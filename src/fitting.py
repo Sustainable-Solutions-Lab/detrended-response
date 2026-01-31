@@ -34,7 +34,7 @@ class FitResult:
     h2: float              # Quadratic temperature coefficient
     h1_se: float           # Standard error of h1
     h2_se: float           # Standard error of h2
-    k: Dict[int, float]    # Country fixed effects (country_idx -> value)
+    k: Dict[int, float]    # Year fixed effects (year -> value)
     r_squared: float       # R-squared
     adj_r_squared: float   # Adjusted R-squared
     rmse: float            # Root mean squared error
@@ -44,8 +44,8 @@ class FitResult:
     T_optimal: float       # Optimal temperature = -h1 / (2*h2)
 
 
-def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> np.ndarray:
-    """Build design matrix with temperature terms and country fixed effects.
+def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
+    """Build design matrix with temperature terms and year fixed effects.
 
     Args:
         data: AnalysisData object
@@ -53,24 +53,31 @@ def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> n
         X2: Second temperature term (n_obs,) - coefficient is h2
 
     Returns:
-        Design matrix (n_obs, 2 + n_countries)
-        Columns: [X1, X2, country_0, country_1, ..., country_{n-1}]
+        Tuple of (design_matrix, unique_years)
+        - Design matrix (n_obs, 2 + n_years)
+        - Columns: [X1, X2, year_0, year_1, ..., year_{n-1}]
+        - unique_years: sorted list of years for k extraction
     """
     n_obs = data.n_obs
-    n_countries = data.n_countries
+
+    # Get unique years and create year index mapping
+    unique_years = sorted(set(data.year))
+    n_years = len(unique_years)
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
 
     # Allocate design matrix
-    X = np.zeros((n_obs, 2 + n_countries))
+    X = np.zeros((n_obs, 2 + n_years))
 
     # Temperature terms
     X[:, 0] = X1
     X[:, 1] = X2
 
-    # Country fixed effects (one-hot encoding)
+    # Year fixed effects (one-hot encoding)
     for i in range(n_obs):
-        X[i, 2 + data.country_idx[i]] = 1.0
+        yr_idx = year_to_idx[data.year[i]]
+        X[i, 2 + yr_idx] = 1.0
 
-    return X
+    return X, unique_years
 
 
 def fit_ols(y: np.ndarray, X: np.ndarray) -> tuple:
@@ -126,7 +133,7 @@ def fit_approach1_temperature_detrending(
     T2_detrend = compute_detrended_temp_squared(data, trends)
 
     # Build design matrix
-    X = build_design_matrix(data, T_star, T2_detrend)
+    X, unique_years = build_design_matrix(data, T_star, T2_detrend)
 
     # Fit OLS
     y = data.growth_pcGDP
@@ -138,11 +145,11 @@ def fit_approach1_temperature_detrending(
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Country fixed effects
-    k = {i: beta[2 + i] for i in range(data.n_countries)}
+    # Year fixed effects
+    k = {unique_years[i]: beta[2 + i] for i in range(len(unique_years))}
 
     # Fit statistics
-    n_params = 2 + data.n_countries
+    n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Optimal temperature
@@ -179,7 +186,7 @@ def fit_approach2_growth_detrending(
     # Build design matrix with raw temperature
     T = data.temp
     T2 = data.temp ** 2
-    X = build_design_matrix(data, T, T2)
+    X, unique_years = build_design_matrix(data, T, T2)
 
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
@@ -190,11 +197,11 @@ def fit_approach2_growth_detrending(
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Country fixed effects
-    k = {i: beta[2 + i] for i in range(data.n_countries)}
+    # Year fixed effects
+    k = {unique_years[i]: beta[2 + i] for i in range(len(unique_years))}
 
     # Fit statistics
-    n_params = 2 + data.n_countries
+    n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Optimal temperature
@@ -233,7 +240,7 @@ def fit_approach3_combined_detrending(
     T2_detrend = compute_detrended_temp_squared(data, trends)
 
     # Build design matrix
-    X = build_design_matrix(data, T_star, T2_detrend)
+    X, unique_years = build_design_matrix(data, T_star, T2_detrend)
 
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
@@ -244,11 +251,11 @@ def fit_approach3_combined_detrending(
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Country fixed effects
-    k = {i: beta[2 + i] for i in range(data.n_countries)}
+    # Year fixed effects
+    k = {unique_years[i]: beta[2 + i] for i in range(len(unique_years))}
 
     # Fit statistics
-    n_params = 2 + data.n_countries
+    n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Optimal temperature
@@ -289,7 +296,7 @@ def fit_approach4_combined_linear_detrending(
     T2_detrend = compute_detrended_temp_squared(data, trends)
 
     # Build design matrix
-    X = build_design_matrix(data, T_star, T2_detrend)
+    X, unique_years = build_design_matrix(data, T_star, T2_detrend)
 
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
@@ -300,11 +307,11 @@ def fit_approach4_combined_linear_detrending(
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Country fixed effects
-    k = {i: beta[2 + i] for i in range(data.n_countries)}
+    # Year fixed effects
+    k = {unique_years[i]: beta[2 + i] for i in range(len(unique_years))}
 
     # Fit statistics
-    n_params = 2 + data.n_countries
+    n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Optimal temperature
@@ -346,7 +353,7 @@ def fit_approach5_combined_quadratic_detrending(
     T2_detrend = compute_detrended_temp_squared_quadratic(data, trends)
 
     # Build design matrix
-    X = build_design_matrix(data, T_star, T2_detrend)
+    X, unique_years = build_design_matrix(data, T_star, T2_detrend)
 
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
@@ -357,11 +364,11 @@ def fit_approach5_combined_quadratic_detrending(
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Country fixed effects
-    k = {i: beta[2 + i] for i in range(data.n_countries)}
+    # Year fixed effects
+    k = {unique_years[i]: beta[2 + i] for i in range(len(unique_years))}
 
     # Fit statistics
-    n_params = 2 + data.n_countries
+    n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Optimal temperature
@@ -395,7 +402,8 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     - k_t: year fixed effects (all years)
 
     For identifiability, we set j_{0,0} = j_{1,0} = j_{2,0} = 0 (first country is reference).
-    All year fixed effects k_t are estimated.
+    This provides 3 constraints to pin down the arbitrary quadratic that could otherwise
+    be added to all j_i(t) and subtracted from all k_t.
     """
     n_obs = data.n_obs
     n_countries = data.n_countries
@@ -446,10 +454,10 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     h1_se = np.sqrt(cov[0, 0])
     h2_se = np.sqrt(cov[1, 1])
 
-    # Year fixed effects (for reporting, we store by year index)
+    # Year fixed effects (store by actual year for consistency with other approaches)
     k = {}
     for yr_idx in range(n_years):
-        k[yr_idx] = beta[k_col_start + yr_idx]
+        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
 
     # Fit statistics
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)

@@ -207,24 +207,26 @@ def plot_temperature_derivative(
 
 
 def plot_coefficient_comparison(results: Dict[str, FitResult], output_dir: Path) -> None:
-    """Plot h1 and h2 coefficients with error bars for each approach."""
+    """Plot T_opt and h2 coefficients for each approach."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     approaches = list(results.keys())
     labels = [results[a].approach for a in approaches]
     x = np.arange(len(approaches))
 
-    # h1 coefficients
-    h1_vals = [results[a].h1 for a in approaches]
-    h1_errs = [results[a].h1_se * 1.96 for a in approaches]  # 95% CI
+    # T_optimal values
+    T_opt_vals = [results[a].T_optimal for a in approaches]
 
-    axes[0].bar(x, h1_vals, yerr=h1_errs, capsize=5, color='steelblue', alpha=0.7)
+    axes[0].bar(x, T_opt_vals, color='steelblue', alpha=0.7)
     axes[0].set_xticks(x)
     axes[0].set_xticklabels(labels, rotation=45, ha='right')
-    axes[0].set_ylabel('h₁ coefficient')
-    axes[0].set_title('Linear Temperature Coefficient (h₁)')
-    axes[0].axhline(0, color='gray', linewidth=0.5)
+    axes[0].set_ylabel('Optimal Temperature (°C)')
+    axes[0].set_title('Optimal Temperature (T_opt)')
     axes[0].grid(True, alpha=0.3, axis='y')
+
+    # Add value labels on bars
+    for i, val in enumerate(T_opt_vals):
+        axes[0].text(i, val + 0.3, f'{val:.1f}°C', ha='center', va='bottom', fontsize=9)
 
     # h2 coefficients
     h2_vals = [results[a].h2 for a in approaches]
@@ -271,6 +273,81 @@ def plot_optimal_temperature_comparison(
 
     plt.tight_layout()
     plt.savefig(output_dir / 'optimal_temperature_comparison.png', dpi=150)
+    plt.close()
+
+
+def plot_year_effects(
+    results: Dict[str, FitResult], data: AnalysisData, output_dir: Path
+) -> None:
+    """Plot year fixed effects k(t) for all approaches.
+
+    All approaches now use year fixed effects k_t.
+
+    For Approach 0 (burke_original), we subtract a least-squares best-fit quadratic
+    from k_t. This shows what the year effects would look like if the quadratic
+    trend were absorbed into the country-specific j_i(t) terms. The subtracted
+    quadratic is what would be added to all j_i(t) under an alternative
+    identifiability constraint.
+    """
+    # Get unique years from data
+    unique_years = sorted(set(data.year))
+    years_array = np.array(unique_years)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Color scheme (same as other plots)
+    colors = {
+        'burke_original': 'black',
+        'approach1': 'green',
+        'approach2': 'blue',
+        'approach3': 'red',
+        'approach4': 'green',
+        'approach5': 'blue',
+    }
+    linestyles = {
+        'burke_original': '-',
+        'approach1': ':',
+        'approach2': '--',
+        'approach3': '-',
+        'approach4': '-',
+        'approach5': '-',
+    }
+
+    for name, r in results.items():
+        # k is stored with actual year as key
+        k_values = np.array([r.k[yr] for yr in unique_years])
+
+        if name == 'burke_original':
+            # For Approach 0, subtract least-squares best-fit quadratic
+            # Fit quadratic: k(t) = a + b*t + c*t^2
+            # Use normalized time for numerical stability
+            t_normalized = years_array - years_array[0]
+            A = np.column_stack([
+                np.ones(len(t_normalized)),
+                t_normalized,
+                t_normalized ** 2
+            ])
+            coeffs, _, _, _ = np.linalg.lstsq(A, k_values, rcond=None)
+            quadratic_fit = A @ coeffs
+            k_values_plot = k_values - quadratic_fit
+            label = "No Detrending (minus best-fit quadratic)"
+        else:
+            k_values_plot = k_values
+            label = f"{r.approach}"
+
+        ax.plot(unique_years, k_values_plot, color=colors.get(name, 'gray'),
+                linestyle=linestyles.get(name, '-'), linewidth=1.5,
+                label=label)
+
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Year', fontsize=12)
+    ax.set_ylabel('k(t) - Year Fixed Effect', fontsize=12)
+    ax.set_title('Year Fixed Effects by Approach', fontsize=14)
+    ax.legend(loc='best', fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(output_dir / 'year_effects.png', dpi=150)
     plt.close()
 
 
@@ -350,6 +427,7 @@ def save_all_outputs(
     plot_temperature_derivative(results, output_dir)
     plot_coefficient_comparison(results, output_dir)
     plot_optimal_temperature_comparison(results, output_dir)
+    plot_year_effects(results, data, output_dir)
     plot_residual_diagnostics(results, data, output_dir)
 
     print("All outputs saved.")

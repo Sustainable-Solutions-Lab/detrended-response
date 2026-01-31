@@ -39,9 +39,9 @@ def main():
     parser.add_argument(
         "--use-csv",
         type=str,
-        default=None,
-        help="Use pre-processed CSV file instead of Maddison/CRU "
-             "(e.g., ~/gdp-growth-fit-sandbox/data/input/df_base_withPop.csv)",
+        default="data/input/df_base_withPop.csv",
+        help="Use pre-processed CSV file (default: data/input/df_base_withPop.csv). "
+             "Set to empty string to use Maddison/CRU instead.",
     )
     parser.add_argument(
         "--maddison",
@@ -79,7 +79,7 @@ def main():
     print("=" * 70)
 
     # Load data
-    if args.use_csv:
+    if args.use_csv and args.use_csv.strip():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
         print(f"\n[1/8] Loading data from {csv_path}...")

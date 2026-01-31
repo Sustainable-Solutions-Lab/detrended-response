@@ -14,56 +14,56 @@ No Detrending
 
 Linear Temperature Detrending
 --------------------------------------------------
-  h1 =     0.012607  (SE: 0.002936)
-  h2 =    -0.000453  (SE: 0.000090)
-  T_optimal = 13.91 C
-  R² = 0.0598
-  Adjusted R² = 0.0404
-  RMSE = 0.059195
+  h1 =     0.014782  (SE: 0.002967)
+  h2 =    -0.000523  (SE: 0.000094)
+  T_optimal = 14.14 C
+  R² = 0.0868
+  Adjusted R² = 0.0800
+  RMSE = 0.058337
   Observations: 8479
-  Parameters: 172
+  Parameters: 64
 
 Quadratic GDP Growth Detrending
 --------------------------------------------------
-  h1 =     0.005866  (SE: 0.002032)
-  h2 =    -0.000200  (SE: 0.000058)
-  T_optimal = 14.64 C
-  R² = 0.0014
-  Adjusted R² = -0.0191
-  RMSE = 0.054889
+  h1 =     0.000241  (SE: 0.000357)
+  h2 =    -0.000007  (SE: 0.000010)
+  T_optimal = 17.44 C
+  R² = 0.0768
+  Adjusted R² = 0.0699
+  RMSE = 0.052777
   Observations: 8479
-  Parameters: 172
+  Parameters: 64
 
 Combined Detrending (Mixed)
 --------------------------------------------------
-  h1 =     0.011072  (SE: 0.002720)
-  h2 =    -0.000420  (SE: 0.000084)
-  T_optimal = 13.18 C
-  R² = 0.0030
-  Adjusted R² = -0.0175
-  RMSE = 0.054845
+  h1 =     0.013538  (SE: 0.002679)
+  h2 =    -0.000471  (SE: 0.000085)
+  T_optimal = 14.36 C
+  R² = 0.0802
+  Adjusted R² = 0.0733
+  RMSE = 0.052680
   Observations: 8479
-  Parameters: 172
+  Parameters: 64
 
 Combined Linear Detrending
 --------------------------------------------------
-  h1 =     0.012411  (SE: 0.002832)
-  h2 =    -0.000446  (SE: 0.000087)
-  T_optimal = 13.91 C
-  R² = 0.0031
-  Adjusted R² = -0.0174
-  RMSE = 0.057105
+  h1 =     0.014463  (SE: 0.002781)
+  h2 =    -0.000503  (SE: 0.000088)
+  T_optimal = 14.37 C
+  R² = 0.0863
+  Adjusted R² = 0.0795
+  RMSE = 0.054670
   Observations: 8479
-  Parameters: 172
+  Parameters: 64
 
 Combined Quadratic Detrending
 --------------------------------------------------
-  h1 =     0.011344  (SE: 0.002766)
-  h2 =    -0.000434  (SE: 0.000085)
-  T_optimal = 13.06 C
-  R² = 0.0031
-  Adjusted R² = -0.0174
-  RMSE = 0.054842
+  h1 =     0.014209  (SE: 0.002727)
+  h2 =    -0.000497  (SE: 0.000087)
+  T_optimal = 14.30 C
+  R² = 0.0804
+  Adjusted R² = 0.0735
+  RMSE = 0.052674
   Observations: 8479
-  Parameters: 172
+  Parameters: 64
 
