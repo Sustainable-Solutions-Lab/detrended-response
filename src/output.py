@@ -31,6 +31,7 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
             'h2_SE': r.h2_se,
             'T_optimal': r.T_optimal,
             'R_squared': r.r_squared,
+            'Total_R_squared': r.total_r_squared,
             'Adj_R_squared': r.adj_r_squared,
             'RMSE': r.rmse,
             'n_obs': r.n_obs,
@@ -53,6 +54,7 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
             f.write(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})\n")
             f.write(f"  T_optimal = {r.T_optimal:.2f} C\n")
             f.write(f"  R² = {r.r_squared:.4f}\n")
+            f.write(f"  Total R² = {r.total_r_squared:.4f}\n")
             f.write(f"  Adjusted R² = {r.adj_r_squared:.4f}\n")
             f.write(f"  RMSE = {r.rmse:.6f}\n")
             f.write(f"  Observations: {r.n_obs}\n")

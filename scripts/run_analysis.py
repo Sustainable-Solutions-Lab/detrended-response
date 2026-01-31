@@ -165,6 +165,7 @@ def main():
         print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
         print(f"  T_optimal = {r.T_optimal:.2f} C")
         print(f"  R² = {r.r_squared:.4f}")
+        print(f"  Total R² = {r.total_r_squared:.4f}")
         print(f"  Adjusted R² = {r.adj_r_squared:.4f}")
         print(f"  RMSE = {r.rmse:.6f}")
 

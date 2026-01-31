@@ -7,6 +7,7 @@ No Detrending
   h2 =    -0.000495  (SE: 0.000089)
   T_optimal = 14.20 C
   R² = 0.2576
+  Total R² = 0.2576
   Adjusted R² = 0.2041
   RMSE = 0.052600
   Observations: 8479
@@ -18,6 +19,7 @@ Linear Temperature Detrending
   h2 =    -0.000523  (SE: 0.000094)
   T_optimal = 14.14 C
   R² = 0.0868
+  Total R² = 0.0868
   Adjusted R² = 0.0800
   RMSE = 0.058337
   Observations: 8479
@@ -29,6 +31,7 @@ Quadratic GDP Growth Detrending
   h2 =    -0.000007  (SE: 0.000010)
   T_optimal = 17.44 C
   R² = 0.0768
+  Total R² = 0.2526
   Adjusted R² = 0.0699
   RMSE = 0.052777
   Observations: 8479
@@ -40,6 +43,7 @@ Combined Detrending (Mixed)
   h2 =    -0.000471  (SE: 0.000085)
   T_optimal = 14.36 C
   R² = 0.0802
+  Total R² = 0.2553
   Adjusted R² = 0.0733
   RMSE = 0.052680
   Observations: 8479
@@ -51,6 +55,7 @@ Combined Linear Detrending
   h2 =    -0.000503  (SE: 0.000088)
   T_optimal = 14.37 C
   R² = 0.0863
+  Total R² = 0.1980
   Adjusted R² = 0.0795
   RMSE = 0.054670
   Observations: 8479
@@ -62,6 +67,7 @@ Combined Quadratic Detrending
   h2 =    -0.000497  (SE: 0.000087)
   T_optimal = 14.30 C
   R² = 0.0804
+  Total R² = 0.2555
   Adjusted R² = 0.0735
   RMSE = 0.052674
   Observations: 8479
@@ -73,6 +79,7 @@ Precomputed k Linear
   h2 =    -0.000453  (SE: 0.000082)
   T_optimal = 14.73 C
   R² = 0.0036
+  Total R² = 0.1990
   Adjusted R² = 0.0035
   RMSE = 0.054636
   Observations: 8479
@@ -84,6 +91,7 @@ Precomputed k Quadratic
   h2 =    -0.000442  (SE: 0.000081)
   T_optimal = 14.61 C
   R² = 0.0035
+  Total R² = 0.2564
   Adjusted R² = 0.0034
   RMSE = 0.052644
   Observations: 8479

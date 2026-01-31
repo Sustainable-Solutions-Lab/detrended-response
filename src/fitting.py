@@ -42,6 +42,7 @@ class FitResult:
     n_params: int          # Number of parameters
     residuals: np.ndarray  # Residuals
     T_optimal: float       # Optimal temperature = -h1 / (2*h2)
+    total_r_squared: float # Variance explained in original dy
 
 
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
@@ -121,6 +122,18 @@ def compute_fit_stats(y: np.ndarray, residuals: np.ndarray, n_params: int) -> tu
     return r_squared, adj_r_squared, rmse
 
 
+def compute_total_r_squared(residuals: np.ndarray, dy: np.ndarray) -> float:
+    """Compute R² of original dy explained by full model.
+
+    This provides a standardized metric across all approaches,
+    measuring what fraction of variance in dy_i(t) is explained
+    by h(T) + j_i(t) + k(t).
+    """
+    ss_res = np.sum(residuals ** 2)
+    ss_tot = np.sum((dy - np.mean(dy)) ** 2)
+    return 1 - ss_res / ss_tot
+
+
 def fit_approach1_temperature_detrending(
     data: AnalysisData, trends: CountryTrends
 ) -> FitResult:
@@ -152,6 +165,9 @@ def fit_approach1_temperature_detrending(
     n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -169,6 +185,7 @@ def fit_approach1_temperature_detrending(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -204,6 +221,9 @@ def fit_approach2_growth_detrending(
     n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -221,6 +241,7 @@ def fit_approach2_growth_detrending(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -258,6 +279,9 @@ def fit_approach3_combined_detrending(
     n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -275,6 +299,7 @@ def fit_approach3_combined_detrending(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -314,6 +339,9 @@ def fit_approach4_combined_linear_detrending(
     n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -331,6 +359,7 @@ def fit_approach4_combined_linear_detrending(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -371,6 +400,9 @@ def fit_approach5_combined_quadratic_detrending(
     n_params = 2 + len(unique_years)
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -388,6 +420,7 @@ def fit_approach5_combined_quadratic_detrending(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -438,6 +471,9 @@ def fit_approach6_precomputed_k_linear(
     n_params = 2  # Just h1 and h2
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -455,6 +491,7 @@ def fit_approach6_precomputed_k_linear(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -505,6 +542,9 @@ def fit_approach7_precomputed_k_quadratic(
     n_params = 2  # Just h1 and h2
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -522,6 +562,7 @@ def fit_approach7_precomputed_k_quadratic(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
@@ -596,6 +637,9 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     # Fit statistics
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
     # Optimal temperature
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
@@ -613,6 +657,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
     )
 
 
