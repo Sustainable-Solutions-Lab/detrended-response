@@ -19,9 +19,14 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.data_loader import load_data
+from src.data_loader import load_data, load_data_from_csv
 from src.detrending import compute_country_trends
-from src.fitting import fit_all_approaches
+from src.fitting import (
+    fit_burke_original,
+    fit_approach1_temperature_detrending,
+    fit_approach2_growth_detrending,
+    fit_approach3_combined_detrending,
+)
 from src.output import save_all_outputs, create_output_dir
 
 
@@ -30,26 +35,33 @@ def main():
         description="Detrended response analysis of climate-economy relationship"
     )
     parser.add_argument(
+        "--use-csv",
+        type=str,
+        default=None,
+        help="Use pre-processed CSV file instead of Maddison/CRU "
+             "(e.g., ~/gdp-growth-fit-sandbox/data/input/df_base_withPop.csv)",
+    )
+    parser.add_argument(
         "--maddison",
         default="data/input/mpd2023_web.xlsx",
-        help="Path to Maddison GDP Excel file",
+        help="Path to Maddison GDP Excel file (ignored if --use-csv is set)",
     )
     parser.add_argument(
         "--cru",
         default="data/input/cru_climate_data.csv",
-        help="Path to CRU temperature CSV file",
+        help="Path to CRU temperature CSV file (ignored if --use-csv is set)",
     )
     parser.add_argument(
         "--year-min",
         type=int,
-        default=1960,
-        help="Minimum year to include (default: 1960)",
+        default=None,
+        help="Minimum year to include (default: 1960 for Maddison/CRU, all years for CSV)",
     )
     parser.add_argument(
         "--year-max",
         type=int,
-        default=2022,
-        help="Maximum year to include (default: 2022)",
+        default=None,
+        help="Maximum year to include (default: 2022 for Maddison/CRU, all years for CSV)",
     )
     parser.add_argument(
         "--output-dir",
@@ -65,25 +77,54 @@ def main():
     print("=" * 70)
 
     # Load data
-    print(f"\nLoading data from {args.maddison} and {args.cru}...")
-    print(f"Year range: {args.year_min} - {args.year_max}")
+    if args.use_csv:
+        # Load from pre-processed CSV file
+        csv_path = Path(args.use_csv).expanduser()
+        print(f"\n[1/6] Loading data from {csv_path}...")
+        data = load_data_from_csv(
+            str(csv_path),
+            year_min=args.year_min,
+            year_max=args.year_max
+        )
+    else:
+        # Load from Maddison/CRU files
+        year_min = args.year_min if args.year_min is not None else 1960
+        year_max = args.year_max if args.year_max is not None else 2022
+        print(f"\n[1/6] Loading data from {args.maddison} and {args.cru}...")
+        print(f"      Year range: {year_min} - {year_max}")
+        data = load_data(
+            args.maddison, args.cru,
+            year_min=year_min, year_max=year_max
+        )
 
-    data = load_data(
-        args.maddison, args.cru,
-        year_min=args.year_min, year_max=args.year_max
-    )
-
-    print(f"  Observations: {data.n_obs}")
-    print(f"  Countries: {data.n_countries}")
-    print(f"  Years: {data.n_years}")
+    print(f"      Observations: {data.n_obs}")
+    print(f"      Countries: {data.n_countries}")
+    print(f"      Years: {data.n_years}")
+    print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\nComputing country-level trends...")
+    print("\n[2/6] Computing country-level trends...")
     trends = compute_country_trends(data)
+    print("      Done.")
 
     # Fit all approaches
-    print("\nFitting models...")
-    results = fit_all_approaches(data, trends)
+    results = {}
+
+    print("\n[3/6] Fitting Approach 0: Burke Original (no pre-detrending)...")
+    results['burke_original'] = fit_burke_original(data)
+    print("      Done.")
+
+    print("\n[4/6] Fitting Approach 1: Temperature detrending...")
+    results['approach1'] = fit_approach1_temperature_detrending(data, trends)
+    print("      Done.")
+
+    print("\n[5/6] Fitting Approach 2: GDP growth detrending...")
+    results['approach2'] = fit_approach2_growth_detrending(data, trends)
+    print("      Done.")
+
+    print("\n[6/6] Fitting Approach 3: Combined detrending...")
+    results['approach3'] = fit_approach3_combined_detrending(data, trends)
+    print("      Done.")
 
     # Print summary
     print("\n" + "=" * 70)

@@ -84,7 +84,11 @@ def save_country_trends(
 def plot_temperature_response(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
 ) -> None:
-    """Plot h(T) = h1*T + h2*T² for each approach."""
+    """Plot h(T) - h(T*) for each approach.
+
+    This shows the temperature response relative to the optimal temperature,
+    so the maximum is at y=0 for each curve.
+    """
     fig, ax = plt.subplots(figsize=(10, 6))
 
     T = np.linspace(T_range[0], T_range[1], 200)
@@ -103,9 +107,20 @@ def plot_temperature_response(
     }
 
     for name, r in results.items():
+        # h(T) = h1*T + h2*T²
         h_T = r.h1 * T + r.h2 * T ** 2
+
+        # h(T*) = h1*T* + h2*T*² = -h1²/(4*h2) when T* = -h1/(2*h2)
+        if r.h2 != 0:
+            h_T_opt = -r.h1 ** 2 / (4 * r.h2)
+        else:
+            h_T_opt = 0
+
+        # Plot h(T) - h(T*)
+        h_relative = h_T - h_T_opt
+
         label = f"{r.approach} (T* = {r.T_optimal:.1f}°C)"
-        ax.plot(T, h_T, color=colors.get(name, 'gray'),
+        ax.plot(T, h_relative, color=colors.get(name, 'gray'),
                 linestyle=linestyles.get(name, '-'), label=label, linewidth=2)
 
         # Mark optimal temperature
@@ -114,8 +129,8 @@ def plot_temperature_response(
 
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
-    ax.set_ylabel('h(T) = h₁T + h₂T²', fontsize=12)
-    ax.set_title('Temperature Response Function by Approach', fontsize=14)
+    ax.set_ylabel('h(T) - h(T*)', fontsize=12)
+    ax.set_title('Temperature Response Relative to Optimum', fontsize=14)
     ax.legend(loc='lower left', fontsize=10)
     ax.set_xlim(T_range)
     ax.grid(True, alpha=0.3)

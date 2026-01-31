@@ -178,11 +178,12 @@ def load_data(maddison_path: str, cru_path: str,
     # Merge on iso_id and year
     df = pd.merge(df_gdp, df_temp, on=['iso_id', 'year'], how='inner')
 
-    # Filter by year range
-    df = df[(df['year'] >= year_min) & (df['year'] <= year_max)].copy()
-
-    # Compute GDP growth rate
+    # Compute GDP growth rate BEFORE filtering by year range
+    # This allows us to use year_min-1 data to compute growth for year_min
     df = compute_gdp_growth(df)
+
+    # NOW filter by year range (after growth is computed)
+    df = df[(df['year'] >= year_min) & (df['year'] <= year_max)].copy()
 
     # Create country index mapping (sorted for reproducibility)
     unique_countries = sorted(df['iso_id'].unique())
@@ -214,5 +215,67 @@ def load_data(maddison_path: str, cru_path: str,
         n_countries=len(unique_countries),
         n_years=len(df['year'].unique()),
         year_range=(year_min, year_max),
+        time_offset=year_mid,
+    )
+
+
+def load_data_from_csv(csv_path: str,
+                       year_min: int = None, year_max: int = None) -> AnalysisData:
+    """Load pre-processed data from CSV file (e.g., df_base_withPop.csv).
+
+    Expected columns: iso_id, year, pcGDP, growth_pcGDP, temp, time, Pop
+
+    Args:
+        csv_path: Path to the CSV file
+        year_min: Minimum year to include (default: use all years in data)
+        year_max: Maximum year to include (default: use all years in data)
+
+    Returns:
+        AnalysisData object containing all arrays and mappings
+    """
+    df = pd.read_csv(csv_path)
+
+    # Filter by year range if specified
+    if year_min is not None:
+        df = df[df['year'] >= year_min]
+    if year_max is not None:
+        df = df[df['year'] <= year_max]
+
+    df = df.copy()
+
+    # Determine actual year range from data
+    actual_year_min = int(df['year'].min())
+    actual_year_max = int(df['year'].max())
+
+    # Create country index mapping (sorted for reproducibility)
+    unique_countries = sorted(df['iso_id'].unique())
+    iso_to_idx = {iso: i for i, iso in enumerate(unique_countries)}
+    idx_to_iso = {i: iso for iso, i in iso_to_idx.items()}
+
+    # Compute centered time index
+    year_mid = (actual_year_min + actual_year_max) / 2
+    df['time_centered'] = df['year'] - year_mid
+
+    # Extract arrays
+    growth_pcGDP = df['growth_pcGDP'].values.astype(np.float64)
+    pcGDP = df['pcGDP'].values.astype(np.float64)
+    temp = df['temp'].values.astype(np.float64)
+    time = df['time_centered'].values.astype(np.float64)
+    year = df['year'].values.astype(np.int32)
+    country_idx = df['iso_id'].map(iso_to_idx).values.astype(np.int32)
+
+    return AnalysisData(
+        growth_pcGDP=growth_pcGDP,
+        pcGDP=pcGDP,
+        temp=temp,
+        time=time,
+        country_idx=country_idx,
+        year=year,
+        iso_to_idx=iso_to_idx,
+        idx_to_iso=idx_to_iso,
+        n_obs=len(growth_pcGDP),
+        n_countries=len(unique_countries),
+        n_years=len(df['year'].unique()),
+        year_range=(actual_year_min, actual_year_max),
         time_offset=year_mid,
     )

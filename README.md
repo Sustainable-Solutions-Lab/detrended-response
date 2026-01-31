@@ -54,8 +54,14 @@ Applies both linear temperature detrending and quadratic GDP growth detrending:
 
 ## Data Sources
 
+Two data input options are available:
+
+### Option 1: Maddison + CRU (default)
 - **GDP**: Maddison Project Database 2023 (Bolt & van Zanden, 2024)
 - **Temperature**: CRU CY v4.09 country-level means (Harris et al., 2020)
+
+### Option 2: Pre-processed CSV
+- **df_base_withPop.csv**: Pre-merged dataset with GDP growth and temperature already computed. Contains columns: `iso_id`, `year`, `pcGDP`, `growth_pcGDP`, `temp`, `precp`, `time`, `Pop`.
 
 ## Installation
 
@@ -86,14 +92,27 @@ python scripts/run_analysis.py
 ### Command Line Options
 
 ```
+--use-csv PATH     Use pre-processed CSV file instead of Maddison/CRU
 --maddison PATH    Path to Maddison GDP Excel file (default: data/input/mpd2023_web.xlsx)
 --cru PATH         Path to CRU temperature CSV file (default: data/input/cru_climate_data.csv)
---year-min YEAR    Minimum year to include (default: 1960)
---year-max YEAR    Maximum year to include (default: 2022)
+--year-min YEAR    Minimum year to include (default: 1960 for Maddison/CRU, all years for CSV)
+--year-max YEAR    Maximum year to include (default: 2022 for Maddison/CRU, all years for CSV)
 --output-dir DIR   Output directory (default: timestamped directory in data/output/)
 ```
 
-Example with custom year range:
+### Examples
+
+Using default Maddison + CRU data:
+```bash
+python scripts/run_analysis.py
+```
+
+Using pre-processed CSV:
+```bash
+python scripts/run_analysis.py --use-csv data/input/df_base_withPop.csv
+```
+
+Custom year range:
 ```bash
 python scripts/run_analysis.py --year-min 1970 --year-max 2010
 ```
@@ -119,22 +138,40 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 ```
 detrended-response/
 ├── data/
-│   ├── input/                  # Input data files
-│   │   ├── mpd2023_web.xlsx    # Maddison GDP data
-│   │   └── cru_climate_data.csv # CRU temperature data
-│   └── output/                 # Analysis results (timestamped)
+│   ├── input/                   # Input data files
+│   │   ├── mpd2023_web.xlsx     # Maddison GDP data
+│   │   ├── cru_climate_data.csv # CRU temperature data
+│   │   └── df_base_withPop.csv  # Pre-processed alternative dataset
+│   └── output/                  # Analysis results (timestamped)
 ├── src/
 │   ├── __init__.py
-│   ├── data_loader.py          # Load and merge GDP + temperature data
-│   ├── detrending.py           # Country-level trend fitting
-│   ├── fitting.py              # OLS regression for each approach
-│   └── output.py               # Results tables and plots
+│   ├── data_loader.py           # Load and merge GDP + temperature data
+│   ├── detrending.py            # Country-level trend fitting
+│   ├── fitting.py               # OLS regression for each approach
+│   └── output.py                # Results tables and plots
 ├── scripts/
-│   └── run_analysis.py         # Main entry point
+│   └── run_analysis.py          # Main entry point
 ├── .gitignore
 ├── requirements.txt
 └── README.md
 ```
+
+## Next Steps
+
+The two data input options currently produce results with **opposite signs** for h₁ and h₂:
+
+| Dataset | h₁ | h₂ | T_optimal |
+|---------|----|----|-----------|
+| Maddison + CRU | -0.0007 | +0.00002 | ~17°C |
+| df_base_withPop.csv | +0.014 | -0.0005 | ~14°C |
+
+The expected signs (based on Burke et al. 2015) are h₁ > 0 and h₂ < 0, which matches the pre-processed CSV but not the Maddison/CRU pipeline.
+
+**Priority**: Diagnose why these two approaches give results with opposing signs. Potential issues to investigate:
+- GDP variable: Is the Maddison/CRU pipeline using total GDP instead of per-capita GDP?
+- Growth rate computation: Are the growth rates being computed consistently?
+- Temperature data: Are there differences in how temperature is aggregated or scaled?
+- Country/year coverage: Do the datasets have different country or time coverage that affects results?
 
 ## References
 
