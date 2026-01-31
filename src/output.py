@@ -614,3 +614,577 @@ def save_bootstrap_summary_txt(
             f.write("\n")
 
     print(f"  Saved bootstrap_summary.txt")
+
+
+def compute_h_response_uncertainty_bands(
+    result: "BootstrapResult",
+    T_range: np.ndarray,
+    percentiles: tuple = (5, 50, 95)
+) -> tuple:
+    """Compute h(T) - h(T*) uncertainty bands from bootstrap samples.
+
+    For each bootstrap sample, computes h(T) - h(T*) over the temperature range.
+    Returns percentile bands across all bootstrap samples.
+
+    Args:
+        result: BootstrapResult containing h1_samples and h2_samples
+        T_range: Array of temperature values
+        percentiles: Percentiles to compute (default: 5th, 50th, 95th)
+
+    Returns:
+        Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
+    """
+    # Get valid bootstrap samples (exclude NaN)
+    valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
+    h1_valid = result.h1_samples[valid_mask]
+    h2_valid = result.h2_samples[valid_mask]
+
+    if len(h1_valid) == 0:
+        return (np.full_like(T_range, np.nan),
+                np.full_like(T_range, np.nan),
+                np.full_like(T_range, np.nan))
+
+    # Compute h(T) - h(T*) for each bootstrap sample
+    # h(T) = h1*T + h2*T^2
+    # h(T*) = -h1^2 / (4*h2) when T* = -h1/(2*h2)
+    n_samples = len(h1_valid)
+    n_T = len(T_range)
+    h_relative_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h1 = h1_valid[i]
+        h2 = h2_valid[i]
+        h_T = h1 * T_range + h2 * T_range ** 2
+        if h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+        else:
+            h_T_opt = 0
+        h_relative_samples[i, :] = h_T - h_T_opt
+
+    # Compute percentiles at each temperature
+    h_bands = []
+    for p in percentiles:
+        h_bands.append(np.percentile(h_relative_samples, p, axis=0))
+
+    return tuple(h_bands)
+
+
+def plot_bootstrap_parameter_distributions(
+    result: "BootstrapResult",
+    stats: Dict[str, Dict],
+    output_dir: Path,
+    approach_key: str
+) -> None:
+    """Plot h1, h2, T_optimal distributions for one approach.
+
+    Creates a (1, 3) subplot with histograms showing:
+    - Point estimate (red solid line)
+    - Bootstrap median (blue dashed line)
+    - 90% CI bounds (gray dotted lines)
+
+    Args:
+        result: BootstrapResult for this approach
+        stats: Statistics dict from compute_bootstrap_statistics
+        output_dir: Directory to save the plot
+        approach_key: Key like 'approach0' for filename
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+
+    params = [
+        ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
+        ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (Quadratic Coefficient)'),
+        ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
+    ]
+
+    for ax, (param_name, samples, point_est, param_stats, xlabel) in zip(axes, params):
+        # Filter valid samples
+        valid_samples = samples[~np.isnan(samples)]
+        if len(valid_samples) == 0:
+            ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center', transform=ax.transAxes)
+            ax.set_xlabel(xlabel, fontsize=12)
+            continue
+
+        # Histogram
+        ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
+
+        # Point estimate (red solid)
+        ax.axvline(x=point_est, color='red', linestyle='-', linewidth=2, label=f'Point est: {point_est:.4f}')
+
+        # Bootstrap median (blue dashed)
+        median = param_stats['p50']
+        ax.axvline(x=median, color='blue', linestyle='--', linewidth=2, label=f'Median: {median:.4f}')
+
+        # 90% CI bounds (gray dotted)
+        p5 = param_stats['p5']
+        p95 = param_stats['p95']
+        ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5, label=f'5th pct: {p5:.4f}')
+        ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5, label=f'95th pct: {p95:.4f}')
+
+        ax.set_xlabel(xlabel, fontsize=12)
+        ax.set_ylabel('Density', fontsize=12)
+        ax.legend(fontsize=8, loc='best')
+        ax.grid(True, alpha=0.3)
+
+    fig.suptitle(f'Bootstrap Distributions: {result.approach}', fontsize=14)
+    plt.tight_layout()
+    plt.savefig(output_dir / f'bootstrap_distributions_{approach_key}.png', dpi=150)
+    plt.close()
+
+
+def plot_all_bootstrap_distributions(
+    results: Dict[str, "BootstrapResult"],
+    all_stats: Dict[str, Dict],
+    output_dir: Path,
+    filename: str = "bootstrap_distributions.pdf"
+) -> None:
+    """Plot h1, h2, T_optimal distributions for all approaches in a single PDF.
+
+    Creates a multi-panel figure with one row per approach and 3 columns
+    (h1, h2, T_optimal).
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        all_stats: Dict mapping approach key to statistics dict
+        output_dir: Directory to save the plot
+        filename: Output filename (should end in .pdf)
+    """
+    from matplotlib.backends.backend_pdf import PdfPages
+
+    approach_names = list(results.keys())
+    n_approaches = len(approach_names)
+
+    with PdfPages(output_dir / filename) as pdf:
+        # Create a figure with all approaches - one row per approach, 3 columns
+        fig, axes = plt.subplots(n_approaches, 3, figsize=(14, 4 * n_approaches))
+
+        if n_approaches == 1:
+            axes = axes.reshape(1, -1)
+
+        for row_idx, name in enumerate(approach_names):
+            result = results[name]
+            stats = all_stats[name]
+
+            params = [
+                ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
+                ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (Quadratic Coefficient)'),
+                ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
+            ]
+
+            for col_idx, (param_name, samples, point_est, param_stats, xlabel) in enumerate(params):
+                ax = axes[row_idx, col_idx]
+
+                # Filter valid samples
+                valid_samples = samples[~np.isnan(samples)]
+                if len(valid_samples) == 0:
+                    ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center', transform=ax.transAxes)
+                    ax.set_xlabel(xlabel, fontsize=10)
+                    continue
+
+                # Histogram
+                ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
+
+                # Point estimate (red solid)
+                ax.axvline(x=point_est, color='red', linestyle='-', linewidth=2, label=f'Point: {point_est:.4f}')
+
+                # Bootstrap median (blue dashed)
+                median = param_stats['p50']
+                ax.axvline(x=median, color='blue', linestyle='--', linewidth=2, label=f'Median: {median:.4f}')
+
+                # 90% CI bounds (gray dotted)
+                p5 = param_stats['p5']
+                p95 = param_stats['p95']
+                ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5, label=f'5%: {p5:.4f}')
+                ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5, label=f'95%: {p95:.4f}')
+
+                ax.set_xlabel(xlabel, fontsize=10)
+                if col_idx == 0:
+                    ax.set_ylabel(f'{result.approach}\n\nDensity', fontsize=10)
+                else:
+                    ax.set_ylabel('Density', fontsize=10)
+                ax.legend(fontsize=7, loc='best')
+                ax.grid(True, alpha=0.3)
+
+                # Add title only on top row
+                if row_idx == 0:
+                    ax.set_title(xlabel, fontsize=11)
+
+        fig.suptitle('Bootstrap Parameter Distributions by Approach', fontsize=14, y=1.01)
+        plt.tight_layout()
+        pdf.savefig(fig, dpi=150, bbox_inches='tight')
+        plt.close()
+
+
+def plot_bootstrap_temperature_response(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    approaches: list = None,
+    filename: str = "bootstrap_temperature_response.pdf",
+    T_range: tuple = (0, 30)
+) -> None:
+    """Plot h(T) - h(T*) with 90% CI bands in multi-panel layout.
+
+    Each approach gets its own panel to avoid overlapping uncertainty bands.
+    Output is saved as PDF.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        approaches: List of approach keys to include (default: all)
+        filename: Output filename (should end in .pdf)
+        T_range: Temperature range for x-axis
+    """
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    if approaches is None:
+        approaches = list(results.keys())
+
+    # Filter to only approaches that exist in results
+    approaches = [name for name in approaches if name in results]
+    n_approaches = len(approaches)
+
+    if n_approaches == 0:
+        return
+
+    # Color scheme (same as existing plots)
+    colors = {
+        'approach0': 'black',
+        'approach1': 'green',
+        'approach2': 'blue',
+        'approach3': 'red',
+        'approach4': 'green',
+        'approach5': 'blue',
+        'approach6': 'green',
+        'approach7': 'blue',
+    }
+
+    # Determine grid layout
+    if n_approaches <= 3:
+        n_rows, n_cols = 1, n_approaches
+    elif n_approaches <= 6:
+        n_rows, n_cols = 2, 3
+    else:
+        n_rows, n_cols = 3, 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    if n_approaches == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    for idx, name in enumerate(approaches):
+        ax = axes[idx]
+        result = results[name]
+        color = colors.get(name, 'steelblue')
+
+        # Compute uncertainty bands
+        h_lower, h_median, h_upper = compute_h_response_uncertainty_bands(result, T)
+
+        # Compute point estimate response
+        h1_point = result.h1_point
+        h2_point = result.h2_point
+        h_T_point = h1_point * T + h2_point * T ** 2
+        if h2_point != 0:
+            h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+        else:
+            h_T_opt_point = 0
+        h_point = h_T_point - h_T_opt_point
+
+        # Plot CI band
+        ax.fill_between(T, h_lower, h_upper, alpha=0.3, color=color, label='90% CI')
+
+        # Plot point estimate
+        ax.plot(T, h_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+        # Mark optimal temperature
+        ax.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
+                   label=f'T_opt = {result.T_optimal_point:.1f}°C')
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_xlabel('Temperature (°C)', fontsize=10)
+        ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+        ax.set_title(f'{result.approach}', fontsize=11)
+        ax.set_xlim(T_range)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc='lower left')
+
+    # Hide unused subplots
+    for idx in range(n_approaches, len(axes)):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Temperature Response with Bootstrap 90% CI', fontsize=14, y=1.02)
+    plt.tight_layout()
+    plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def plot_bootstrap_T_optimal_comparison(
+    results: Dict[str, "BootstrapResult"],
+    all_stats: Dict[str, Dict],
+    output_dir: Path
+) -> None:
+    """Horizontal error bar plot: point estimate + 90% CI + IQR for each approach.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        all_stats: Dict mapping approach key to statistics dict
+        output_dir: Directory to save the plot
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Color scheme
+    colors = {
+        'approach0': 'black',
+        'approach1': 'green',
+        'approach2': 'blue',
+        'approach3': 'red',
+        'approach4': 'green',
+        'approach5': 'blue',
+        'approach6': 'green',
+        'approach7': 'blue',
+    }
+
+    approach_names = list(results.keys())
+    n_approaches = len(approach_names)
+    y_positions = np.arange(n_approaches)
+
+    for i, name in enumerate(approach_names):
+        result = results[name]
+        stats = all_stats[name]['T_optimal']
+        color = colors.get(name, 'gray')
+
+        point_est = result.T_optimal_point
+        p5, p25, p50, p75, p95 = stats['p5'], stats['p25'], stats['p50'], stats['p75'], stats['p95']
+
+        # Plot 90% CI as error bar
+        ci_lower = point_est - p5
+        ci_upper = p95 - point_est
+        ax.errorbar(point_est, i, xerr=[[ci_lower], [ci_upper]],
+                    fmt='o', color=color, capsize=5, capthick=2, markersize=8,
+                    label=f'{result.approach}' if i == 0 else None)
+
+        # Plot IQR as a thick bar
+        ax.plot([p25, p75], [i, i], color=color, linewidth=4, alpha=0.5)
+
+        # Add label with point estimate value
+        ax.annotate(f'{point_est:.1f}°C', xy=(point_est, i), xytext=(5, 0),
+                    textcoords='offset points', fontsize=9, va='center')
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels([results[name].approach for name in approach_names])
+    ax.set_xlabel('Optimal Temperature (°C)', fontsize=12)
+    ax.set_title('T_optimal with Bootstrap 90% CI and IQR', fontsize=14)
+    ax.grid(True, alpha=0.3, axis='x')
+
+    # Add legend explaining markers
+    ax.annotate('Circle: point estimate, Thin line: 90% CI, Thick line: IQR',
+                xy=(0.02, 0.98), xycoords='axes fraction',
+                fontsize=9, va='top', ha='left',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+    plt.tight_layout()
+    plt.savefig(output_dir / 'bootstrap_T_optimal_comparison.png', dpi=150)
+    plt.close()
+
+
+def compute_derivative_uncertainty_bands(
+    result: "BootstrapResult",
+    T_range: np.ndarray,
+    percentiles: tuple = (5, 50, 95)
+) -> tuple:
+    """Compute dh/dT = h1 + 2*h2*T uncertainty bands from bootstrap samples.
+
+    Args:
+        result: BootstrapResult containing h1_samples and h2_samples
+        T_range: Array of temperature values
+        percentiles: Percentiles to compute (default: 5th, 50th, 95th)
+
+    Returns:
+        Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
+    """
+    # Get valid bootstrap samples (exclude NaN)
+    valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
+    h1_valid = result.h1_samples[valid_mask]
+    h2_valid = result.h2_samples[valid_mask]
+
+    if len(h1_valid) == 0:
+        return (np.full_like(T_range, np.nan),
+                np.full_like(T_range, np.nan),
+                np.full_like(T_range, np.nan))
+
+    # Compute dh/dT for each bootstrap sample
+    n_samples = len(h1_valid)
+    n_T = len(T_range)
+    dh_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h1 = h1_valid[i]
+        h2 = h2_valid[i]
+        dh_samples[i, :] = h1 + 2 * h2 * T_range
+
+    # Compute percentiles at each temperature
+    dh_bands = []
+    for p in percentiles:
+        dh_bands.append(np.percentile(dh_samples, p, axis=0))
+
+    return tuple(dh_bands)
+
+
+def plot_bootstrap_temperature_derivative(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    approaches: list = None,
+    filename: str = "bootstrap_temperature_derivative.pdf",
+    T_range: tuple = (0, 30)
+) -> None:
+    """Plot dh/dT = h1 + 2*h2*T with 90% CI bands in multi-panel layout.
+
+    Each approach gets its own panel to avoid overlapping uncertainty bands.
+    Output is saved as PDF.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        approaches: List of approach keys to include (default: all)
+        filename: Output filename (should end in .pdf)
+        T_range: Temperature range for x-axis
+    """
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    if approaches is None:
+        approaches = list(results.keys())
+
+    # Filter to only approaches that exist in results
+    approaches = [name for name in approaches if name in results]
+    n_approaches = len(approaches)
+
+    if n_approaches == 0:
+        return
+
+    # Color scheme (same as existing plots)
+    colors = {
+        'approach0': 'black',
+        'approach1': 'green',
+        'approach2': 'blue',
+        'approach3': 'red',
+        'approach4': 'green',
+        'approach5': 'blue',
+        'approach6': 'green',
+        'approach7': 'blue',
+    }
+
+    # Determine grid layout
+    if n_approaches <= 3:
+        n_rows, n_cols = 1, n_approaches
+    elif n_approaches <= 6:
+        n_rows, n_cols = 2, 3
+    else:
+        n_rows, n_cols = 3, 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    if n_approaches == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    for idx, name in enumerate(approaches):
+        ax = axes[idx]
+        result = results[name]
+        color = colors.get(name, 'steelblue')
+
+        # Compute uncertainty bands
+        dh_lower, dh_median, dh_upper = compute_derivative_uncertainty_bands(result, T)
+
+        # Compute point estimate derivative
+        h1_point = result.h1_point
+        h2_point = result.h2_point
+        dh_point = h1_point + 2 * h2_point * T
+
+        # Plot CI band
+        ax.fill_between(T, dh_lower, dh_upper, alpha=0.3, color=color, label='90% CI')
+
+        # Plot point estimate
+        ax.plot(T, dh_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_xlabel('Temperature (°C)', fontsize=10)
+        ax.set_ylabel('dh/dT = h₁ + 2h₂T', fontsize=10)
+        ax.set_title(f'{result.approach}', fontsize=11)
+        ax.set_xlim(T_range)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc='upper right')
+
+    # Hide unused subplots
+    for idx in range(n_approaches, len(axes)):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Temperature Derivative with Bootstrap 90% CI', fontsize=14, y=1.02)
+    plt.tight_layout()
+    plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
+    plt.close()
+
+
+def save_all_bootstrap_plots(
+    results: Dict[str, "BootstrapResult"],
+    all_stats: Dict[str, Dict],
+    output_dir: Path,
+    T_range: tuple = (0, 30)
+) -> None:
+    """Generate all bootstrap plots.
+
+    Calls:
+    - plot_all_bootstrap_distributions() for all approaches in single PDF
+    - plot_bootstrap_temperature_response() for approaches 0-5 and 0,6,7
+    - plot_bootstrap_temperature_derivative() for approaches 0-5 and 0,6,7
+    - plot_bootstrap_T_optimal_comparison() for all approaches
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        all_stats: Dict mapping approach key to statistics dict
+        output_dir: Directory to save plots
+        T_range: Temperature range for response plots
+    """
+    # Generate combined distribution plot for all approaches
+    plot_all_bootstrap_distributions(results, all_stats, output_dir)
+    print("      Saved bootstrap_distributions.pdf")
+
+    # Temperature response plots
+    # Plot 1: Approaches 0-5
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        filename='bootstrap_temperature_response_all.pdf',
+        T_range=T_range
+    )
+    print("      Saved bootstrap_temperature_response_all.pdf")
+
+    # Plot 2: Approaches 0, 6, 7 (precomputed k)
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach0', 'approach6', 'approach7'],
+        filename='bootstrap_temperature_response_precomputed_k.pdf',
+        T_range=T_range
+    )
+    print("      Saved bootstrap_temperature_response_precomputed_k.pdf")
+
+    # Temperature derivative plots
+    # Plot 1: Approaches 0-5
+    plot_bootstrap_temperature_derivative(
+        results, output_dir,
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        filename='bootstrap_temperature_derivative_all.pdf',
+        T_range=T_range
+    )
+    print("      Saved bootstrap_temperature_derivative_all.pdf")
+
+    # Plot 2: Approaches 0, 6, 7 (precomputed k)
+    plot_bootstrap_temperature_derivative(
+        results, output_dir,
+        approaches=['approach0', 'approach6', 'approach7'],
+        filename='bootstrap_temperature_derivative_precomputed_k.pdf',
+        T_range=T_range
+    )
+    print("      Saved bootstrap_temperature_derivative_precomputed_k.pdf")
+
+    # T_optimal comparison across all approaches
+    plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir)
+    print("      Saved bootstrap_T_optimal_comparison.png")

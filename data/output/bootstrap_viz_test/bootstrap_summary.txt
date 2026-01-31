@@ -1,0 +1,174 @@
+Bootstrap Uncertainty Analysis - Summary
+======================================================================
+
+Bootstrap iterations: 50
+Successful iterations: 50
+
+No Detrending
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.20
+    Bootstrap median:     14.13
+    90% CI:          [   10.89,    16.42]
+    IQR:             [   12.91,    14.92]
+    Std:                 1.7452
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014068
+    Bootstrap median:  0.014159
+    90% CI:          [  0.008600,   0.021449]
+    IQR:             [  0.011402,   0.017221]
+    Std:               0.003915
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000495
+    Bootstrap median: -0.000502
+    90% CI:          [ -0.000731,  -0.000364]
+    IQR:             [ -0.000606,  -0.000422]
+    Std:               0.000113
+
+Linear Temperature Detrending
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.14
+    Bootstrap median:     14.21
+    90% CI:          [   10.56,    16.73]
+    IQR:             [   12.46,    15.30]
+    Std:                 2.0595
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014782
+    Bootstrap median:  0.015391
+    90% CI:          [  0.008018,   0.023311]
+    IQR:             [  0.011714,   0.018830]
+    Std:               0.004682
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000523
+    Bootstrap median: -0.000520
+    90% CI:          [ -0.000780,  -0.000353]
+    IQR:             [ -0.000622,  -0.000430]
+    Std:               0.000136
+
+Quadratic GDP Growth Detrending
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       17.44
+    Bootstrap median:     17.39
+    90% CI:          [   15.68,    18.44]
+    IQR:             [   16.71,    18.10]
+    Std:                 0.8908
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000241
+    Bootstrap median:  0.000283
+    90% CI:          [  0.000129,   0.000487]
+    IQR:             [  0.000186,   0.000364]
+    Std:               0.000124
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000007
+    Bootstrap median: -0.000008
+    90% CI:          [ -0.000013,  -0.000004]
+    IQR:             [ -0.000010,  -0.000006]
+    Std:               0.000003
+
+Combined Detrending (Mixed)
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.36
+    Bootstrap median:     14.17
+    90% CI:          [   10.93,    16.57]
+    IQR:             [   13.06,    15.04]
+    Std:                 1.7395
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.013538
+    Bootstrap median:  0.013944
+    90% CI:          [  0.008260,   0.020037]
+    IQR:             [  0.010937,   0.015968]
+    Std:               0.003605
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000471
+    Bootstrap median: -0.000469
+    90% CI:          [ -0.000686,  -0.000351]
+    IQR:             [ -0.000560,  -0.000402]
+    Std:               0.000103
+
+Combined Linear Detrending
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.37
+    Bootstrap median:     14.28
+    90% CI:          [   10.65,    17.23]
+    IQR:             [   12.59,    15.53]
+    Std:                 2.1699
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014463
+    Bootstrap median:  0.015153
+    90% CI:          [  0.007587,   0.022747]
+    IQR:             [  0.011384,   0.018652]
+    Std:               0.004570
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000503
+    Bootstrap median: -0.000509
+    90% CI:          [ -0.000754,  -0.000338]
+    IQR:             [ -0.000605,  -0.000414]
+    Std:               0.000133
+
+Combined Quadratic Detrending
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.30
+    Bootstrap median:     14.25
+    90% CI:          [   10.96,    16.60]
+    IQR:             [   13.04,    14.97]
+    Std:                 1.7455
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014209
+    Bootstrap median:  0.014396
+    90% CI:          [  0.008733,   0.021511]
+    IQR:             [  0.011475,   0.017196]
+    Std:               0.003886
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000497
+    Bootstrap median: -0.000501
+    90% CI:          [ -0.000734,  -0.000365]
+    IQR:             [ -0.000600,  -0.000426]
+    Std:               0.000112
+
+Precomputed k Linear
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.73
+    Bootstrap median:     14.62
+    90% CI:          [   11.02,    17.15]
+    IQR:             [   12.93,    15.79]
+    Std:                 2.0574
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.013360
+    Bootstrap median:  0.013797
+    90% CI:          [  0.006854,   0.019845]
+    IQR:             [  0.009899,   0.016666]
+    Std:               0.004020
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000453
+    Bootstrap median: -0.000446
+    90% CI:          [ -0.000656,  -0.000304]
+    IQR:             [ -0.000533,  -0.000370]
+    Std:               0.000110
+
+Precomputed k Quadratic
+--------------------------------------------------
+  T_optimal (Optimal Temperature, C):
+    Point estimate:       14.61
+    Bootstrap median:     14.41
+    90% CI:          [   11.16,    16.48]
+    IQR:             [   13.12,    15.32]
+    Std:                 1.6744
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.012919
+    Bootstrap median:  0.013357
+    90% CI:          [  0.007703,   0.018578]
+    IQR:             [  0.010262,   0.015391]
+    Std:               0.003328
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000442
+    Bootstrap median: -0.000433
+    90% CI:          [ -0.000607,  -0.000333]
+    IQR:             [ -0.000518,  -0.000383]
+    Std:               0.000092
+

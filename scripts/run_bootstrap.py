@@ -27,6 +27,7 @@ from src.output import (
     create_output_dir,
     save_bootstrap_coefficients_csv,
     save_bootstrap_summary_txt,
+    save_all_bootstrap_plots,
 )
 
 
@@ -97,7 +98,7 @@ def main():
     # Load data
     if args.use_csv and args.use_csv.strip():
         csv_path = Path(args.use_csv).expanduser()
-        print(f"\n[1/6] Loading data from {csv_path}...")
+        print(f"\n[1/7] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -106,7 +107,7 @@ def main():
     else:
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
-        print(f"\n[1/6] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/7] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -118,14 +119,14 @@ def main():
     print(f"      Years: {data.n_years}")
 
     # Compute country-level trends
-    print("\n[2/6] Computing country-level trends...")
+    print("\n[2/7] Computing country-level trends...")
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
     # Fit original model (point estimates)
-    print("\n[3/6] Fitting original model (point estimates)...")
+    print("\n[3/7] Fitting original model (point estimates)...")
     original_results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
@@ -134,7 +135,7 @@ def main():
     print("      Done.")
 
     # Run bootstrap
-    print(f"\n[4/6] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
+    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
     bootstrap_results = run_bootstrap(
         data=data,
         trends=trends,
@@ -146,14 +147,14 @@ def main():
     print("      Done.")
 
     # Compute summary statistics
-    print("\n[5/6] Computing bootstrap statistics...")
+    print("\n[5/7] Computing bootstrap statistics...")
     all_stats = {}
     for name, result in bootstrap_results.items():
         all_stats[name] = compute_bootstrap_statistics(result)
     print("      Done.")
 
     # Save outputs
-    print("\n[6/6] Saving outputs...")
+    print("\n[6/7] Saving outputs...")
     if args.output_dir:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -162,6 +163,11 @@ def main():
 
     save_bootstrap_coefficients_csv(bootstrap_results, output_dir)
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir)
+
+    # Generate bootstrap plots
+    print("\n[7/7] Generating bootstrap plots...")
+    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir)
+    print("      Done.")
 
     print(f"      Output saved to: {output_dir}")
 
