@@ -18,10 +18,19 @@ class CountryTrends:
     T0: Dict[int, float]  # country_idx -> intercept
     T1: Dict[int, float]  # country_idx -> slope
 
+    # Temperature quadratic trend: T(t) = T0_quad + T1_quad*t + T2_quad*t²
+    T0_quad: Dict[int, float]  # country_idx -> intercept (quadratic fit)
+    T1_quad: Dict[int, float]  # country_idx -> linear coef (quadratic fit)
+    T2_quad: Dict[int, float]  # country_idx -> quadratic coef (quadratic fit)
+
     # GDP growth quadratic trend: Δy(t) = y0 + y1*t + y2*t²
     y0: Dict[int, float]  # country_idx -> constant
     y1: Dict[int, float]  # country_idx -> linear coef
     y2: Dict[int, float]  # country_idx -> quadratic coef
+
+    # GDP growth linear trend: Δy(t) = y0_lin + y1_lin*t
+    y0_lin: Dict[int, float]  # country_idx -> constant (linear fit)
+    y1_lin: Dict[int, float]  # country_idx -> slope (linear fit)
 
 
 def fit_linear_trend(t: np.ndarray, y: np.ndarray) -> tuple:
@@ -57,11 +66,13 @@ def fit_quadratic_trend(t: np.ndarray, y: np.ndarray) -> tuple:
 
 
 def compute_country_trends(data: AnalysisData) -> CountryTrends:
-    """Compute linear temperature and quadratic GDP growth trends for each country.
+    """Compute linear temperature and GDP growth trends for each country.
 
     For each country i:
-    - Fits T_i(t) = T_{0,i} + T_{1,i} * t
-    - Fits Δy_i(t) = y_{0,i} + y_{1,i} * t + y_{2,i} * t²
+    - Fits T_i(t) = T_{0,i} + T_{1,i} * t (temperature linear trend)
+    - Fits T_i(t) = T_{0,i} + T_{1,i} * t + T_{2,i} * t² (temperature quadratic trend)
+    - Fits Δy_i(t) = y_{0,i} + y_{1,i} * t + y_{2,i} * t² (GDP quadratic trend)
+    - Fits Δy_i(t) = y_{0,lin,i} + y_{1,lin,i} * t (GDP linear trend)
 
     Args:
         data: AnalysisData object with observation arrays
@@ -71,9 +82,14 @@ def compute_country_trends(data: AnalysisData) -> CountryTrends:
     """
     T0 = {}
     T1 = {}
+    T0_quad = {}
+    T1_quad = {}
+    T2_quad = {}
     y0 = {}
     y1 = {}
     y2 = {}
+    y0_lin = {}
+    y1_lin = {}
 
     for country_idx in range(data.n_countries):
         # Get observations for this country
@@ -85,12 +101,26 @@ def compute_country_trends(data: AnalysisData) -> CountryTrends:
         # Fit linear temperature trend
         T0[country_idx], T1[country_idx] = fit_linear_trend(t_country, temp_country)
 
+        # Fit quadratic temperature trend
+        T0_quad[country_idx], T1_quad[country_idx], T2_quad[country_idx] = fit_quadratic_trend(
+            t_country, temp_country
+        )
+
         # Fit quadratic GDP growth trend
         y0[country_idx], y1[country_idx], y2[country_idx] = fit_quadratic_trend(
             t_country, growth_country
         )
 
-    return CountryTrends(T0=T0, T1=T1, y0=y0, y1=y1, y2=y2)
+        # Fit linear GDP growth trend
+        y0_lin[country_idx], y1_lin[country_idx] = fit_linear_trend(
+            t_country, growth_country
+        )
+
+    return CountryTrends(
+        T0=T0, T1=T1,
+        T0_quad=T0_quad, T1_quad=T1_quad, T2_quad=T2_quad,
+        y0=y0, y1=y1, y2=y2, y0_lin=y0_lin, y1_lin=y1_lin
+    )
 
 
 def compute_detrended_temperature(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
@@ -155,3 +185,63 @@ def compute_growth_trend_values(data: AnalysisData, trends: CountryTrends) -> np
         y_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
 
     return y_trend
+
+
+def compute_growth_trend_values_linear(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
+    """Compute the linear GDP growth trend values.
+
+    Returns y0_lin + y1_lin*t for each observation.
+    """
+    y_trend = np.zeros(data.n_obs)
+
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        y_trend[i] = trends.y0_lin[c] + trends.y1_lin[c] * t
+
+    return y_trend
+
+
+def compute_detrended_temperature_quadratic(
+    data: AnalysisData, trends: CountryTrends
+) -> np.ndarray:
+    """Compute temperature departure from quadratic trend.
+
+    Returns T*(t) = T(t) - (T0_quad + T1_quad*t + T2_quad*t²)
+    """
+    T_star = np.zeros(data.n_obs)
+
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        T_trend = (
+            trends.T0_quad[c]
+            + trends.T1_quad[c] * t
+            + trends.T2_quad[c] * t * t
+        )
+        T_star[i] = data.temp[i] - T_trend
+
+    return T_star
+
+
+def compute_detrended_temp_squared_quadratic(
+    data: AnalysisData, trends: CountryTrends
+) -> np.ndarray:
+    """Compute T² - (T0_quad + T1_quad*t + T2_quad*t²)² for quadratic temperature detrending.
+
+    This is the coefficient adjustment for h2 in the quadratic temperature-detrended model.
+    """
+    T2_detrend = np.zeros(data.n_obs)
+
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        T = data.temp[i]
+        T_trend = (
+            trends.T0_quad[c]
+            + trends.T1_quad[c] * t
+            + trends.T2_quad[c] * t * t
+        )
+        T2_detrend[i] = T * T - T_trend * T_trend
+
+    return T2_detrend

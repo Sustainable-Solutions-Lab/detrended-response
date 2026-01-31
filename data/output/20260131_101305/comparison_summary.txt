@@ -1,18 +1,18 @@
 Detrended Response Analysis - Comparison of Approaches
 ======================================================================
 
-Burke Original (j + k_t)
+No Detrending
 --------------------------------------------------
-  h1 =     0.014068  (SE: 0.002810)
+  h1 =     0.014068  (SE: 0.002809)
   h2 =    -0.000495  (SE: 0.000089)
   T_optimal = 14.20 C
   R² = 0.2576
-  Adjusted R² = 0.2039
+  Adjusted R² = 0.2041
   RMSE = 0.052600
   Observations: 8479
-  Parameters: 573
+  Parameters: 571
 
-Temperature Detrending
+Linear Temperature Detrending
 --------------------------------------------------
   h1 =     0.012607  (SE: 0.002936)
   h2 =    -0.000453  (SE: 0.000090)
@@ -23,7 +23,7 @@ Temperature Detrending
   Observations: 8479
   Parameters: 172
 
-GDP Growth Detrending
+Quadratic GDP Growth Detrending
 --------------------------------------------------
   h1 =     0.005866  (SE: 0.002032)
   h2 =    -0.000200  (SE: 0.000058)
@@ -34,7 +34,7 @@ GDP Growth Detrending
   Observations: 8479
   Parameters: 172
 
-Combined Detrending
+Combined Detrending (Mixed)
 --------------------------------------------------
   h1 =     0.011072  (SE: 0.002720)
   h2 =    -0.000420  (SE: 0.000084)
@@ -42,6 +42,28 @@ Combined Detrending
   R² = 0.0030
   Adjusted R² = -0.0175
   RMSE = 0.054845
+  Observations: 8479
+  Parameters: 172
+
+Combined Linear Detrending
+--------------------------------------------------
+  h1 =     0.012411  (SE: 0.002832)
+  h2 =    -0.000446  (SE: 0.000087)
+  T_optimal = 13.91 C
+  R² = 0.0031
+  Adjusted R² = -0.0174
+  RMSE = 0.057105
+  Observations: 8479
+  Parameters: 172
+
+Combined Quadratic Detrending
+--------------------------------------------------
+  h1 =     0.011344  (SE: 0.002766)
+  h2 =    -0.000434  (SE: 0.000085)
+  T_optimal = 13.06 C
+  R² = 0.0031
+  Adjusted R² = -0.0174
+  RMSE = 0.054842
   Observations: 8479
   Parameters: 172
 

@@ -93,17 +93,30 @@ def plot_temperature_response(
 
     T = np.linspace(T_range[0], T_range[1], 200)
 
+    # Color scheme (degree of detrending):
+    # - No detrending: black
+    # - Mixed (linear T + quadratic GDP): red
+    # - Linear: green
+    # - Quadratic: blue
     colors = {
         'burke_original': 'black',
-        'approach1': 'blue',
-        'approach2': 'green',
-        'approach3': 'red',
+        'approach1': 'green',      # Linear Temperature Detrending
+        'approach2': 'blue',       # Quadratic GDP Growth Detrending
+        'approach3': 'red',        # Combined Detrending (Mixed)
+        'approach4': 'green',      # Combined Linear Detrending
+        'approach5': 'blue',       # Combined Quadratic Detrending
     }
+    # Line style scheme (what's being detrended):
+    # - No detrending or combined (both): solid
+    # - GDP growth detrending only: dashed
+    # - Temperature detrending only: dotted
     linestyles = {
         'burke_original': '-',
-        'approach1': '--',
-        'approach2': '-.',
-        'approach3': ':',
+        'approach1': ':',
+        'approach2': '--',
+        'approach3': '-',
+        'approach4': '-',
+        'approach5': '-',
     }
 
     for name, r in results.items():
@@ -119,7 +132,7 @@ def plot_temperature_response(
         # Plot h(T) - h(T*)
         h_relative = h_T - h_T_opt
 
-        label = f"{r.approach} (T* = {r.T_optimal:.1f}°C)"
+        label = f"{r.approach} (T_opt = {r.T_optimal:.1f}°C)"
         ax.plot(T, h_relative, color=colors.get(name, 'gray'),
                 linestyle=linestyles.get(name, '-'), label=label, linewidth=2)
 
@@ -129,7 +142,7 @@ def plot_temperature_response(
 
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
-    ax.set_ylabel('h(T) - h(T*)', fontsize=12)
+    ax.set_ylabel('h(T) - h(T_opt)', fontsize=12)
     ax.set_title('Temperature Response Relative to Optimum', fontsize=14)
     ax.legend(loc='lower left', fontsize=10)
     ax.set_xlim(T_range)
@@ -148,17 +161,30 @@ def plot_temperature_derivative(
 
     T = np.linspace(T_range[0], T_range[1], 200)
 
+    # Color scheme (degree of detrending):
+    # - No detrending: black
+    # - Mixed (linear T + quadratic GDP): red
+    # - Linear: green
+    # - Quadratic: blue
     colors = {
         'burke_original': 'black',
-        'approach1': 'blue',
-        'approach2': 'green',
-        'approach3': 'red',
+        'approach1': 'green',      # Linear Temperature Detrending
+        'approach2': 'blue',       # Quadratic GDP Growth Detrending
+        'approach3': 'red',        # Combined Detrending (Mixed)
+        'approach4': 'green',      # Combined Linear Detrending
+        'approach5': 'blue',       # Combined Quadratic Detrending
     }
+    # Line style scheme (what's being detrended):
+    # - No detrending or combined (both): solid
+    # - GDP growth detrending only: dashed
+    # - Temperature detrending only: dotted
     linestyles = {
         'burke_original': '-',
-        'approach1': '--',
-        'approach2': '-.',
-        'approach3': ':',
+        'approach1': ':',
+        'approach2': '--',
+        'approach3': '-',
+        'approach4': '-',
+        'approach5': '-',
     }
 
     for name, r in results.items():
@@ -227,7 +253,8 @@ def plot_optimal_temperature_comparison(
     labels = [results[a].approach for a in approaches]
     T_opt = [results[a].T_optimal for a in approaches]
 
-    colors = ['black', 'blue', 'green', 'red']
+    # Colors: black (none), green (linear T), blue (quad GDP), red (mixed), green (linear), blue (quad)
+    colors = ['black', 'green', 'blue', 'red', 'green', 'blue']
     x = np.arange(len(approaches))
 
     bars = ax.bar(x, T_opt, color=colors[:len(approaches)], alpha=0.7)

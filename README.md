@@ -1,56 +1,135 @@
 # Detrended Response Analysis
 
-This project examines different interpretations of the time trend terms in the Burke et al. (2015) climate-economy relationship. The Burke equation contains country-specific quadratic time trends that can be interpreted as:
+## Overview
 
-1. Linear detrending of country-level temperature
-2. Quadratic detrending of country-level per capita GDP growth
-3. A combination of both detrendings
+The Burke et al. (2015) equation contains a country-specific quadratic time trend. This work explores how this quadratic time trend can be interpreted. To simplify the discussion, we consider the economic response to temperature only, neglecting precipitation responses.
 
-This work makes these implicit detrendings explicit and compares the resulting climate response estimates.
+The time trend can be interpreted either as reflecting a linear detrending of the country-level temperature curve, or as a quadratic detrending of the country-level per capita GDP growth-rate curve, or as a combination of these two detrendings. One way of understanding the Burke et al. (2015) equation is that it is relating, at country level, departures from the linear temperature trend to departures from the quadratic GDP growth trend.
+
+This work examines the effect of making this implicit detrending explicit.
 
 ## The Model
 
-The Burke et al. (2015) equation (simplified to temperature only) is:
+The Burke et al. (2015) equations, simplified to consider temperature only, can be written as:
 
+```
+Δyᵢ(t) = h(Tᵢ(t)) + jᵢ(t) + k(t)
+```
+
+where:
+```
+h(Tᵢ(t)) = h₁·Tᵢ(t) + h₂·Tᵢ(t)²
+jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t²
+k(t) = kₜ
+```
+
+This can be collapsed into:
 ```
 Δyᵢ(t) = h₁·Tᵢ(t) + h₂·Tᵢ(t)² + j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² + kₜ
 ```
 
-Where:
-- `Δyᵢ(t)` is the per capita GDP growth rate for country i in year t
-- `Tᵢ(t)` is the annual mean temperature
-- `h₁, h₂` are the temperature response coefficients
-- `j₀,ᵢ, j₁,ᵢ, j₂,ᵢ` are country-specific quadratic time trend coefficients
-- `kₜ` are year fixed effects
+**Variables:**
+- `Δyᵢ(t)` — per capita GDP growth rate for country i in year t
+- `Tᵢ(t)` — annual mean temperature
+- `h₁, h₂` — temperature response coefficients
+- `jᵢ(t)` — country-specific quadratic time trend
+- `kₜ` — year fixed effects
 
-The optimal temperature (where growth is maximized) is: `T* = -h₁ / (2·h₂)`
+**Optimal temperature** (where growth is maximized): `T_opt = -h₁ / (2·h₂)`
 
-## Four Approaches
+## Interpreting the Time Trend Function jᵢ(t)
 
-### Approach 0: Burke Original (No Pre-Detrending)
-The standard Burke et al. (2015) specification with all j terms and year fixed effects estimated jointly via OLS. No detrending is performed prior to the fit:
+The time trend function `jᵢ(t)` can be interpreted as:
+1. A linear detrending of the country-level temperature curve
+2. A quadratic detrending of the country-level per capita GDP growth-rate curve
+3. A combination of both detrendings
+
+If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
+
+## Six Approaches
+
+### Approach 0: No Detrending
+
+Fit all terms in a single fitting process. With this approach, it is unclear how much `jᵢ(t)` is acting to detrend temperature versus per capita GDP growth rates, and how much of the error term is being absorbed into these many additional degrees of freedom.
+
 ```
 Δyᵢ(t) = h₁·T + h₂·T² + j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² + kₜ
 ```
-All parameters (h₁, h₂, j terms, kₜ) are estimated simultaneously.
+
+Note: One could add any arbitrary quadratic in time to `k(t)` and subtract the same quadratic from all of the `jᵢ(t)`s. Therefore, three additional constraints must be added. Without loss of generality, we set `j₁(t) = 0` for the first country.
+
+**Degrees of freedom:** 2 for h(T) + 3×(n_countries - 1) for jᵢ(t) + n_years for k(t)
 
 ### Approach 1: Linear Temperature Detrending
-Interprets the time trend as removing a linear temperature trend. Pre-computes `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares, then estimates:
+
+We know that at least `j₀,ᵢ` and `j₁,ᵢ` relate to the temperature scale, because their values would differ if temperature was measured in Celsius versus Kelvin. A natural assumption is that at least part of `jᵢ(t)` is meant to represent a linear detrending of temperature.
+
+Pre-compute `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares on the linear temperature trend, then estimate:
+
 ```
 Δyᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
 ```
 
+**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+
 ### Approach 2: Quadratic GDP Growth Detrending
-Interprets the time trend as removing a quadratic GDP growth trend. Pre-computes `y₀,ᵢ, y₁,ᵢ, y₂,ᵢ` for each country via least squares, then estimates:
+
+Another interpretation of `jᵢ(t)` is that it represents a quadratic detrending of the `Δyᵢ(t)` values.
+
+Pre-compute `y₀,ᵢ`, `y₁,ᵢ`, and `y₂,ᵢ` for each country via least squares on the quadratic per capita GDP-growth trend, then estimate:
+
 ```
 Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·T + h₂·T² + kᵢ
 ```
 
-### Approach 3: Combined Detrending
-Applies both linear temperature detrending and quadratic GDP growth detrending:
+**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+
+### Approach 3: Combined Detrending (Mixed)
+
+Combines linear temperature detrending with quadratic GDP growth detrending. If the purpose of `jᵢ(t)` is to effect both a linear detrending of the temperature record and a quadratic detrending of the per-capita GDP growth record:
+
 ```
 Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
 ```
+
+**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+
+### Approach 4: Combined Linear Detrending
+
+There is something unsatisfying about correlating departures from a quadratic detrending of per capita GDP growth with departures from a linear detrending of temperature. This approach applies linear detrending to both variables.
+
+```
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
+```
+
+**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+
+### Approach 5: Combined Quadratic Detrending
+
+Applies quadratic detrending to both per capita GDP growth and temperature. When combined with the 2nd order term in h(T), this results in `jᵢ(t)` becoming a 4th-order equation.
+
+```
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)]
+                                      + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²] + kᵢ
+```
+
+**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+
+## Plot Color Scheme
+
+In the output plots:
+
+| Approach | Color | Line Style | Description |
+|----------|-------|------------|-------------|
+| 0 | Black | Solid | No detrending |
+| 1 | Green | Dotted | Linear (temperature only) |
+| 2 | Blue | Dashed | Quadratic (GDP growth only) |
+| 3 | Red | Solid | Mixed (linear T + quadratic GDP) |
+| 4 | Green | Solid | Linear (both) |
+| 5 | Blue | Solid | Quadratic (both) |
+
+**Color** indicates the degree of detrending (linear=green, quadratic=blue, mixed=red, none=black).
+**Line style** indicates what is being detrended (temperature only=dotted, GDP growth only=dashed, both/none=solid).
 
 ## Data Sources
 
@@ -102,11 +181,6 @@ python scripts/run_analysis.py
 
 ### Examples
 
-Using default Maddison + CRU data:
-```bash
-python scripts/run_analysis.py
-```
-
 Using pre-processed CSV:
 ```bash
 python scripts/run_analysis.py --use-csv data/input/df_base_withPop.csv
@@ -126,8 +200,8 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 | `comparison_summary.txt` | Text summary of all approaches |
 | `comparison_table.csv` | Tabular comparison of coefficients and fit statistics |
 | `comparison_table.xlsx` | Same as above in Excel format |
-| `country_trends.csv` | Country-level trend coefficients (T₀,ᵢ, T₁,ᵢ, y₀,ᵢ, y₁,ᵢ, y₂,ᵢ) |
-| `temperature_response.png` | Plot of h(T) = h₁T + h₂T² for each approach |
+| `country_trends.csv` | Country-level trend coefficients |
+| `temperature_response.png` | Plot of h(T) - h(T_opt) for each approach |
 | `temperature_derivative.png` | Plot of dh/dT = h₁ + 2h₂T |
 | `coefficient_comparison.png` | Bar chart comparing h₁ and h₂ across approaches |
 | `optimal_temperature_comparison.png` | Bar chart of optimal temperatures |
@@ -155,23 +229,6 @@ detrended-response/
 ├── requirements.txt
 └── README.md
 ```
-
-## Next Steps
-
-The two data input options currently produce results with **opposite signs** for h₁ and h₂:
-
-| Dataset | h₁ | h₂ | T_optimal |
-|---------|----|----|-----------|
-| Maddison + CRU | -0.0007 | +0.00002 | ~17°C |
-| df_base_withPop.csv | +0.014 | -0.0005 | ~14°C |
-
-The expected signs (based on Burke et al. 2015) are h₁ > 0 and h₂ < 0, which matches the pre-processed CSV but not the Maddison/CRU pipeline.
-
-**Priority**: Diagnose why these two approaches give results with opposing signs. Potential issues to investigate:
-- GDP variable: Is the Maddison/CRU pipeline using total GDP instead of per-capita GDP?
-- Growth rate computation: Are the growth rates being computed consistently?
-- Temperature data: Are there differences in how temperature is aggregated or scaled?
-- Country/year coverage: Do the datasets have different country or time coverage that affects results?
 
 ## References
 

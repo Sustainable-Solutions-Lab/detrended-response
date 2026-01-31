@@ -19,7 +19,10 @@ from .detrending import (
     CountryTrends,
     compute_detrended_temperature,
     compute_detrended_temp_squared,
+    compute_detrended_temperature_quadratic,
+    compute_detrended_temp_squared_quadratic,
     compute_growth_trend_values,
+    compute_growth_trend_values_linear,
 )
 
 
@@ -146,7 +149,7 @@ def fit_approach1_temperature_detrending(
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
     return FitResult(
-        approach="Temperature Detrending",
+        approach="Linear Temperature Detrending",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -198,7 +201,7 @@ def fit_approach2_growth_detrending(
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
     return FitResult(
-        approach="GDP Growth Detrending",
+        approach="Quadratic GDP Growth Detrending",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -252,7 +255,120 @@ def fit_approach3_combined_detrending(
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
     return FitResult(
-        approach="Combined Detrending",
+        approach="Combined Detrending (Mixed)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+    )
+
+
+def fit_approach4_combined_linear_detrending(
+    data: AnalysisData, trends: CountryTrends
+) -> FitResult:
+    """Approach 4: Combined detrending with linear GDP growth trend.
+
+    Δy_i(t) - (y0 + y1*t) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
+
+    Like Approach 3, but uses linear GDP growth trend (y2 = 0).
+    """
+    # Compute detrended dependent variable using linear trend
+    y_trend = compute_growth_trend_values_linear(data, trends)
+    y = data.growth_pcGDP - y_trend
+
+    # Compute detrended temperature terms
+    T_star = compute_detrended_temperature(data, trends)
+    T2_detrend = compute_detrended_temp_squared(data, trends)
+
+    # Build design matrix
+    X = build_design_matrix(data, T_star, T2_detrend)
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Country fixed effects
+    k = {i: beta[2 + i] for i in range(data.n_countries)}
+
+    # Fit statistics
+    n_params = 2 + data.n_countries
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResult(
+        approach="Combined Linear Detrending",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+    )
+
+
+def fit_approach5_combined_quadratic_detrending(
+    data: AnalysisData, trends: CountryTrends
+) -> FitResult:
+    """Approach 5: Combined detrending with quadratic temperature and GDP growth trends.
+
+    Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t + T2*t²)]
+                                  + h2*[T² - (T0 + T1*t + T2*t²)²] + k_i
+
+    Like Approach 3, but uses quadratic temperature trend instead of linear.
+    """
+    # Compute detrended dependent variable (quadratic GDP growth trend)
+    y_trend = compute_growth_trend_values(data, trends)
+    y = data.growth_pcGDP - y_trend
+
+    # Compute detrended temperature terms using quadratic temperature trend
+    T_star = compute_detrended_temperature_quadratic(data, trends)
+    T2_detrend = compute_detrended_temp_squared_quadratic(data, trends)
+
+    # Build design matrix
+    X = build_design_matrix(data, T_star, T2_detrend)
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Country fixed effects
+    k = {i: beta[2 + i] for i in range(data.n_countries)}
+
+    # Fit statistics
+    n_params = 2 + data.n_countries
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResult(
+        approach="Combined Quadratic Detrending",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -275,11 +391,11 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
 
     This estimates:
     - h1, h2: temperature response coefficients
-    - j_{0,i}, j_{1,i}, j_{2,i}: country-specific quadratic time trends (all countries)
-    - k_t: year fixed effects (first year is reference, k_0 = 0)
+    - j_{0,i}, j_{1,i}, j_{2,i}: country-specific quadratic time trends (countries i > 0)
+    - k_t: year fixed effects (all years)
 
-    Setting k_0 = 0 is sufficient to identify the model. The j_0 terms absorb
-    the country-specific baseline levels.
+    For identifiability, we set j_{0,0} = j_{1,0} = j_{2,0} = 0 (first country is reference).
+    All year fixed effects k_t are estimated.
     """
     n_obs = data.n_obs
     n_countries = data.n_countries
@@ -291,10 +407,10 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
 
     # Number of parameters:
     # - 2 for h1, h2
-    # - 3 * n_countries for j terms (all countries)
-    # - (n_years - 1) for k_t terms (first year is reference, k_0 = 0)
-    n_j_params = 3 * n_countries
-    n_k_params = n_years - 1
+    # - 3 * (n_countries - 1) for j terms (first country is reference, j[0] = 0)
+    # - n_years for k_t terms (all years)
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_years
     n_params = 2 + n_j_params + n_k_params
 
     X = np.zeros((n_obs, n_params))
@@ -303,22 +419,22 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     X[:, 0] = data.temp
     X[:, 1] = data.temp ** 2
 
-    # Country-specific time trends (all countries)
+    # Country-specific time trends (skip country 0 as reference)
     for i in range(n_obs):
         c = data.country_idx[i]
-        t = data.time[i]
+        if c > 0:  # Skip country 0 (reference country)
+            t = data.time[i]
+            # j0, j1, j2 for country c are at columns for (c-1)
+            col_base = 2 + 3 * (c - 1)
+            X[i, col_base] = 1.0        # j0[c]
+            X[i, col_base + 1] = t      # j1[c]
+            X[i, col_base + 2] = t * t  # j2[c]
 
-        col_base = 2 + 3 * c
-        X[i, col_base] = 1.0        # j0
-        X[i, col_base + 1] = t      # j1
-        X[i, col_base + 2] = t * t  # j2
-
-    # Year fixed effects (skip first year as reference, k_0 = 0)
+    # Year fixed effects (all years)
     k_col_start = 2 + n_j_params
     for i in range(n_obs):
         yr_idx = year_to_idx[data.year[i]]
-        if yr_idx > 0:
-            X[i, k_col_start + yr_idx - 1] = 1.0
+        X[i, k_col_start + yr_idx] = 1.0
 
     # Fit OLS
     y = data.growth_pcGDP
@@ -331,9 +447,9 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     h2_se = np.sqrt(cov[1, 1])
 
     # Year fixed effects (for reporting, we store by year index)
-    k = {0: 0.0}  # Reference year (k_0 = 0)
-    for yr_idx in range(1, n_years):
-        k[yr_idx] = beta[k_col_start + yr_idx - 1]
+    k = {}
+    for yr_idx in range(n_years):
+        k[yr_idx] = beta[k_col_start + yr_idx]
 
     # Fit statistics
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
@@ -342,7 +458,7 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
     return FitResult(
-        approach="Burke Original (j + k_t)",
+        approach="No Detrending",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -359,17 +475,21 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
 
 
 def fit_all_approaches(data: AnalysisData, trends: CountryTrends) -> dict:
-    """Fit all four approaches and return results.
+    """Fit all six approaches and return results.
 
     Returns dict with keys:
         'burke_original': Original Burke et al. (2015) with j terms and year fixed effects
-        'approach1': Temperature detrending
-        'approach2': GDP growth detrending
-        'approach3': Combined detrending
+        'approach1': Temperature detrending (linear T trend)
+        'approach2': GDP growth detrending (quadratic GDP trend)
+        'approach3': Combined detrending (linear T trend, quadratic GDP trend)
+        'approach4': Combined detrending (linear T trend, linear GDP trend)
+        'approach5': Combined detrending (quadratic T trend, quadratic GDP trend)
     """
     return {
         'burke_original': fit_burke_original(data),
         'approach1': fit_approach1_temperature_detrending(data, trends),
         'approach2': fit_approach2_growth_detrending(data, trends),
         'approach3': fit_approach3_combined_detrending(data, trends),
+        'approach4': fit_approach4_combined_linear_detrending(data, trends),
+        'approach5': fit_approach5_combined_quadratic_detrending(data, trends),
     }

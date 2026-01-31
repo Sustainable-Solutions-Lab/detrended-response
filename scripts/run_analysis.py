@@ -26,6 +26,8 @@ from src.fitting import (
     fit_approach1_temperature_detrending,
     fit_approach2_growth_detrending,
     fit_approach3_combined_detrending,
+    fit_approach4_combined_linear_detrending,
+    fit_approach5_combined_quadratic_detrending,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -80,7 +82,7 @@ def main():
     if args.use_csv:
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
-        print(f"\n[1/6] Loading data from {csv_path}...")
+        print(f"\n[1/8] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -90,7 +92,7 @@ def main():
         # Load from Maddison/CRU files
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
-        print(f"\n[1/6] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/8] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -103,27 +105,35 @@ def main():
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\n[2/6] Computing country-level trends...")
+    print("\n[2/8] Computing country-level trends...")
     trends = compute_country_trends(data)
     print("      Done.")
 
     # Fit all approaches
     results = {}
 
-    print("\n[3/6] Fitting Approach 0: Burke Original (no pre-detrending)...")
+    print("\n[3/8] Fitting Approach 0: Burke Original (no pre-detrending)...")
     results['burke_original'] = fit_burke_original(data)
     print("      Done.")
 
-    print("\n[4/6] Fitting Approach 1: Temperature detrending...")
+    print("\n[4/8] Fitting Approach 1: Temperature detrending...")
     results['approach1'] = fit_approach1_temperature_detrending(data, trends)
     print("      Done.")
 
-    print("\n[5/6] Fitting Approach 2: GDP growth detrending...")
+    print("\n[5/8] Fitting Approach 2: GDP growth detrending...")
     results['approach2'] = fit_approach2_growth_detrending(data, trends)
     print("      Done.")
 
-    print("\n[6/6] Fitting Approach 3: Combined detrending...")
+    print("\n[6/8] Fitting Approach 3: Combined detrending (quadratic GDP, linear T)...")
     results['approach3'] = fit_approach3_combined_detrending(data, trends)
+    print("      Done.")
+
+    print("\n[7/8] Fitting Approach 4: Combined detrending (linear GDP, linear T)...")
+    results['approach4'] = fit_approach4_combined_linear_detrending(data, trends)
+    print("      Done.")
+
+    print("\n[8/8] Fitting Approach 5: Combined detrending (quadratic GDP, quadratic T)...")
+    results['approach5'] = fit_approach5_combined_quadratic_detrending(data, trends)
     print("      Done.")
 
     # Print summary
