@@ -27,23 +27,27 @@ The optimal temperature (where growth is maximized) is: `T* = -h₁ / (2·h₂)`
 
 ## Four Approaches
 
-### Burke Original
-The standard Burke et al. (2015) specification with all j terms and year fixed effects estimated jointly via OLS.
+### Approach 0: Burke Original (No Pre-Detrending)
+The standard Burke et al. (2015) specification with all j terms and year fixed effects estimated jointly via OLS. No detrending is performed prior to the fit:
+```
+Δy_i(t) = h₁·T + h₂·T² + j_{0,i} + j_{1,i}·t + j_{2,i}·t² + k_t
+```
+All parameters (h₁, h₂, j terms, k_t) are estimated simultaneously.
 
-### Approach 1: Temperature Detrending
-Interprets the time trend as removing a linear temperature trend. Pre-computes `T_{0,i}` and `T_{1,i}` for each country, then estimates:
+### Approach 1: Linear Temperature Detrending
+Interprets the time trend as removing a linear temperature trend. Pre-computes `T_{0,i}` and `T_{1,i}` for each country via least squares, then estimates:
 ```
 Δy_i(t) = h₁·[T - (T₀ + T₁·t)] + h₂·[T² - (T₀ + T₁·t)²] + k_i
 ```
 
-### Approach 2: GDP Growth Detrending
-Interprets the time trend as removing a quadratic GDP growth trend. Pre-computes `y_{0,i}, y_{1,i}, y_{2,i}` for each country, then estimates:
+### Approach 2: Quadratic GDP Growth Detrending
+Interprets the time trend as removing a quadratic GDP growth trend. Pre-computes `y_{0,i}, y_{1,i}, y_{2,i}` for each country via least squares, then estimates:
 ```
 Δy_i(t) - (y₀ + y₁·t + y₂·t²) = h₁·T + h₂·T² + k_i
 ```
 
 ### Approach 3: Combined Detrending
-Applies both detrendings:
+Applies both linear temperature detrending and quadratic GDP growth detrending:
 ```
 Δy_i(t) - (y₀ + y₁·t + y₂·t²) = h₁·[T - (T₀ + T₁·t)] + h₂·[T² - (T₀ + T₁·t)²] + k_i
 ```
