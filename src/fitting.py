@@ -391,8 +391,142 @@ def fit_approach5_combined_quadratic_detrending(
     )
 
 
-def fit_burke_original(data: AnalysisData) -> FitResult:
-    """Original Burke et al. (2015) model with country time trends and year fixed effects.
+def fit_approach6_precomputed_k_linear(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Approach 6: Pre-computed k[t] with linear country/temperature trends.
+
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) = j_{0,i} + j_{1,i}*t are fit to dy_i[t] - k[t]
+    3. Temperature is detrended with linear trend: T* = T - (T0 + T1*t)
+    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
+
+    Unlike Approaches 4/5, year effects k[t] are pre-computed as year means
+    rather than estimated in the regression.
+    """
+    # Compute detrended temperature terms (linear)
+    T_star = compute_detrended_temperature(data, trends)
+    T2_detrend = compute_detrended_temp_squared(data, trends)
+
+    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
+    # where j_i[t] is the linear trend fit to (dy - k)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        # j_i[t] = y0_lin + y1_lin * t (fit to dy - k)
+        j_i_t = trends.y0_lin[c] + trends.y1_lin[c] * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Design matrix: just [T*, T*²] - no year fixed effects
+    X = np.column_stack([T_star, T2_detrend])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResult(
+        approach="Precomputed k Linear",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+    )
+
+
+def fit_approach7_precomputed_k_quadratic(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Approach 7: Pre-computed k[t] with quadratic country/temperature trends.
+
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² are fit to dy_i[t] - k[t]
+    3. Temperature is detrended with quadratic trend: T* = T - (T0 + T1*t + T2*t²)
+    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
+
+    Unlike Approaches 4/5, year effects k[t] are pre-computed as year means
+    rather than estimated in the regression.
+    """
+    # Compute detrended temperature terms (quadratic)
+    T_star = compute_detrended_temperature_quadratic(data, trends)
+    T2_detrend = compute_detrended_temp_squared_quadratic(data, trends)
+
+    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
+    # where j_i[t] is the quadratic trend fit to (dy - k)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        # j_i[t] = y0 + y1*t + y2*t² (fit to dy - k)
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Design matrix: just [T*, T*²] - no year fixed effects
+    X = np.column_stack([T_star, T2_detrend])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResult(
+        approach="Precomputed k Quadratic",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+    )
+
+
+def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
+    """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
     Δy_i(t) = h1*T + h2*T² + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
 
@@ -482,22 +616,38 @@ def fit_burke_original(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_all_approaches(data: AnalysisData, trends: CountryTrends) -> dict:
-    """Fit all six approaches and return results.
+def fit_all_approaches(
+    data: AnalysisData, trends: CountryTrends,
+    trends_with_k: CountryTrends = None, year_means: dict = None
+) -> dict:
+    """Fit all approaches and return results.
 
     Returns dict with keys:
-        'burke_original': Original Burke et al. (2015) with j terms and year fixed effects
+        'approach0': No detrending, with j terms and year fixed effects
         'approach1': Temperature detrending (linear T trend)
         'approach2': GDP growth detrending (quadratic GDP trend)
         'approach3': Combined detrending (linear T trend, quadratic GDP trend)
         'approach4': Combined detrending (linear T trend, linear GDP trend)
         'approach5': Combined detrending (quadratic T trend, quadratic GDP trend)
+        'approach6': Pre-computed k with linear trends (if trends_with_k and year_means provided)
+        'approach7': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
     """
-    return {
-        'burke_original': fit_burke_original(data),
+    results = {
+        'approach0': fit_approach0_no_detrending(data),
         'approach1': fit_approach1_temperature_detrending(data, trends),
         'approach2': fit_approach2_growth_detrending(data, trends),
         'approach3': fit_approach3_combined_detrending(data, trends),
         'approach4': fit_approach4_combined_linear_detrending(data, trends),
         'approach5': fit_approach5_combined_quadratic_detrending(data, trends),
     }
+
+    # Add approaches 6 and 7 if trends_with_k and year_means are provided
+    if trends_with_k is not None and year_means is not None:
+        results['approach6'] = fit_approach6_precomputed_k_linear(
+            data, trends_with_k, year_means
+        )
+        results['approach7'] = fit_approach7_precomputed_k_quadratic(
+            data, trends_with_k, year_means
+        )
+
+    return results

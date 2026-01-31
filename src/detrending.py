@@ -245,3 +245,87 @@ def compute_detrended_temp_squared_quadratic(
         T2_detrend[i] = T * T - T_trend * T_trend
 
     return T2_detrend
+
+
+def compute_year_means(data: AnalysisData) -> Dict[int, float]:
+    """Compute mean dy_i[t] for each year t (equally weighted across countries).
+
+    Returns k[t] = mean_i(growth_pcGDP_i[t]) for each year t.
+    """
+    from collections import defaultdict
+
+    sums = defaultdict(float)
+    counts = defaultdict(int)
+
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        sums[yr] += data.growth_pcGDP[i]
+        counts[yr] += 1
+
+    return {yr: sums[yr] / counts[yr] for yr in sums}
+
+
+def compute_country_trends_with_k(
+    data: AnalysisData, year_means: Dict[int, float]
+) -> CountryTrends:
+    """Compute country trends on dy_i[t] - k[t] instead of dy_i[t].
+
+    For Approaches 6 and 7, we first compute k[t] = mean(dy_i[t]), then fit
+    country trends to the residual dy_i[t] - k[t]. Temperature trends remain
+    unchanged (still fit to temperature data).
+
+    Args:
+        data: AnalysisData object with observation arrays
+        year_means: Dictionary of year -> mean growth rate k[t]
+
+    Returns:
+        CountryTrends object with trend coefficients per country
+    """
+    T0 = {}
+    T1 = {}
+    T0_quad = {}
+    T1_quad = {}
+    T2_quad = {}
+    y0 = {}
+    y1 = {}
+    y2 = {}
+    y0_lin = {}
+    y1_lin = {}
+
+    for country_idx in range(data.n_countries):
+        # Get observations for this country
+        mask = data.country_idx == country_idx
+        t_country = data.time[mask]
+        temp_country = data.temp[mask]
+        growth_country = data.growth_pcGDP[mask]
+        year_country = data.year[mask]
+
+        # Subtract year means from growth to get dy - k[t]
+        growth_adjusted = np.array([
+            growth_country[j] - year_means[year_country[j]]
+            for j in range(len(growth_country))
+        ])
+
+        # Fit linear temperature trend (unchanged)
+        T0[country_idx], T1[country_idx] = fit_linear_trend(t_country, temp_country)
+
+        # Fit quadratic temperature trend (unchanged)
+        T0_quad[country_idx], T1_quad[country_idx], T2_quad[country_idx] = fit_quadratic_trend(
+            t_country, temp_country
+        )
+
+        # Fit quadratic GDP growth trend to adjusted growth (dy - k[t])
+        y0[country_idx], y1[country_idx], y2[country_idx] = fit_quadratic_trend(
+            t_country, growth_adjusted
+        )
+
+        # Fit linear GDP growth trend to adjusted growth (dy - k[t])
+        y0_lin[country_idx], y1_lin[country_idx] = fit_linear_trend(
+            t_country, growth_adjusted
+        )
+
+    return CountryTrends(
+        T0=T0, T1=T1,
+        T0_quad=T0_quad, T1_quad=T1_quad, T2_quad=T2_quad,
+        y0=y0, y1=y1, y2=y2, y0_lin=y0_lin, y1_lin=y1_lin
+    )

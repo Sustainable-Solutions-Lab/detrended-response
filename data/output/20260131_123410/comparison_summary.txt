@@ -67,3 +67,25 @@ Combined Quadratic Detrending
   Observations: 8479
   Parameters: 64
 
+Precomputed k Linear
+--------------------------------------------------
+  h1 =     0.013360  (SE: 0.002681)
+  h2 =    -0.000453  (SE: 0.000082)
+  T_optimal = 14.73 C
+  R² = 0.0036
+  Adjusted R² = 0.0035
+  RMSE = 0.054636
+  Observations: 8479
+  Parameters: 2
+
+Precomputed k Quadratic
+--------------------------------------------------
+  h1 =     0.012919  (SE: 0.002628)
+  h2 =    -0.000442  (SE: 0.000081)
+  T_optimal = 14.61 C
+  R² = 0.0035
+  Adjusted R² = 0.0034
+  RMSE = 0.052644
+  Observations: 8479
+  Parameters: 2
+

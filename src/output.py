@@ -81,10 +81,12 @@ def save_country_trends(
     df.to_excel(output_dir / 'country_trends.xlsx', index=False)
 
 
-def plot_temperature_response(
-    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
+def _plot_temperature_response_subset(
+    results: Dict[str, FitResult], output_dir: Path,
+    approaches: list, filename: str, title_suffix: str = "",
+    T_range: tuple = (0, 30)
 ) -> None:
-    """Plot h(T) - h(T*) for each approach.
+    """Plot h(T) - h(T*) for a subset of approaches.
 
     This shows the temperature response relative to the optimal temperature,
     so the maximum is at y=0 for each curve.
@@ -99,27 +101,35 @@ def plot_temperature_response(
     # - Linear: green
     # - Quadratic: blue
     colors = {
-        'burke_original': 'black',
+        'approach0': 'black',
         'approach1': 'green',      # Linear Temperature Detrending
         'approach2': 'blue',       # Quadratic GDP Growth Detrending
         'approach3': 'red',        # Combined Detrending (Mixed)
         'approach4': 'green',      # Combined Linear Detrending
         'approach5': 'blue',       # Combined Quadratic Detrending
+        'approach6': 'green',      # Precomputed k Linear
+        'approach7': 'blue',       # Precomputed k Quadratic
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
+    # - Precomputed k approaches: dash-dot
     linestyles = {
-        'burke_original': '-',
+        'approach0': '-',
         'approach1': ':',
         'approach2': '--',
         'approach3': '-',
         'approach4': '-',
         'approach5': '-',
+        'approach6': '-.',
+        'approach7': '-.',
     }
 
-    for name, r in results.items():
+    for name in approaches:
+        if name not in results:
+            continue
+        r = results[name]
         # h(T) = h1*T + h2*T²
         h_T = r.h1 * T + r.h2 * T ** 2
 
@@ -143,20 +153,47 @@ def plot_temperature_response(
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
     ax.set_ylabel('h(T) - h(T_opt)', fontsize=12)
-    ax.set_title('Temperature Response Relative to Optimum', fontsize=14)
+    title = 'Temperature Response Relative to Optimum'
+    if title_suffix:
+        title += f' ({title_suffix})'
+    ax.set_title(title, fontsize=14)
     ax.legend(loc='lower left', fontsize=10)
     ax.set_xlim(T_range)
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(output_dir / 'temperature_response.png', dpi=150)
+    plt.savefig(output_dir / filename, dpi=150)
     plt.close()
 
 
-def plot_temperature_derivative(
+def plot_temperature_response(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
 ) -> None:
-    """Plot dh/dT = h1 + 2*h2*T for each approach."""
+    """Plot h(T) - h(T*) for approaches, generating two separate plots."""
+    # Plot 1: Approaches 0-5 (all original approaches)
+    _plot_temperature_response_subset(
+        results, output_dir,
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        filename='temperature_response_all.png',
+        title_suffix='Approaches 0-5',
+        T_range=T_range
+    )
+    # Plot 2: Approaches 0, 6, 7 (precomputed k approaches)
+    _plot_temperature_response_subset(
+        results, output_dir,
+        approaches=['approach0', 'approach6', 'approach7'],
+        filename='temperature_response_precomputed_k.png',
+        title_suffix='Approaches 0, 6, 7',
+        T_range=T_range
+    )
+
+
+def _plot_temperature_derivative_subset(
+    results: Dict[str, FitResult], output_dir: Path,
+    approaches: list, filename: str, title_suffix: str = "",
+    T_range: tuple = (0, 30)
+) -> None:
+    """Plot dh/dT = h1 + 2*h2*T for a subset of approaches."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
     T = np.linspace(T_range[0], T_range[1], 200)
@@ -167,27 +204,35 @@ def plot_temperature_derivative(
     # - Linear: green
     # - Quadratic: blue
     colors = {
-        'burke_original': 'black',
+        'approach0': 'black',
         'approach1': 'green',      # Linear Temperature Detrending
         'approach2': 'blue',       # Quadratic GDP Growth Detrending
         'approach3': 'red',        # Combined Detrending (Mixed)
         'approach4': 'green',      # Combined Linear Detrending
         'approach5': 'blue',       # Combined Quadratic Detrending
+        'approach6': 'green',      # Precomputed k Linear
+        'approach7': 'blue',       # Precomputed k Quadratic
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
+    # - Precomputed k approaches: dash-dot
     linestyles = {
-        'burke_original': '-',
+        'approach0': '-',
         'approach1': ':',
         'approach2': '--',
         'approach3': '-',
         'approach4': '-',
         'approach5': '-',
+        'approach6': '-.',
+        'approach7': '-.',
     }
 
-    for name, r in results.items():
+    for name in approaches:
+        if name not in results:
+            continue
+        r = results[name]
         dh_dT = r.h1 + 2 * r.h2 * T
         label = f"{r.approach}"
         ax.plot(T, dh_dT, color=colors.get(name, 'gray'),
@@ -196,14 +241,39 @@ def plot_temperature_derivative(
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
     ax.set_ylabel('dh/dT = h₁ + 2h₂T', fontsize=12)
-    ax.set_title('Temperature Derivative by Approach', fontsize=14)
+    title = 'Temperature Derivative by Approach'
+    if title_suffix:
+        title += f' ({title_suffix})'
+    ax.set_title(title, fontsize=14)
     ax.legend(loc='upper left', fontsize=10)
     ax.set_xlim(T_range)
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig(output_dir / 'temperature_derivative.png', dpi=150)
+    plt.savefig(output_dir / filename, dpi=150)
     plt.close()
+
+
+def plot_temperature_derivative(
+    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
+) -> None:
+    """Plot dh/dT for approaches, generating two separate plots."""
+    # Plot 1: Approaches 0-5 (all original approaches)
+    _plot_temperature_derivative_subset(
+        results, output_dir,
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        filename='temperature_derivative_all.png',
+        title_suffix='Approaches 0-5',
+        T_range=T_range
+    )
+    # Plot 2: Approaches 0, 6, 7 (precomputed k approaches)
+    _plot_temperature_derivative_subset(
+        results, output_dir,
+        approaches=['approach0', 'approach6', 'approach7'],
+        filename='temperature_derivative_precomputed_k.png',
+        title_suffix='Approaches 0, 6, 7',
+        T_range=T_range
+    )
 
 
 def plot_coefficient_comparison(results: Dict[str, FitResult], output_dir: Path) -> None:
@@ -255,11 +325,21 @@ def plot_optimal_temperature_comparison(
     labels = [results[a].approach for a in approaches]
     T_opt = [results[a].T_optimal for a in approaches]
 
-    # Colors: black (none), green (linear T), blue (quad GDP), red (mixed), green (linear), blue (quad)
-    colors = ['black', 'green', 'blue', 'red', 'green', 'blue']
+    # Colors mapping for approaches
+    color_map = {
+        'approach0': 'black',
+        'approach1': 'green',
+        'approach2': 'blue',
+        'approach3': 'red',
+        'approach4': 'green',
+        'approach5': 'blue',
+        'approach6': 'green',
+        'approach7': 'blue',
+    }
+    colors = [color_map.get(a, 'gray') for a in approaches]
     x = np.arange(len(approaches))
 
-    bars = ax.bar(x, T_opt, color=colors[:len(approaches)], alpha=0.7)
+    bars = ax.bar(x, T_opt, color=colors, alpha=0.7)
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=45, ha='right')
     ax.set_ylabel('Optimal Temperature (°C)')
@@ -283,7 +363,7 @@ def plot_year_effects(
 
     All approaches now use year fixed effects k_t.
 
-    For Approach 0 (burke_original), we subtract a least-squares best-fit quadratic
+    For Approach 0 (no detrending), we subtract a least-squares best-fit quadratic
     from k_t. This shows what the year effects would look like if the quadratic
     trend were absorbed into the country-specific j_i(t) terms. The subtracted
     quadratic is what would be added to all j_i(t) under an alternative
@@ -295,29 +375,35 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Color scheme (same as other plots)
+    # Color scheme (same as other plots, except approach6 is black here)
     colors = {
-        'burke_original': 'black',
+        'approach0': 'black',
         'approach1': 'green',
         'approach2': 'blue',
         'approach3': 'red',
         'approach4': 'green',
         'approach5': 'blue',
+        'approach6': 'black',  # Black for precomputed k on this plot
     }
     linestyles = {
-        'burke_original': '-',
+        'approach0': '-',
         'approach1': ':',
         'approach2': '--',
         'approach3': '-',
         'approach4': '-',
         'approach5': '-',
+        'approach6': '-.',
     }
 
     for name, r in results.items():
+        # Skip approach7 - it has the same k values as approach6 (both are precomputed year means)
+        if name == 'approach7':
+            continue
+
         # k is stored with actual year as key
         k_values = np.array([r.k[yr] for yr in unique_years])
 
-        if name == 'burke_original':
+        if name == 'approach0':
             # For Approach 0, subtract least-squares best-fit quadratic
             # Fit quadratic: k(t) = a + b*t + c*t^2
             # Use normalized time for numerical stability
@@ -331,6 +417,9 @@ def plot_year_effects(
             quadratic_fit = A @ coeffs
             k_values_plot = k_values - quadratic_fit
             label = "No Detrending (minus best-fit quadratic)"
+        elif name == 'approach6':
+            k_values_plot = k_values
+            label = "Precomputed k (year means)"
         else:
             k_values_plot = k_values
             label = f"{r.approach}"

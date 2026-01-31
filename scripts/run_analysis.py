@@ -20,14 +20,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data_loader import load_data, load_data_from_csv
-from src.detrending import compute_country_trends
+from src.detrending import (
+    compute_country_trends,
+    compute_year_means,
+    compute_country_trends_with_k,
+)
 from src.fitting import (
-    fit_burke_original,
+    fit_approach0_no_detrending,
     fit_approach1_temperature_detrending,
     fit_approach2_growth_detrending,
     fit_approach3_combined_detrending,
     fit_approach4_combined_linear_detrending,
     fit_approach5_combined_quadratic_detrending,
+    fit_approach6_precomputed_k_linear,
+    fit_approach7_precomputed_k_quadratic,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -82,7 +88,7 @@ def main():
     if args.use_csv and args.use_csv.strip():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
-        print(f"\n[1/8] Loading data from {csv_path}...")
+        print(f"\n[1/10] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -92,7 +98,7 @@ def main():
         # Load from Maddison/CRU files
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
-        print(f"\n[1/8] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/10] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -105,35 +111,46 @@ def main():
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\n[2/8] Computing country-level trends...")
+    print("\n[2/10] Computing country-level trends...")
     trends = compute_country_trends(data)
+    print("      Done.")
+
+    # Compute year means and country trends with k for Approaches 6 and 7
+    print("\n[3/10] Computing year means k[t] and adjusted country trends...")
+    year_means = compute_year_means(data)
+    trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
     # Fit all approaches
     results = {}
 
-    print("\n[3/8] Fitting Approach 0: Burke Original (no pre-detrending)...")
-    results['burke_original'] = fit_burke_original(data)
+    print("\n[4/10] Fitting Approach 0: No detrending...")
+    results['approach0'] = fit_approach0_no_detrending(data)
     print("      Done.")
 
-    print("\n[4/8] Fitting Approach 1: Temperature detrending...")
+    print("\n[5/10] Fitting Approach 1: Temperature detrending...")
     results['approach1'] = fit_approach1_temperature_detrending(data, trends)
     print("      Done.")
 
-    print("\n[5/8] Fitting Approach 2: GDP growth detrending...")
+    print("\n[6/10] Fitting Approach 2: GDP growth detrending...")
     results['approach2'] = fit_approach2_growth_detrending(data, trends)
     print("      Done.")
 
-    print("\n[6/8] Fitting Approach 3: Combined detrending (quadratic GDP, linear T)...")
+    print("\n[7/10] Fitting Approach 3: Combined detrending (quadratic GDP, linear T)...")
     results['approach3'] = fit_approach3_combined_detrending(data, trends)
     print("      Done.")
 
-    print("\n[7/8] Fitting Approach 4: Combined detrending (linear GDP, linear T)...")
+    print("\n[8/10] Fitting Approach 4: Combined detrending (linear GDP, linear T)...")
     results['approach4'] = fit_approach4_combined_linear_detrending(data, trends)
     print("      Done.")
 
-    print("\n[8/8] Fitting Approach 5: Combined detrending (quadratic GDP, quadratic T)...")
+    print("\n[9/10] Fitting Approach 5: Combined detrending (quadratic GDP, quadratic T)...")
     results['approach5'] = fit_approach5_combined_quadratic_detrending(data, trends)
+    print("      Done.")
+
+    print("\n[10/10] Fitting Approaches 6 & 7: Precomputed k with linear/quadratic trends...")
+    results['approach6'] = fit_approach6_precomputed_k_linear(data, trends_with_k, year_means)
+    results['approach7'] = fit_approach7_precomputed_k_quadratic(data, trends_with_k, year_means)
     print("      Done.")
 
     # Print summary
