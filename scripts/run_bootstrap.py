@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Run bootstrap analysis for uncertainty quantification.
+
+This script performs country-level cluster bootstrap resampling to compute
+confidence intervals for h1, h2, and T_optimal across all 8 approaches.
+
+Usage:
+    python scripts/run_bootstrap.py [--n-bootstrap N] [--random-seed SEED] [--output-dir DIR]
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.data_loader import load_data, load_data_from_csv
+from src.detrending import (
+    compute_country_trends,
+    compute_year_means,
+    compute_country_trends_with_k,
+)
+from src.fitting import fit_all_approaches
+from src.bootstrap import run_bootstrap, compute_bootstrap_statistics
+from src.output import (
+    create_output_dir,
+    save_bootstrap_coefficients_csv,
+    save_bootstrap_summary_txt,
+)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Bootstrap uncertainty analysis for detrended response"
+    )
+    parser.add_argument(
+        "--n-bootstrap",
+        type=int,
+        default=1000,
+        help="Number of bootstrap iterations (default: 1000)",
+    )
+    parser.add_argument(
+        "--random-seed",
+        type=int,
+        default=42,
+        help="Random seed for reproducibility (default: 42)",
+    )
+    parser.add_argument(
+        "--use-csv",
+        type=str,
+        default="data/input/df_base_withPop.csv",
+        help="Use pre-processed CSV file (default: data/input/df_base_withPop.csv). "
+             "Set to empty string to use Maddison/CRU instead.",
+    )
+    parser.add_argument(
+        "--maddison",
+        default="data/input/mpd2023_web.xlsx",
+        help="Path to Maddison GDP Excel file (ignored if --use-csv is set)",
+    )
+    parser.add_argument(
+        "--cru",
+        default="data/input/cru_climate_data.csv",
+        help="Path to CRU temperature CSV file (ignored if --use-csv is set)",
+    )
+    parser.add_argument(
+        "--year-min",
+        type=int,
+        default=None,
+        help="Minimum year to include (default: 1960 for Maddison/CRU, all years for CSV)",
+    )
+    parser.add_argument(
+        "--year-max",
+        type=int,
+        default=None,
+        help="Maximum year to include (default: 2022 for Maddison/CRU, all years for CSV)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory (default: timestamped)",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress progress messages",
+    )
+
+    args = parser.parse_args()
+    verbose = not args.quiet
+
+    print("=" * 70)
+    print("Bootstrap Uncertainty Analysis")
+    print("=" * 70)
+
+    # Load data
+    if args.use_csv and args.use_csv.strip():
+        csv_path = Path(args.use_csv).expanduser()
+        print(f"\n[1/6] Loading data from {csv_path}...")
+        data = load_data_from_csv(
+            str(csv_path),
+            year_min=args.year_min,
+            year_max=args.year_max
+        )
+    else:
+        year_min = args.year_min if args.year_min is not None else 1960
+        year_max = args.year_max if args.year_max is not None else 2022
+        print(f"\n[1/6] Loading data from {args.maddison} and {args.cru}...")
+        print(f"      Year range: {year_min} - {year_max}")
+        data = load_data(
+            args.maddison, args.cru,
+            year_min=year_min, year_max=year_max
+        )
+
+    print(f"      Observations: {data.n_obs}")
+    print(f"      Countries: {data.n_countries}")
+    print(f"      Years: {data.n_years}")
+
+    # Compute country-level trends
+    print("\n[2/6] Computing country-level trends...")
+    trends = compute_country_trends(data)
+    year_means = compute_year_means(data)
+    trends_with_k = compute_country_trends_with_k(data, year_means)
+    print("      Done.")
+
+    # Fit original model (point estimates)
+    print("\n[3/6] Fitting original model (point estimates)...")
+    original_results = fit_all_approaches(
+        data, trends,
+        trends_with_k=trends_with_k,
+        year_means=year_means
+    )
+    print("      Done.")
+
+    # Run bootstrap
+    print(f"\n[4/6] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
+    bootstrap_results = run_bootstrap(
+        data=data,
+        trends=trends,
+        original_results=original_results,
+        n_bootstrap=args.n_bootstrap,
+        random_seed=args.random_seed,
+        verbose=verbose,
+    )
+    print("      Done.")
+
+    # Compute summary statistics
+    print("\n[5/6] Computing bootstrap statistics...")
+    all_stats = {}
+    for name, result in bootstrap_results.items():
+        all_stats[name] = compute_bootstrap_statistics(result)
+    print("      Done.")
+
+    # Save outputs
+    print("\n[6/6] Saving outputs...")
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = create_output_dir()
+
+    save_bootstrap_coefficients_csv(bootstrap_results, output_dir)
+    save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir)
+
+    print(f"      Output saved to: {output_dir}")
+
+    # Print summary
+    print("\n" + "=" * 70)
+    print("Bootstrap Summary")
+    print("=" * 70)
+
+    for name, result in bootstrap_results.items():
+        stats = all_stats[name]
+        print(f"\n{result.approach}")
+        print("-" * 50)
+        print(f"  T_optimal: {result.T_optimal_point:.2f} C")
+        print(f"    90% CI: [{stats['T_optimal']['p5']:.2f}, {stats['T_optimal']['p95']:.2f}]")
+        print(f"    IQR:    [{stats['T_optimal']['p25']:.2f}, {stats['T_optimal']['p75']:.2f}]")
+        print(f"  h1: {result.h1_point:.6f}")
+        print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
+        print(f"  h2: {result.h2_point:.6f}")
+        print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+        print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
+
+    print("\n" + "=" * 70)
+    print(f"Results saved to: {output_dir}")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

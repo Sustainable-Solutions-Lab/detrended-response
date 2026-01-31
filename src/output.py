@@ -10,6 +10,11 @@ from .data_loader import AnalysisData
 from .detrending import CountryTrends
 from .fitting import FitResult
 
+# Import for type hints - bootstrap module imported at end to avoid circular import
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .bootstrap import BootstrapResult
+
 
 def create_output_dir(base_dir: str = "data/output") -> Path:
     """Create timestamped output directory."""
@@ -523,3 +528,89 @@ def save_all_outputs(
 
     print("All outputs saved.")
     return output_dir
+
+
+def save_bootstrap_coefficients_csv(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path
+) -> None:
+    """Save bootstrap samples to CSV for each approach.
+
+    Creates: bootstrap_coefficients.csv with columns:
+    - iteration
+    - approach
+    - h1, h2, T_optimal, r_squared, total_r_squared
+    """
+    rows = []
+    for name, result in results.items():
+        for i in range(result.n_bootstrap):
+            rows.append({
+                'iteration': i,
+                'approach': name,
+                'approach_name': result.approach,
+                'h1': result.h1_samples[i],
+                'h2': result.h2_samples[i],
+                'T_optimal': result.T_optimal_samples[i],
+                'r_squared': result.r_squared_samples[i],
+                'total_r_squared': result.total_r_squared_samples[i],
+            })
+
+    df = pd.DataFrame(rows)
+    df.to_csv(output_dir / 'bootstrap_coefficients.csv', index=False)
+    print(f"  Saved bootstrap_coefficients.csv ({len(df)} rows)")
+
+
+def save_bootstrap_summary_txt(
+    results: Dict[str, "BootstrapResult"],
+    all_stats: Dict[str, Dict],
+    output_dir: Path
+) -> None:
+    """Save text summary with confidence intervals.
+
+    For each approach, reports:
+    - Point estimate
+    - Bootstrap median
+    - 90% CI: [5th, 95th percentiles]
+    - IQR: [25th, 75th percentiles]
+    """
+    with open(output_dir / 'bootstrap_summary.txt', 'w') as f:
+        f.write("Bootstrap Uncertainty Analysis - Summary\n")
+        f.write("=" * 70 + "\n\n")
+
+        # Write metadata
+        first_result = next(iter(results.values()))
+        f.write(f"Bootstrap iterations: {first_result.n_bootstrap}\n")
+        f.write(f"Successful iterations: {first_result.n_successful}\n\n")
+
+        for name, result in results.items():
+            stats = all_stats[name]
+            f.write(f"{result.approach}\n")
+            f.write("-" * 50 + "\n")
+
+            # T_optimal
+            f.write(f"  T_optimal (Optimal Temperature, C):\n")
+            f.write(f"    Point estimate:  {result.T_optimal_point:10.2f}\n")
+            f.write(f"    Bootstrap median:{stats['T_optimal']['p50']:10.2f}\n")
+            f.write(f"    90% CI:          [{stats['T_optimal']['p5']:8.2f}, {stats['T_optimal']['p95']:8.2f}]\n")
+            f.write(f"    IQR:             [{stats['T_optimal']['p25']:8.2f}, {stats['T_optimal']['p75']:8.2f}]\n")
+            f.write(f"    Std:             {stats['T_optimal']['std']:10.4f}\n")
+
+            # h1
+            f.write(f"  h1 (Linear temperature coefficient):\n")
+            f.write(f"    Point estimate:  {result.h1_point:10.6f}\n")
+            f.write(f"    Bootstrap median:{stats['h1']['p50']:10.6f}\n")
+            f.write(f"    90% CI:          [{stats['h1']['p5']:10.6f}, {stats['h1']['p95']:10.6f}]\n")
+            f.write(f"    IQR:             [{stats['h1']['p25']:10.6f}, {stats['h1']['p75']:10.6f}]\n")
+            f.write(f"    Std:             {stats['h1']['std']:10.6f}\n")
+
+            # h2
+            f.write(f"  h2 (Quadratic temperature coefficient):\n")
+            f.write(f"    Point estimate:  {result.h2_point:10.6f}\n")
+            f.write(f"    Bootstrap median:{stats['h2']['p50']:10.6f}\n")
+            f.write(f"    90% CI:          [{stats['h2']['p5']:10.6f}, {stats['h2']['p95']:10.6f}]\n")
+            f.write(f"    IQR:             [{stats['h2']['p25']:10.6f}, {stats['h2']['p75']:10.6f}]\n")
+            f.write(f"    Std:             {stats['h2']['std']:10.6f}\n")
+
+            f.write("\n")
+
+    print(f"  Saved bootstrap_summary.txt")
