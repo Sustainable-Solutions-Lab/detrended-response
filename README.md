@@ -13,15 +13,15 @@ This work makes these implicit detrendings explicit and compares the resulting c
 The Burke et al. (2015) equation (simplified to temperature only) is:
 
 ```
-Δy_i(t) = h₁·T_i(t) + h₂·T_i(t)² + j_{0,i} + j_{1,i}·t + j_{2,i}·t² + k_t
+Δyᵢ(t) = h₁·Tᵢ(t) + h₂·Tᵢ(t)² + j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² + kₜ
 ```
 
 Where:
-- `Δy_i(t)` is the per capita GDP growth rate for country i in year t
-- `T_i(t)` is the annual mean temperature
+- `Δyᵢ(t)` is the per capita GDP growth rate for country i in year t
+- `Tᵢ(t)` is the annual mean temperature
 - `h₁, h₂` are the temperature response coefficients
-- `j_{0,i}, j_{1,i}, j_{2,i}` are country-specific quadratic time trend coefficients
-- `k_t` are year fixed effects
+- `j₀,ᵢ, j₁,ᵢ, j₂,ᵢ` are country-specific quadratic time trend coefficients
+- `kₜ` are year fixed effects
 
 The optimal temperature (where growth is maximized) is: `T* = -h₁ / (2·h₂)`
 
@@ -30,26 +30,26 @@ The optimal temperature (where growth is maximized) is: `T* = -h₁ / (2·h₂)`
 ### Approach 0: Burke Original (No Pre-Detrending)
 The standard Burke et al. (2015) specification with all j terms and year fixed effects estimated jointly via OLS. No detrending is performed prior to the fit:
 ```
-Δy_i(t) = h₁·T + h₂·T² + j_{0,i} + j_{1,i}·t + j_{2,i}·t² + k_t
+Δyᵢ(t) = h₁·T + h₂·T² + j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² + kₜ
 ```
-All parameters (h₁, h₂, j terms, k_t) are estimated simultaneously.
+All parameters (h₁, h₂, j terms, kₜ) are estimated simultaneously.
 
 ### Approach 1: Linear Temperature Detrending
-Interprets the time trend as removing a linear temperature trend. Pre-computes `T_{0,i}` and `T_{1,i}` for each country via least squares, then estimates:
+Interprets the time trend as removing a linear temperature trend. Pre-computes `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares, then estimates:
 ```
-Δy_i(t) = h₁·[T - (T₀ + T₁·t)] + h₂·[T² - (T₀ + T₁·t)²] + k_i
+Δyᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
 ```
 
 ### Approach 2: Quadratic GDP Growth Detrending
-Interprets the time trend as removing a quadratic GDP growth trend. Pre-computes `y_{0,i}, y_{1,i}, y_{2,i}` for each country via least squares, then estimates:
+Interprets the time trend as removing a quadratic GDP growth trend. Pre-computes `y₀,ᵢ, y₁,ᵢ, y₂,ᵢ` for each country via least squares, then estimates:
 ```
-Δy_i(t) - (y₀ + y₁·t + y₂·t²) = h₁·T + h₂·T² + k_i
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·T + h₂·T² + kᵢ
 ```
 
 ### Approach 3: Combined Detrending
 Applies both linear temperature detrending and quadratic GDP growth detrending:
 ```
-Δy_i(t) - (y₀ + y₁·t + y₂·t²) = h₁·[T - (T₀ + T₁·t)] + h₂·[T² - (T₀ + T₁·t)²] + k_i
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
 ```
 
 ## Data Sources
@@ -107,7 +107,7 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 | `comparison_summary.txt` | Text summary of all approaches |
 | `comparison_table.csv` | Tabular comparison of coefficients and fit statistics |
 | `comparison_table.xlsx` | Same as above in Excel format |
-| `country_trends.csv` | Country-level trend coefficients (T₀, T₁, y₀, y₁, y₂) |
+| `country_trends.csv` | Country-level trend coefficients (T₀,ᵢ, T₁,ᵢ, y₀,ᵢ, y₁,ᵢ, y₂,ᵢ) |
 | `temperature_response.png` | Plot of h(T) = h₁T + h₂T² for each approach |
 | `temperature_derivative.png` | Plot of dh/dT = h₁ + 2h₂T |
 | `coefficient_comparison.png` | Bar chart comparing h₁ and h₂ across approaches |
