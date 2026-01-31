@@ -1,0 +1,47 @@
+Detrended Response Analysis - Comparison of Approaches
+======================================================================
+
+Burke Original (j + k_t)
+--------------------------------------------------
+  h1 =     0.014068  (SE: 0.002810)
+  h2 =    -0.000495  (SE: 0.000089)
+  T_optimal = 14.20 C
+  R² = 0.2576
+  Adjusted R² = 0.2039
+  RMSE = 0.052600
+  Observations: 8479
+  Parameters: 573
+
+Temperature Detrending
+--------------------------------------------------
+  h1 =     0.012607  (SE: 0.002936)
+  h2 =    -0.000453  (SE: 0.000090)
+  T_optimal = 13.91 C
+  R² = 0.0598
+  Adjusted R² = 0.0404
+  RMSE = 0.059195
+  Observations: 8479
+  Parameters: 172
+
+GDP Growth Detrending
+--------------------------------------------------
+  h1 =     0.005866  (SE: 0.002032)
+  h2 =    -0.000200  (SE: 0.000058)
+  T_optimal = 14.64 C
+  R² = 0.0014
+  Adjusted R² = -0.0191
+  RMSE = 0.054889
+  Observations: 8479
+  Parameters: 172
+
+Combined Detrending
+--------------------------------------------------
+  h1 =     0.011072  (SE: 0.002720)
+  h2 =    -0.000420  (SE: 0.000084)
+  T_optimal = 13.18 C
+  R² = 0.0030
+  Adjusted R² = -0.0175
+  RMSE = 0.054845
+  Observations: 8479
+  Parameters: 172
+
