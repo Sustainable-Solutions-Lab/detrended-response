@@ -46,7 +46,7 @@ The time trend function `jᵢ(t)` can be interpreted as:
 
 If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
 
-## Six Approaches
+## Eight Approaches
 
 ### Approach 0: No Detrending
 
@@ -67,10 +67,10 @@ We know that at least `j₀,ᵢ` and `j₁,ᵢ` relate to the temperature scale,
 Pre-compute `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares on the linear temperature trend, then estimate:
 
 ```
-Δyᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
+Δyᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
 ```
 
-**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
 ### Approach 2: Quadratic GDP Growth Detrending
 
@@ -79,30 +79,30 @@ Another interpretation of `jᵢ(t)` is that it represents a quadratic detrending
 Pre-compute `y₀,ᵢ`, `y₁,ᵢ`, and `y₂,ᵢ` for each country via least squares on the quadratic per capita GDP-growth trend, then estimate:
 
 ```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·T + h₂·T² + kᵢ
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·T + h₂·T² + kₜ
 ```
 
-**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
 ### Approach 3: Combined Detrending (Mixed)
 
 Combines linear temperature detrending with quadratic GDP growth detrending. If the purpose of `jᵢ(t)` is to effect both a linear detrending of the temperature record and a quadratic detrending of the per-capita GDP growth record:
 
 ```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
 ```
 
-**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
 ### Approach 4: Combined Linear Detrending
 
 There is something unsatisfying about correlating departures from a quadratic detrending of per capita GDP growth with departures from a linear detrending of temperature. This approach applies linear detrending to both variables.
 
 ```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kᵢ
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
 ```
 
-**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
 ### Approach 5: Combined Quadratic Detrending
 
@@ -110,10 +110,41 @@ Applies quadratic detrending to both per capita GDP growth and temperature. When
 
 ```
 Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)]
-                                      + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²] + kᵢ
+                                      + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²] + kₜ
 ```
 
-**Degrees of freedom:** 2 for h(T) + n_countries for kᵢ
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
+
+### Approach 6: Pre-computed k(t) with Linear Trends
+
+In Approaches 1-5, year fixed effects kₜ are estimated simultaneously with the temperature coefficients. An alternative is to pre-compute kₜ as year means before fitting.
+
+1. Pre-compute year effects: `k(t) = mean_i(Δyᵢ(t))`
+2. Fit country trends jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t to `Δyᵢ(t) - k(t)`
+3. Fit temperature trends T₀,ᵢ + T₁,ᵢ·t (linear)
+4. Final regression on residuals:
+
+```
+[Δyᵢ(t) - k(t)] - jᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²]
+```
+
+**Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
+
+### Approach 7: Pre-computed k(t) with Quadratic Trends
+
+Same as Approach 6, but with quadratic trends for both GDP growth and temperature.
+
+1. Pre-compute year effects: `k(t) = mean_i(Δyᵢ(t))`
+2. Fit country trends jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² to `Δyᵢ(t) - k(t)`
+3. Fit temperature trends T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t² (quadratic)
+4. Final regression on residuals:
+
+```
+[Δyᵢ(t) - k(t)] - jᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)]
+                         + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²]
+```
+
+**Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
 
 ## Plot Color Scheme
 
@@ -127,9 +158,11 @@ In the output plots:
 | 3 | Red | Solid | Mixed (linear T + quadratic GDP) |
 | 4 | Green | Solid | Linear (both) |
 | 5 | Blue | Solid | Quadratic (both) |
+| 6 | Green | Dash-dot | Pre-computed k, linear trends |
+| 7 | Blue | Dash-dot | Pre-computed k, quadratic trends |
 
 **Color** indicates the degree of detrending (linear=green, quadratic=blue, mixed=red, none=black).
-**Line style** indicates what is being detrended (temperature only=dotted, GDP growth only=dashed, both/none=solid).
+**Line style** indicates what is being detrended (temperature only=dotted, GDP growth only=dashed, both/none=solid, pre-computed k=dash-dot).
 
 ## Data Sources
 
@@ -221,6 +254,41 @@ Custom year range:
 python scripts/run_analysis.py --year-min 1970 --year-max 2010
 ```
 
+### Bootstrap Uncertainty Analysis
+
+The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for h₁, h₂, and T_optimal across all approaches.
+
+```bash
+python scripts/run_bootstrap.py
+```
+
+**What it does:**
+1. Resamples countries with replacement (cluster bootstrap preserves within-country correlation)
+2. Re-fits all approaches for each bootstrap iteration
+3. Computes percentile-based confidence intervals (90% CI, IQR)
+4. Generates distribution plots and summary statistics
+
+**Options:**
+```
+--n-bootstrap N     Number of bootstrap iterations (default: 1000)
+--random-seed SEED  Random seed for reproducibility (default: 42)
+--use-csv PATH      Pre-processed CSV file (default: data/input/df_base_withPop.csv)
+--year-min YEAR     Minimum year to include
+--year-max YEAR     Maximum year to include
+--output-dir DIR    Output directory (default: timestamped)
+--quiet             Suppress progress messages
+```
+
+**Bootstrap output files:**
+| File | Description |
+|------|-------------|
+| `bootstrap_coefficients.csv` | All bootstrap samples for h₁, h₂, T_optimal |
+| `bootstrap_summary.txt` | Summary statistics and confidence intervals |
+| `bootstrap_distributions.pdf` | Histograms of coefficient distributions |
+| `bootstrap_temperature_response.pdf` | Temperature response curves with uncertainty bands |
+| `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
+| `bootstrap_T_optimal_comparison.png` | Optimal temperature comparison with error bars |
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
@@ -252,9 +320,11 @@ detrended-response/
 │   ├── data_loader.py           # Load and merge GDP + temperature data
 │   ├── detrending.py            # Country-level trend fitting
 │   ├── fitting.py               # OLS regression for each approach
+│   ├── bootstrap.py             # Cluster bootstrap resampling
 │   └── output.py                # Results tables and plots
 ├── scripts/
 │   ├── run_analysis.py              # Main entry point
+│   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
