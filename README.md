@@ -142,6 +142,36 @@ Two data input options are available:
 ### Option 2: Pre-processed CSV
 - **df_base_withPop.csv**: Pre-merged dataset with GDP growth and temperature already computed. Contains columns: `iso_id`, `year`, `pcGDP`, `growth_pcGDP`, `temp`, `precp`, `time`, `Pop`.
 
+## Data Preparation
+
+### Creating the Maddison/CRU Dataset
+
+The `create_Maddison_CRU_dataset.py` script merges Maddison Project GDP/population data with CRU climate data to create a unified dataset for analysis.
+
+```bash
+python scripts/create_Maddison_CRU_dataset.py
+```
+
+**What it does:**
+1. Loads GDP per capita from Maddison Project Database 2023 (GDPpc sheet)
+2. Loads population from Maddison (Population sheet)
+3. Fills GDP gaps of up to 4 years using constant growth rate interpolation
+4. Loads CRU climate data and maps country names to ISO3 codes
+5. Computes GDP growth rate as log difference: `growth = log(GDP_t) - log(GDP_{t-1})`
+6. Computes log-transformed precipitation relative to country mean
+7. Merges all data and filters to 1961-2022
+
+**Options:**
+```
+--maddison PATH   Maddison Excel file (default: data/input/mpd2023_web.xlsx)
+--cru PATH        CRU CSV file (default: data/input/cru_climate_data.csv)
+--output PATH     Output CSV path (default: data/input/Maddison_CRU_dataset.csv)
+--max-gap N       Maximum GDP gap to fill (default: 4 years)
+--validate        Run validation checks on output
+```
+
+**Output columns:** `iso_id`, `year`, `pcGDP`, `growth_pcGDP`, `temp`, `precp`, `time`, `time2`, `Pop`
+
 ## Installation
 
 1. Clone the repository:
@@ -224,7 +254,8 @@ detrended-response/
 │   ├── fitting.py               # OLS regression for each approach
 │   └── output.py                # Results tables and plots
 ├── scripts/
-│   └── run_analysis.py          # Main entry point
+│   ├── run_analysis.py              # Main entry point
+│   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
 └── README.md

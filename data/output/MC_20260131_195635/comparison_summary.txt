@@ -1,0 +1,99 @@
+Detrended Response Analysis - Comparison of Approaches
+======================================================================
+
+No Detrending
+--------------------------------------------------
+  h1 =     0.014202  (SE: 0.003087)
+  h2 =    -0.000434  (SE: 0.000099)
+  T_optimal = 16.36 C
+  R² = 0.1962
+  Total R² = 0.1962
+  Adjusted R² = 0.1481
+  RMSE = 0.058098
+  Observations: 9404
+  Parameters: 532
+
+Linear Temperature Detrending
+--------------------------------------------------
+  h1 =     0.015525  (SE: 0.003115)
+  h2 =    -0.000453  (SE: 0.000099)
+  T_optimal = 17.13 C
+  R² = 0.0927
+  Total R² = 0.0927
+  Adjusted R² = 0.0866
+  RMSE = 0.061727
+  Observations: 9404
+  Parameters: 64
+
+Quadratic GDP Growth Detrending
+--------------------------------------------------
+  h1 =     0.000135  (SE: 0.000318)
+  h2 =    -0.000005  (SE: 0.000010)
+  T_optimal = 14.85 C
+  R² = 0.0951
+  Total R² = 0.1918
+  Adjusted R² = 0.0890
+  RMSE = 0.058258
+  Observations: 9404
+  Parameters: 64
+
+Combined Detrending (Mixed)
+--------------------------------------------------
+  h1 =     0.013943  (SE: 0.002937)
+  h2 =    -0.000409  (SE: 0.000093)
+  T_optimal = 17.07 C
+  R² = 0.0973
+  Total R² = 0.1938
+  Adjusted R² = 0.0912
+  RMSE = 0.058187
+  Observations: 9404
+  Parameters: 64
+
+Combined Linear Detrending
+--------------------------------------------------
+  h1 =     0.016078  (SE: 0.002978)
+  h2 =    -0.000458  (SE: 0.000094)
+  T_optimal = 17.55 C
+  R² = 0.0962
+  Total R² = 0.1708
+  Adjusted R² = 0.0901
+  RMSE = 0.059011
+  Observations: 9404
+  Parameters: 64
+
+Combined Quadratic Detrending
+--------------------------------------------------
+  h1 =     0.014177  (SE: 0.003015)
+  h2 =    -0.000424  (SE: 0.000097)
+  T_optimal = 16.72 C
+  R² = 0.0973
+  Total R² = 0.1938
+  Adjusted R² = 0.0912
+  RMSE = 0.058188
+  Observations: 9404
+  Parameters: 64
+
+Precomputed k Linear
+--------------------------------------------------
+  h1 =     0.013675  (SE: 0.002789)
+  h2 =    -0.000388  (SE: 0.000086)
+  T_optimal = 17.60 C
+  R² = 0.0026
+  Total R² = 0.1706
+  Adjusted R² = 0.0025
+  RMSE = 0.059019
+  Observations: 9404
+  Parameters: 2
+
+Precomputed k Quadratic
+--------------------------------------------------
+  h1 =     0.012241  (SE: 0.002816)
+  h2 =    -0.000352  (SE: 0.000087)
+  T_optimal = 17.37 C
+  R² = 0.0021
+  Total R² = 0.1958
+  Adjusted R² = 0.0020
+  RMSE = 0.058113
+  Observations: 9404
+  Parameters: 2
+
