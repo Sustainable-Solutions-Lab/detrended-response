@@ -279,6 +279,11 @@ python scripts/run_bootstrap.py
 --quiet             Suppress progress messages
 ```
 
+**Example:**
+```bash
+python scripts/run_bootstrap.py --n-bootstrap 1000 --use-csv data/input/Maddison_CRU_dataset.csv
+```
+
 **Bootstrap output files:**
 | File | Description |
 |------|-------------|
