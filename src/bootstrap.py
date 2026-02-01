@@ -206,9 +206,9 @@ def run_bootstrap(
                 total_r_squared_samples[name][b] = np.nan
 
         # Progress reporting
-        if verbose and (b + 1) % 100 == 0:
+        if verbose and (b + 1) % 10 == 0:
             print(f"  Completed {b + 1}/{n_bootstrap} iterations "
-                  f"({n_successful} successful)")
+                  f"({n_successful} successful)", flush=True)
 
     if verbose:
         print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")

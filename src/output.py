@@ -760,6 +760,25 @@ def plot_all_bootstrap_distributions(
         if n_approaches == 1:
             axes = axes.reshape(1, -1)
 
+        # First pass: determine x-axis ranges for each column
+        col_ranges = {0: [], 1: [], 2: []}  # h1, h2, T_optimal
+        for name in approach_names:
+            result = results[name]
+            for col_idx, samples in enumerate([result.h1_samples, result.h2_samples, result.T_optimal_samples]):
+                valid_samples = samples[~np.isnan(samples)]
+                if len(valid_samples) > 0:
+                    col_ranges[col_idx].extend([valid_samples.min(), valid_samples.max()])
+
+        # Compute min/max for each column with small padding
+        col_xlims = {}
+        for col_idx, values in col_ranges.items():
+            if values:
+                xmin, xmax = min(values), max(values)
+                padding = (xmax - xmin) * 0.05
+                col_xlims[col_idx] = (xmin - padding, xmax + padding)
+            else:
+                col_xlims[col_idx] = None
+
         for row_idx, name in enumerate(approach_names):
             result = results[name]
             stats = all_stats[name]
@@ -778,10 +797,16 @@ def plot_all_bootstrap_distributions(
                 if len(valid_samples) == 0:
                     ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center', transform=ax.transAxes)
                     ax.set_xlabel(xlabel, fontsize=10)
+                    if col_xlims[col_idx]:
+                        ax.set_xlim(col_xlims[col_idx])
                     continue
 
-                # Histogram
-                ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
+                # Histogram - use fixed bins based on column range for consistency
+                if col_xlims[col_idx]:
+                    bin_edges = np.linspace(col_xlims[col_idx][0], col_xlims[col_idx][1], 51)
+                    ax.hist(valid_samples, bins=bin_edges, density=True, alpha=0.7, color='steelblue')
+                else:
+                    ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
 
                 # Point estimate (red solid)
                 ax.axvline(x=point_est, color='red', linestyle='-', linewidth=2, label=f'Point: {point_est:.4f}')
@@ -804,6 +829,10 @@ def plot_all_bootstrap_distributions(
                 ax.legend(fontsize=7, loc='best')
                 ax.grid(True, alpha=0.3)
 
+                # Set consistent x-axis range for all panels in this column
+                if col_xlims[col_idx]:
+                    ax.set_xlim(col_xlims[col_idx])
+
                 # Add title only on top row
                 if row_idx == 0:
                     ax.set_title(xlabel, fontsize=11)
@@ -824,6 +853,7 @@ def plot_bootstrap_temperature_response(
     """Plot h(T) - h(T*) with 90% CI bands in multi-panel layout.
 
     Each approach gets its own panel to avoid overlapping uncertainty bands.
+    All panels share the same y-axis range for easy comparison.
     Output is saved as PDF.
 
     Args:
@@ -857,24 +887,12 @@ def plot_bootstrap_temperature_response(
         'approach7': 'blue',
     }
 
-    # Determine grid layout
-    if n_approaches <= 3:
-        n_rows, n_cols = 1, n_approaches
-    elif n_approaches <= 6:
-        n_rows, n_cols = 2, 3
-    else:
-        n_rows, n_cols = 3, 3
+    # First pass: compute all data and find global y-axis range
+    plot_data = {}
+    y_min, y_max = np.inf, -np.inf
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
-    if n_approaches == 1:
-        axes = [axes]
-    else:
-        axes = axes.flatten()
-
-    for idx, name in enumerate(approaches):
-        ax = axes[idx]
+    for name in approaches:
         result = results[name]
-        color = colors.get(name, 'steelblue')
 
         # Compute uncertainty bands
         h_lower, h_median, h_upper = compute_h_response_uncertainty_bands(result, T)
@@ -889,11 +907,51 @@ def plot_bootstrap_temperature_response(
             h_T_opt_point = 0
         h_point = h_T_point - h_T_opt_point
 
+        plot_data[name] = {
+            'h_lower': h_lower,
+            'h_upper': h_upper,
+            'h_point': h_point,
+        }
+
+        # Update global y range
+        y_min = min(y_min, np.nanmin(h_lower), np.nanmin(h_point))
+        y_max = max(y_max, np.nanmax(h_upper), np.nanmax(h_point))
+
+    # Add some padding to y range
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    # Determine grid layout
+    if n_approaches <= 3:
+        n_rows, n_cols = 1, n_approaches
+    elif n_approaches <= 4:
+        n_rows, n_cols = 2, 2
+    elif n_approaches <= 6:
+        n_rows, n_cols = 2, 3
+    elif n_approaches <= 8:
+        n_rows, n_cols = 4, 2
+    else:
+        n_rows, n_cols = 3, 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    if n_approaches == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    # Second pass: create the plots
+    for idx, name in enumerate(approaches):
+        ax = axes[idx]
+        result = results[name]
+        color = colors.get(name, 'steelblue')
+        data = plot_data[name]
+
         # Plot CI band
-        ax.fill_between(T, h_lower, h_upper, alpha=0.3, color=color, label='90% CI')
+        ax.fill_between(T, data['h_lower'], data['h_upper'], alpha=0.3, color=color, label='90% CI')
 
         # Plot point estimate
-        ax.plot(T, h_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+        ax.plot(T, data['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
 
         # Mark optimal temperature
         ax.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
@@ -904,6 +962,7 @@ def plot_bootstrap_temperature_response(
         ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
         ax.set_title(f'{result.approach}', fontsize=11)
         ax.set_xlim(T_range)
+        ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8, loc='lower left')
 
@@ -1039,6 +1098,7 @@ def plot_bootstrap_temperature_derivative(
     """Plot dh/dT = h1 + 2*h2*T with 90% CI bands in multi-panel layout.
 
     Each approach gets its own panel to avoid overlapping uncertainty bands.
+    All panels share the same y-axis range for easy comparison.
     Output is saved as PDF.
 
     Args:
@@ -1072,24 +1132,12 @@ def plot_bootstrap_temperature_derivative(
         'approach7': 'blue',
     }
 
-    # Determine grid layout
-    if n_approaches <= 3:
-        n_rows, n_cols = 1, n_approaches
-    elif n_approaches <= 6:
-        n_rows, n_cols = 2, 3
-    else:
-        n_rows, n_cols = 3, 3
+    # First pass: compute all data and find global y-axis range
+    plot_data = {}
+    y_min, y_max = np.inf, -np.inf
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
-    if n_approaches == 1:
-        axes = [axes]
-    else:
-        axes = axes.flatten()
-
-    for idx, name in enumerate(approaches):
-        ax = axes[idx]
+    for name in approaches:
         result = results[name]
-        color = colors.get(name, 'steelblue')
 
         # Compute uncertainty bands
         dh_lower, dh_median, dh_upper = compute_derivative_uncertainty_bands(result, T)
@@ -1099,17 +1147,58 @@ def plot_bootstrap_temperature_derivative(
         h2_point = result.h2_point
         dh_point = h1_point + 2 * h2_point * T
 
+        plot_data[name] = {
+            'dh_lower': dh_lower,
+            'dh_upper': dh_upper,
+            'dh_point': dh_point,
+        }
+
+        # Update global y range
+        y_min = min(y_min, np.nanmin(dh_lower), np.nanmin(dh_point))
+        y_max = max(y_max, np.nanmax(dh_upper), np.nanmax(dh_point))
+
+    # Add some padding to y range
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    # Determine grid layout
+    if n_approaches <= 3:
+        n_rows, n_cols = 1, n_approaches
+    elif n_approaches <= 4:
+        n_rows, n_cols = 2, 2
+    elif n_approaches <= 6:
+        n_rows, n_cols = 2, 3
+    elif n_approaches <= 8:
+        n_rows, n_cols = 4, 2
+    else:
+        n_rows, n_cols = 3, 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    if n_approaches == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    # Second pass: create the plots
+    for idx, name in enumerate(approaches):
+        ax = axes[idx]
+        result = results[name]
+        color = colors.get(name, 'steelblue')
+        data = plot_data[name]
+
         # Plot CI band
-        ax.fill_between(T, dh_lower, dh_upper, alpha=0.3, color=color, label='90% CI')
+        ax.fill_between(T, data['dh_lower'], data['dh_upper'], alpha=0.3, color=color, label='90% CI')
 
         # Plot point estimate
-        ax.plot(T, dh_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+        ax.plot(T, data['dh_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
 
         ax.axhline(0, color='gray', linewidth=0.5)
         ax.set_xlabel('Temperature (°C)', fontsize=10)
         ax.set_ylabel('dh/dT = h₁ + 2h₂T', fontsize=10)
         ax.set_title(f'{result.approach}', fontsize=11)
         ax.set_xlim(T_range)
+        ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8, loc='upper right')
 
@@ -1147,43 +1236,25 @@ def save_all_bootstrap_plots(
     plot_all_bootstrap_distributions(results, all_stats, output_dir)
     print("      Saved bootstrap_distributions.pdf")
 
-    # Temperature response plots
-    # Plot 1: Approaches 0-5
+    # Temperature response plot - all 8 approaches in one PDF
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
-        filename='bootstrap_temperature_response_all.pdf',
+        approaches=['approach0', 'approach1', 'approach2', 'approach3',
+                    'approach4', 'approach5', 'approach6', 'approach7'],
+        filename='bootstrap_temperature_response.pdf',
         T_range=T_range
     )
-    print("      Saved bootstrap_temperature_response_all.pdf")
+    print("      Saved bootstrap_temperature_response.pdf")
 
-    # Plot 2: Approaches 0, 6, 7 (precomputed k)
-    plot_bootstrap_temperature_response(
-        results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7'],
-        filename='bootstrap_temperature_response_precomputed_k.pdf',
-        T_range=T_range
-    )
-    print("      Saved bootstrap_temperature_response_precomputed_k.pdf")
-
-    # Temperature derivative plots
-    # Plot 1: Approaches 0-5
+    # Temperature derivative plot - all 8 approaches in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
-        filename='bootstrap_temperature_derivative_all.pdf',
+        approaches=['approach0', 'approach1', 'approach2', 'approach3',
+                    'approach4', 'approach5', 'approach6', 'approach7'],
+        filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range
     )
-    print("      Saved bootstrap_temperature_derivative_all.pdf")
-
-    # Plot 2: Approaches 0, 6, 7 (precomputed k)
-    plot_bootstrap_temperature_derivative(
-        results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7'],
-        filename='bootstrap_temperature_derivative_precomputed_k.pdf',
-        T_range=T_range
-    )
-    print("      Saved bootstrap_temperature_derivative_precomputed_k.pdf")
+    print("      Saved bootstrap_temperature_derivative.pdf")
 
     # T_optimal comparison across all approaches
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir)
