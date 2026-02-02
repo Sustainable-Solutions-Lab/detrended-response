@@ -16,6 +16,7 @@ DEFAULT_LOESS_WINDOW_YEARS = 25
 
 # Minimum number of points required for LOESS fitting
 MIN_LOESS_POINTS = 3
+
 from dataclasses import dataclass
 from typing import Dict
 from statsmodels.nonparametric.smoothers_lowess import lowess
@@ -145,26 +146,88 @@ def compute_country_trends(data: AnalysisData) -> CountryTrends:
     )
 
 
-def compute_detrended_temperature(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
-    """Compute temperature departure from linear trend.
+def _compute_temp_trend_value(
+    trends: CountryTrends, country_idx: int, t: float, quadratic: bool = False
+) -> float:
+    """Compute temperature trend value for a single observation.
 
-    Returns T*(t) = T(t) - (T0 + T1*t)
+    Args:
+        trends: CountryTrends object with trend coefficients
+        country_idx: Index of the country
+        t: Time value
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        Temperature trend value at time t
+    """
+    if quadratic:
+        return (
+            trends.T0_quad[country_idx]
+            + trends.T1_quad[country_idx] * t
+            + trends.T2_quad[country_idx] * t * t
+        )
+    else:
+        return trends.T0[country_idx] + trends.T1[country_idx] * t
+
+
+def _compute_growth_trend_value(
+    trends: CountryTrends, country_idx: int, t: float, quadratic: bool = True
+) -> float:
+    """Compute GDP growth trend value for a single observation.
+
+    Args:
+        trends: CountryTrends object with trend coefficients
+        country_idx: Index of the country
+        t: Time value
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        Growth trend value at time t
+    """
+    if quadratic:
+        return trends.y0[country_idx] + trends.y1[country_idx] * t + trends.y2[country_idx] * t * t
+    else:
+        return trends.y0_lin[country_idx] + trends.y1_lin[country_idx] * t
+
+
+def compute_detrended_temperature(
+    data: AnalysisData, trends: CountryTrends, quadratic: bool = False
+) -> np.ndarray:
+    """Compute temperature departure from trend.
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends object with trend coefficients
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        T*(t) = T(t) - trend(t) for each observation
     """
     T_star = np.zeros(data.n_obs)
 
     for i in range(data.n_obs):
         c = data.country_idx[i]
         t = data.time[i]
-        T_trend = trends.T0[c] + trends.T1[c] * t
+        T_trend = _compute_temp_trend_value(trends, c, t, quadratic)
         T_star[i] = data.temp[i] - T_trend
 
     return T_star
 
 
-def compute_detrended_temp_squared(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
-    """Compute T² - (T0 + T1*t)² for the linear temperature detrending.
+def compute_detrended_temp_squared(
+    data: AnalysisData, trends: CountryTrends, quadratic: bool = False
+) -> np.ndarray:
+    """Compute T² - trend² for temperature detrending.
 
     This is the coefficient adjustment for h2 in the temperature-detrended model.
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends object with trend coefficients
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        T² - trend² for each observation
     """
     T2_detrend = np.zeros(data.n_obs)
 
@@ -172,39 +235,55 @@ def compute_detrended_temp_squared(data: AnalysisData, trends: CountryTrends) ->
         c = data.country_idx[i]
         t = data.time[i]
         T = data.temp[i]
-        T_trend = trends.T0[c] + trends.T1[c] * t
+        T_trend = _compute_temp_trend_value(trends, c, t, quadratic)
         T2_detrend[i] = T * T - T_trend * T_trend
 
     return T2_detrend
 
 
-def compute_detrended_growth(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
-    """Compute GDP growth departure from quadratic trend.
+def compute_detrended_growth(
+    data: AnalysisData, trends: CountryTrends, quadratic: bool = True
+) -> np.ndarray:
+    """Compute GDP growth departure from trend.
 
-    Returns Δy*(t) = Δy(t) - (y0 + y1*t + y2*t²)
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends object with trend coefficients
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        Δy*(t) = Δy(t) - trend(t) for each observation
     """
     growth_star = np.zeros(data.n_obs)
 
     for i in range(data.n_obs):
         c = data.country_idx[i]
         t = data.time[i]
-        y_trend = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y_trend = _compute_growth_trend_value(trends, c, t, quadratic)
         growth_star[i] = data.growth_pcGDP[i] - y_trend
 
     return growth_star
 
 
-def compute_growth_trend_values(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
-    """Compute the quadratic GDP growth trend values.
+def compute_growth_trend_values(
+    data: AnalysisData, trends: CountryTrends, quadratic: bool = True
+) -> np.ndarray:
+    """Compute the GDP growth trend values.
 
-    Returns y0 + y1*t + y2*t² for each observation.
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends object with trend coefficients
+        quadratic: If True, use quadratic trend; otherwise use linear trend
+
+    Returns:
+        Trend values for each observation
     """
     y_trend = np.zeros(data.n_obs)
 
     for i in range(data.n_obs):
         c = data.country_idx[i]
         t = data.time[i]
-        y_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y_trend[i] = _compute_growth_trend_value(trends, c, t, quadratic)
 
     return y_trend
 
@@ -212,16 +291,11 @@ def compute_growth_trend_values(data: AnalysisData, trends: CountryTrends) -> np
 def compute_growth_trend_values_linear(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
     """Compute the linear GDP growth trend values.
 
+    This is a convenience wrapper for compute_growth_trend_values with quadratic=False.
+
     Returns y0_lin + y1_lin*t for each observation.
     """
-    y_trend = np.zeros(data.n_obs)
-
-    for i in range(data.n_obs):
-        c = data.country_idx[i]
-        t = data.time[i]
-        y_trend[i] = trends.y0_lin[c] + trends.y1_lin[c] * t
-
-    return y_trend
+    return compute_growth_trend_values(data, trends, quadratic=False)
 
 
 def compute_detrended_temperature_quadratic(
@@ -229,44 +303,21 @@ def compute_detrended_temperature_quadratic(
 ) -> np.ndarray:
     """Compute temperature departure from quadratic trend.
 
+    This is a convenience wrapper for compute_detrended_temperature with quadratic=True.
+
     Returns T*(t) = T(t) - (T0_quad + T1_quad*t + T2_quad*t²)
     """
-    T_star = np.zeros(data.n_obs)
-
-    for i in range(data.n_obs):
-        c = data.country_idx[i]
-        t = data.time[i]
-        T_trend = (
-            trends.T0_quad[c]
-            + trends.T1_quad[c] * t
-            + trends.T2_quad[c] * t * t
-        )
-        T_star[i] = data.temp[i] - T_trend
-
-    return T_star
+    return compute_detrended_temperature(data, trends, quadratic=True)
 
 
 def compute_detrended_temp_squared_quadratic(
     data: AnalysisData, trends: CountryTrends
 ) -> np.ndarray:
-    """Compute T² - (T0_quad + T1_quad*t + T2_quad*t²)² for quadratic temperature detrending.
+    """Compute T² - quadratic_trend² for quadratic temperature detrending.
 
-    This is the coefficient adjustment for h2 in the quadratic temperature-detrended model.
+    This is a convenience wrapper for compute_detrended_temp_squared with quadratic=True.
     """
-    T2_detrend = np.zeros(data.n_obs)
-
-    for i in range(data.n_obs):
-        c = data.country_idx[i]
-        t = data.time[i]
-        T = data.temp[i]
-        T_trend = (
-            trends.T0_quad[c]
-            + trends.T1_quad[c] * t
-            + trends.T2_quad[c] * t * t
-        )
-        T2_detrend[i] = T * T - T_trend * T_trend
-
-    return T2_detrend
+    return compute_detrended_temp_squared(data, trends, quadratic=True)
 
 
 def compute_year_means(data: AnalysisData) -> Dict[int, float]:
