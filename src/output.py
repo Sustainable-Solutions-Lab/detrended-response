@@ -119,29 +119,29 @@ def save_summary_table(
 ) -> None:
     """Save comparison table of all approaches."""
     rows = []
-    for name, r in results.items():
+    for name, result in results.items():
         row = {
-            'Approach': r.approach,
-            'h1': r.h1,
-            'h1_SE': r.h1_se,
-            'h2': r.h2,
-            'h2_SE': r.h2_se,
-            'T_optimal': r.T_optimal,
-            'R_squared': r.r_squared,
-            'Total_R_squared': r.total_r_squared,
-            'Adj_R_squared': r.adj_r_squared,
-            'RMSE': r.rmse,
-            'RMS_Imbalance': r.rms_imbalance,
-            'RMS_h_T': r.rms_h,
-            'Imbalance_Ratio': r.imbalance_ratio,
-            'n_obs': r.n_obs,
-            'n_params': r.n_params,
+            'Approach': result.approach,
+            'h1': result.h1,
+            'h1_SE': result.h1_se,
+            'h2': result.h2,
+            'h2_SE': result.h2_se,
+            'T_optimal': result.T_optimal,
+            'R_squared': result.r_squared,
+            'Total_R_squared': result.total_r_squared,
+            'Adj_R_squared': result.adj_r_squared,
+            'RMSE': result.rmse,
+            'RMS_Imbalance': result.rms_imbalance,
+            'RMS_h_T': result.rms_h,
+            'Imbalance_Ratio': result.imbalance_ratio,
+            'n_obs': result.n_obs,
+            'n_params': result.n_params,
         }
         # Add beta for Approach 8
-        if hasattr(r, 'beta'):
-            row['beta'] = r.beta
-            row['beta_SE'] = r.beta_se
-            row['Y_ref'] = r.Y_ref
+        if hasattr(result, 'beta'):
+            row['beta'] = result.beta
+            row['beta_SE'] = result.beta_se
+            row['Y_ref'] = result.Y_ref
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -172,28 +172,28 @@ def save_summary_table(
             f.write(f"Input data: {Path(input_file).name}\n")
         f.write("=" * 70 + "\n\n")
 
-        for name, r in results.items():
-            f.write(f"{r.approach}\n")
+        for name, result in results.items():
+            f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            f.write(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})\n")
-            f.write(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})\n")
+            f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
+            f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
             # Add beta for Approach 8
-            if hasattr(r, 'beta'):
-                f.write(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})\n")
-                f.write(f"  Y_ref = {r.Y_ref:.2f}\n")
-            f.write(f"  T_optimal = {r.T_optimal:.2f} C\n")
-            f.write(f"  R² = {r.r_squared:.4f}\n")
-            f.write(f"  Total R² = {r.total_r_squared:.4f}\n")
-            f.write(f"  Adjusted R² = {r.adj_r_squared:.4f}\n")
-            f.write(f"  RMSE = {r.rmse:.6f}\n")
-            if r.rms_imbalance is not None:
-                f.write(f"  RMS Imbalance = {r.rms_imbalance:.6f}\n")
-            if r.rms_h is not None:
-                f.write(f"  RMS h(T) = {r.rms_h:.6f}\n")
-            if r.imbalance_ratio is not None:
-                f.write(f"  Imbalance Ratio = {r.imbalance_ratio:.4f}\n")
-            f.write(f"  Observations: {r.n_obs}\n")
-            f.write(f"  Parameters: {r.n_params}\n")
+            if hasattr(result, 'beta'):
+                f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
+                f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
+            f.write(f"  T_optimal = {result.T_optimal:.2f} C\n")
+            f.write(f"  R² = {result.r_squared:.4f}\n")
+            f.write(f"  Total R² = {result.total_r_squared:.4f}\n")
+            f.write(f"  Adjusted R² = {result.adj_r_squared:.4f}\n")
+            f.write(f"  RMSE = {result.rmse:.6f}\n")
+            if result.rms_imbalance is not None:
+                f.write(f"  RMS Imbalance = {result.rms_imbalance:.6f}\n")
+            if result.rms_h is not None:
+                f.write(f"  RMS h(T) = {result.rms_h:.6f}\n")
+            if result.imbalance_ratio is not None:
+                f.write(f"  Imbalance Ratio = {result.imbalance_ratio:.4f}\n")
+            f.write(f"  Observations: {result.n_obs}\n")
+            f.write(f"  Parameters: {result.n_params}\n")
             f.write("\n")
 
 
@@ -490,13 +490,13 @@ def plot_year_effects(
     year_effects_colors = dict(APPROACH_COLORS)
     year_effects_colors['approach6'] = 'black'
 
-    for name, r in results.items():
+    for name, result in results.items():
         # Skip approach7, approach8, approach9, approach10 - they use the same k values as approach6 (precomputed year means)
         if name in ('approach7', 'approach8', 'approach9', 'approach10'):
             continue
 
         # k is stored with actual year as key
-        k_values = np.array([r.k[yr] for yr in unique_years])
+        k_values = np.array([result.k[yr] for yr in unique_years])
 
         if name == 'approach0':
             # For Approach 0, subtract least-squares best-fit quadratic
@@ -517,7 +517,7 @@ def plot_year_effects(
             label = "Precomputed k (year means)"
         else:
             k_values_plot = k_values
-            label = f"{r.approach}"
+            label = f"{result.approach}"
 
         ax.plot(unique_years, k_values_plot, color=year_effects_colors.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), linewidth=1.5,
@@ -541,10 +541,10 @@ def plot_residual_diagnostics(
     input_file: str = None
 ) -> None:
     """Plot residual diagnostics for each approach."""
-    for name, r in results.items():
+    for name, result in results.items():
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
-        residuals = r.residuals
+        residuals = result.residuals
 
         # Histogram of residuals
         axes[0, 0].hist(residuals, bins=HISTOGRAM_BINS, density=True, alpha=0.7, color='steelblue')
@@ -573,7 +573,7 @@ def plot_residual_diagnostics(
         stats.probplot(residuals, dist="norm", plot=axes[1, 1])
         axes[1, 1].set_title('Q-Q Plot')
 
-        fig.suptitle(f'Residual Diagnostics: {r.approach}', fontsize=14)
+        fig.suptitle(f'Residual Diagnostics: {result.approach}', fontsize=14)
         plt.tight_layout()
         add_input_file_annotation(fig, input_file)
 
