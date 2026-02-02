@@ -721,11 +721,12 @@ def save_bootstrap_coefficients_csv(
     - iteration
     - approach
     - h1, h2, T_optimal, r_squared, total_r_squared
+    - beta (for approaches 8 and 10 where it's a free parameter)
     """
     rows = []
     for name, result in results.items():
         for i in range(result.n_bootstrap):
-            rows.append({
+            row = {
                 'iteration': i,
                 'approach': name,
                 'approach_name': result.approach,
@@ -734,7 +735,11 @@ def save_bootstrap_coefficients_csv(
                 'T_optimal': result.T_optimal_samples[i],
                 'r_squared': result.r_squared_samples[i],
                 'total_r_squared': result.total_r_squared_samples[i],
-            })
+            }
+            # Add beta for approaches where it's a free parameter (8 and 10)
+            if result.beta_samples is not None:
+                row['beta'] = result.beta_samples[i]
+            rows.append(row)
 
     df = pd.DataFrame(rows)
     csv_path = output_dir / 'bootstrap_coefficients.csv'
@@ -799,6 +804,15 @@ def save_bootstrap_summary_txt(
             f.write(f"    90% CI:          [{stats['h2']['p5']:10.6f}, {stats['h2']['p95']:10.6f}]\n")
             f.write(f"    IQR:             [{stats['h2']['p25']:10.6f}, {stats['h2']['p75']:10.6f}]\n")
             f.write(f"    Std:             {stats['h2']['std']:10.6f}\n")
+
+            # beta (for approaches where it's a free parameter)
+            if result.beta_point is not None and 'beta' in stats:
+                f.write(f"  beta (GDP scaling exponent):\n")
+                f.write(f"    Point estimate:  {result.beta_point:10.4f}\n")
+                f.write(f"    Bootstrap median:{stats['beta']['p50']:10.4f}\n")
+                f.write(f"    90% CI:          [{stats['beta']['p5']:10.4f}, {stats['beta']['p95']:10.4f}]\n")
+                f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
+                f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
 
             f.write("\n")
 
