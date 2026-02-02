@@ -46,7 +46,7 @@ The time trend function `jᵢ(t)` can be interpreted as:
 
 If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
 
-## Nine Approaches
+## Eleven Approaches (0-10)
 
 ### Approach 0: Conjoined OLS Fit
 
@@ -186,6 +186,65 @@ The full model becomes:
 
 **Degrees of freedom:** 3 for h(T) (h₁, h₂, β); year effects pre-computed
 
+### Approaches 9 & 10: LOESS Detrending
+
+Approaches 9 and 10 replace polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
+
+**Approach 9:** LOESS version of Approach 7 (pre-computed k with LOESS trends)
+```
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h₁·[T - LOESS(T)] + h₂·[T² - LOESS(T)²]
+```
+
+**Approach 10:** LOESS version of Approach 8 (GDP-dependent response with LOESS trends)
+```
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = (Yᵢ/Y_ref)^(-β) · [h₁·[T - LOESS(T)] + h₂·[T² - LOESS(T)²]]
+```
+
+Both use a 25-year LOESS window (configurable via `--loess-window`).
+
+## Imbalance Metrics
+
+### The Consistency Equation
+
+If the choice of smoothing function and the determination of the climate response function were perfect, the following equation would be satisfied exactly:
+
+```
+0 = h(f_trend(Tᵢ(t))) + f_trend(Δyᵢ(t) - k(t)) + k(t)
+```
+
+where:
+- `h(T) = h₁·T + h₂·T²` is the climate response function
+- `f_trend(T)` is the temperature trend (linear, quadratic, or LOESS depending on approach)
+- `f_trend(Δy - k)` is the country-specific GDP growth trend (after removing year means)
+- `k(t)` is the year mean
+
+In practice, the right side will not sum to zero. The root-mean-square of this imbalance provides a diagnostic metric.
+
+### Three Metrics
+
+For each approach, we compute:
+
+| Metric | Description |
+|--------|-------------|
+| **RMS Imbalance** | `sqrt(mean((h(T_trend) + j_trend + k)²))` — measures internal consistency |
+| **RMS h(T)** | `sqrt(mean(h(T)²))` — magnitude of climate response signal |
+| **Imbalance Ratio** | RMS Imbalance / RMS h(T) — normalized imbalance |
+
+### Interpretation
+
+- **Low RMS Imbalance** suggests good internal consistency between the detrending and climate response
+- **High RMS Imbalance** indicates a mismatch — the trend function may be absorbing signal that should be attributed to climate, or vice versa
+
+### Important Limitation
+
+**The imbalance metric can be "gamed" by null or weak detrending:**
+- If `T_trend = 0` (no temperature detrending), then `h(T_trend) = 0` regardless of h₁ and h₂
+- A degenerate case with no trends and a near-zero climate response would minimize the imbalance while explaining nothing meaningful
+
+The **Imbalance Ratio** addresses this limitation by normalizing by the magnitude of the climate response. A ratio close to 1.0 or below indicates reasonable consistency, while very high ratios (e.g., >10) may indicate that the climate signal is too weak to meaningfully evaluate consistency.
+
+**Example:** Approach 2 (Quadratic GDP Growth Detrending) often shows a very high imbalance ratio because it has no temperature detrending (T_trend = 0) and estimates near-zero climate coefficients, making RMS h(T) extremely small.
+
 ## Plot Color Scheme
 
 In the output plots:
@@ -201,9 +260,23 @@ In the output plots:
 | 6 | Green | Dash-dot | Pre-computed k, linear trends |
 | 7 | Blue | Dash-dot | Pre-computed k, quadratic trends |
 | 8 | Purple | Dash-dot | GDP-dependent response |
+| 9 | Orange | Densely dashed | Pre-computed k, LOESS trends |
+| 10 | Brown | Densely dashed | GDP-dependent response, LOESS |
 
-**Color** indicates the degree of detrending (linear=green, quadratic=blue, mixed=red, none=black, GDP-dependent=purple).
-**Line style** indicates what is being detrended (temperature only=dotted, GDP growth only=dashed, both/none=solid, pre-computed k=dash-dot).
+**Color** indicates the detrending method:
+- Green = linear polynomial
+- Blue = quadratic polynomial
+- Red = mixed (linear T + quadratic GDP)
+- Black = conjoined OLS (no pre-detrending)
+- Purple = GDP-dependent response with quadratic
+- Orange/Brown = LOESS detrending
+
+**Line style** indicates what is being detrended:
+- Dotted = temperature only
+- Dashed = GDP growth only
+- Solid = both or none
+- Dash-dot = pre-computed k with polynomial trends
+- Densely dashed = pre-computed k with LOESS trends
 
 ## Data Sources
 

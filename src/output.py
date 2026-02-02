@@ -57,6 +57,9 @@ def save_summary_table(
             'Total_R_squared': r.total_r_squared,
             'Adj_R_squared': r.adj_r_squared,
             'RMSE': r.rmse,
+            'RMS_Imbalance': r.rms_imbalance,
+            'RMS_h_T': r.rms_h,
+            'Imbalance_Ratio': r.imbalance_ratio,
             'n_obs': r.n_obs,
             'n_params': r.n_params,
         }
@@ -109,6 +112,12 @@ def save_summary_table(
             f.write(f"  Total R² = {r.total_r_squared:.4f}\n")
             f.write(f"  Adjusted R² = {r.adj_r_squared:.4f}\n")
             f.write(f"  RMSE = {r.rmse:.6f}\n")
+            if r.rms_imbalance is not None:
+                f.write(f"  RMS Imbalance = {r.rms_imbalance:.6f}\n")
+            if r.rms_h is not None:
+                f.write(f"  RMS h(T) = {r.rms_h:.6f}\n")
+            if r.imbalance_ratio is not None:
+                f.write(f"  Imbalance Ratio = {r.imbalance_ratio:.4f}\n")
             f.write(f"  Observations: {r.n_obs}\n")
             f.write(f"  Parameters: {r.n_params}\n")
             f.write("\n")

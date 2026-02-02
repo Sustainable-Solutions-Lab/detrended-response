@@ -206,6 +206,12 @@ def main():
         print(f"  Total R² = {r.total_r_squared:.4f}")
         print(f"  Adjusted R² = {r.adj_r_squared:.4f}")
         print(f"  RMSE = {r.rmse:.6f}")
+        if r.rms_imbalance is not None:
+            print(f"  RMS Imbalance = {r.rms_imbalance:.6f}")
+        if r.rms_h is not None:
+            print(f"  RMS h(T) = {r.rms_h:.6f}")
+        if r.imbalance_ratio is not None:
+            print(f"  Imbalance Ratio = {r.imbalance_ratio:.4f}")
 
     # Save outputs
     print("\n" + "=" * 70)
