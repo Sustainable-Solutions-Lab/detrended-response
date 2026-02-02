@@ -46,7 +46,7 @@ The time trend function `jᵢ(t)` can be interpreted as:
 
 If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
 
-## Eight Approaches
+## Nine Approaches
 
 ### Approach 0: No Detrending
 
@@ -146,6 +146,41 @@ Same as Approach 6, but with quadratic trends for both GDP growth and temperatur
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
 
+### Approach 8: GDP-Dependent Temperature Response
+
+Approaches 0-7 assume that the temperature response function h(T) is the same for all countries regardless of income level. However, wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and other infrastructure.
+
+Approach 8 introduces a GDP-dependent scaling of the climate response:
+
+```
+h(Y,T) = (Y/Y_ref)^(-β) · (h₁·T* + h₂·T*²)
+```
+
+where:
+- `Y` is per capita GDP
+- `Y_ref` is a reference GDP level (mean pcGDP computed once on the full dataset)
+- `β` is the GDP scaling exponent
+- `T*` is quadratic-detrended temperature (same as Approach 7)
+
+Note: `Y_ref` is computed once on the full dataset and held fixed during bootstrap resampling to ensure all samples are compared to the same reference.
+
+The full model becomes:
+
+```
+[Δyᵢ(t) - k(t)] - jᵢ(t) = (Yᵢ(t)/Y_ref)^(-β) · [h₁·T* + h₂·T*²]
+```
+
+**Interpretation of β:**
+- `β > 0`: Poorer countries are more affected by temperature (the GDP scaling factor is larger when Y < Y_ref)
+- `β = 0`: No GDP-dependence (reduces to Approach 7)
+- Larger β means stronger income-based adaptation
+
+**Solution approach:** Since β enters nonlinearly, we use nested optimization:
+1. Outer loop: Optimize β using Brent's method over [0.01, 0.99]
+2. Inner loop: For each candidate β, solve linear OLS for h₁ and h₂
+
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, β); year effects pre-computed
+
 ## Plot Color Scheme
 
 In the output plots:
@@ -160,8 +195,9 @@ In the output plots:
 | 5 | Blue | Solid | Quadratic (both) |
 | 6 | Green | Dash-dot | Pre-computed k, linear trends |
 | 7 | Blue | Dash-dot | Pre-computed k, quadratic trends |
+| 8 | Purple | Dash-dot | GDP-dependent response |
 
-**Color** indicates the degree of detrending (linear=green, quadratic=blue, mixed=red, none=black).
+**Color** indicates the degree of detrending (linear=green, quadratic=blue, mixed=red, none=black, GDP-dependent=purple).
 **Line style** indicates what is being detrended (temperature only=dotted, GDP growth only=dashed, both/none=solid, pre-computed k=dash-dot).
 
 ## Data Sources

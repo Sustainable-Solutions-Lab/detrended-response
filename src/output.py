@@ -28,7 +28,7 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
     """Save comparison table of all approaches."""
     rows = []
     for name, r in results.items():
-        rows.append({
+        row = {
             'Approach': r.approach,
             'h1': r.h1,
             'h1_SE': r.h1_se,
@@ -41,7 +41,13 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
             'RMSE': r.rmse,
             'n_obs': r.n_obs,
             'n_params': r.n_params,
-        })
+        }
+        # Add beta for Approach 8
+        if hasattr(r, 'beta'):
+            row['beta'] = r.beta
+            row['beta_SE'] = r.beta_se
+            row['Y_ref'] = r.Y_ref
+        rows.append(row)
 
     df = pd.DataFrame(rows)
     df.to_csv(output_dir / 'comparison_table.csv', index=False)
@@ -57,6 +63,10 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
             f.write("-" * 50 + "\n")
             f.write(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})\n")
             f.write(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})\n")
+            # Add beta for Approach 8
+            if hasattr(r, 'beta'):
+                f.write(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})\n")
+                f.write(f"  Y_ref = {r.Y_ref:.2f}\n")
             f.write(f"  T_optimal = {r.T_optimal:.2f} C\n")
             f.write(f"  R² = {r.r_squared:.4f}\n")
             f.write(f"  Total R² = {r.total_r_squared:.4f}\n")
@@ -116,6 +126,7 @@ def _plot_temperature_response_subset(
         'approach5': 'blue',       # Combined Quadratic Detrending
         'approach6': 'green',      # Precomputed k Linear
         'approach7': 'blue',       # Precomputed k Quadratic
+        'approach8': 'purple',     # GDP-dependent Response
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
@@ -131,6 +142,7 @@ def _plot_temperature_response_subset(
         'approach5': '-',
         'approach6': '-.',
         'approach7': '-.',
+        'approach8': '-.',
     }
 
     for name in approaches:
@@ -185,12 +197,12 @@ def plot_temperature_response(
         title_suffix='Approaches 0-5',
         T_range=T_range
     )
-    # Plot 2: Approaches 0, 6, 7 (precomputed k approaches)
+    # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7'],
+        approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_response_precomputed_k.png',
-        title_suffix='Approaches 0, 6, 7',
+        title_suffix='Approaches 0, 6, 7, 8',
         T_range=T_range
     )
 
@@ -219,6 +231,7 @@ def _plot_temperature_derivative_subset(
         'approach5': 'blue',       # Combined Quadratic Detrending
         'approach6': 'green',      # Precomputed k Linear
         'approach7': 'blue',       # Precomputed k Quadratic
+        'approach8': 'purple',     # GDP-dependent Response
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
@@ -234,6 +247,7 @@ def _plot_temperature_derivative_subset(
         'approach5': '-',
         'approach6': '-.',
         'approach7': '-.',
+        'approach8': '-.',
     }
 
     for name in approaches:
@@ -273,12 +287,12 @@ def plot_temperature_derivative(
         title_suffix='Approaches 0-5',
         T_range=T_range
     )
-    # Plot 2: Approaches 0, 6, 7 (precomputed k approaches)
+    # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7'],
+        approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_derivative_precomputed_k.png',
-        title_suffix='Approaches 0, 6, 7',
+        title_suffix='Approaches 0, 6, 7, 8',
         T_range=T_range
     )
 
@@ -342,6 +356,7 @@ def plot_optimal_temperature_comparison(
         'approach5': 'blue',
         'approach6': 'green',
         'approach7': 'blue',
+        'approach8': 'purple',
     }
     colors = [color_map.get(a, 'gray') for a in approaches]
     x = np.arange(len(approaches))
@@ -391,6 +406,7 @@ def plot_year_effects(
         'approach4': 'green',
         'approach5': 'blue',
         'approach6': 'black',  # Black for precomputed k on this plot
+        'approach8': 'purple',
     }
     linestyles = {
         'approach0': '-',
@@ -400,11 +416,12 @@ def plot_year_effects(
         'approach4': '-',
         'approach5': '-',
         'approach6': '-.',
+        'approach8': '-.',
     }
 
     for name, r in results.items():
-        # Skip approach7 - it has the same k values as approach6 (both are precomputed year means)
-        if name == 'approach7':
+        # Skip approach7 and approach8 - they use the same k values as approach6 (precomputed year means)
+        if name in ('approach7', 'approach8'):
             continue
 
         # k is stored with actual year as key
@@ -492,6 +509,67 @@ def plot_residual_diagnostics(
         plt.close()
 
 
+def plot_gdp_scaling_factor(
+    results: Dict[str, FitResult],
+    output_dir: Path,
+    Y_range: tuple = None,
+) -> None:
+    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 8.
+
+    This shows how the temperature response is scaled by per capita GDP level.
+    Countries with lower GDP have larger scaling factors (more affected).
+
+    Args:
+        results: Dictionary of FitResult objects (must include 'approach8')
+        output_dir: Output directory
+        Y_range: GDP range for x-axis (default: from data min to max)
+    """
+    if 'approach8' not in results:
+        return
+
+    r = results['approach8']
+    if not hasattr(r, 'beta') or not hasattr(r, 'Y_ref'):
+        return
+
+    beta = r.beta
+    Y_ref = r.Y_ref
+
+    # Default Y range: from ~500 to ~100000 (covers most country GDPs)
+    if Y_range is None:
+        Y_range = (500, 100000)
+
+    # Create GDP array (log-spaced for better visualization)
+    Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
+
+    # Compute scaling factor
+    g = (Y / Y_ref) ** (-beta)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    ax.plot(Y, g, 'purple', linewidth=2, label=f'β = {beta:.3f}')
+    ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='g = 1 (at Y = Y_ref)')
+    ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref = ${Y_ref:,.0f}')
+
+    ax.set_xscale('log')
+    ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
+    ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+    ax.set_title('GDP-Dependent Temperature Response Scaling (Approach 8)', fontsize=14)
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+
+    # Add annotations for interpretation
+    ax.annotate('Poorer countries:\nmore affected',
+                xy=(Y_range[0] * 2, g[0] * 0.9),
+                fontsize=10, color='darkred')
+    ax.annotate('Richer countries:\nless affected',
+                xy=(Y_range[1] * 0.3, g[-1] * 1.1),
+                fontsize=10, color='darkgreen')
+
+    plt.tight_layout()
+    plt.savefig(output_dir / 'gdp_scaling_factor.png', dpi=150)
+    plt.close()
+
+
 def save_all_outputs(
     data: AnalysisData,
     trends: CountryTrends,
@@ -525,6 +603,10 @@ def save_all_outputs(
     plot_optimal_temperature_comparison(results, output_dir)
     plot_year_effects(results, data, output_dir)
     plot_residual_diagnostics(results, data, output_dir)
+
+    # Plot GDP scaling factor for Approach 8
+    if 'approach8' in results:
+        plot_gdp_scaling_factor(results, output_dir)
 
     print("All outputs saved.")
     return output_dir
@@ -885,6 +967,7 @@ def plot_bootstrap_temperature_response(
         'approach5': 'blue',
         'approach6': 'green',
         'approach7': 'blue',
+        'approach8': 'purple',
     }
 
     # First pass: compute all data and find global y-axis range
@@ -1000,6 +1083,7 @@ def plot_bootstrap_T_optimal_comparison(
         'approach5': 'blue',
         'approach6': 'green',
         'approach7': 'blue',
+        'approach8': 'purple',
     }
 
     approach_names = list(results.keys())
@@ -1130,6 +1214,7 @@ def plot_bootstrap_temperature_derivative(
         'approach5': 'blue',
         'approach6': 'green',
         'approach7': 'blue',
+        'approach8': 'purple',
     }
 
     # First pass: compute all data and find global y-axis range
@@ -1236,21 +1321,21 @@ def save_all_bootstrap_plots(
     plot_all_bootstrap_distributions(results, all_stats, output_dir)
     print("      Saved bootstrap_distributions.pdf")
 
-    # Temperature response plot - all 8 approaches in one PDF
+    # Temperature response plot - all 9 approaches in one PDF
     plot_bootstrap_temperature_response(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7'],
+                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range
     )
     print("      Saved bootstrap_temperature_response.pdf")
 
-    # Temperature derivative plot - all 8 approaches in one PDF
+    # Temperature derivative plot - all 9 approaches in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7'],
+                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range
     )

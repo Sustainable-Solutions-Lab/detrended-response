@@ -11,6 +11,7 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
+import numpy as np
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -123,6 +124,9 @@ def main():
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
+    # Compute Y_ref once on full dataset (used for all bootstrap iterations)
+    Y_ref = np.mean(data.pcGDP)
+    print(f"      Y_ref (mean pcGDP): {Y_ref:.2f}")
     print("      Done.")
 
     # Fit original model (point estimates)
@@ -130,7 +134,8 @@ def main():
     original_results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
-        year_means=year_means
+        year_means=year_means,
+        Y_ref=Y_ref
     )
     print("      Done.")
 
@@ -143,6 +148,7 @@ def main():
         n_bootstrap=args.n_bootstrap,
         random_seed=args.random_seed,
         verbose=verbose,
+        Y_ref=Y_ref,
     )
     print("      Done.")
 
@@ -187,6 +193,10 @@ def main():
         print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
         print(f"  h2: {result.h2_point:.6f}")
         print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+        # Print beta for Approach 8
+        if result.beta_point is not None and 'beta' in stats:
+            print(f"  beta: {result.beta_point:.4f}")
+            print(f"    90% CI: [{stats['beta']['p5']:.4f}, {stats['beta']['p95']:.4f}]")
         print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
 
     print("\n" + "=" * 70)

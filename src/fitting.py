@@ -12,6 +12,7 @@ Approach 3: Combined detrending
 
 import numpy as np
 from scipy import linalg
+from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
 from typing import Dict
 from .data_loader import AnalysisData
@@ -40,6 +41,31 @@ class FitResult:
     rmse: float            # Root mean squared error
     n_obs: int             # Number of observations
     n_params: int          # Number of parameters
+    residuals: np.ndarray  # Residuals
+    T_optimal: float       # Optimal temperature = -h1 / (2*h2)
+    total_r_squared: float # Variance explained in original dy
+
+
+@dataclass
+class FitResultApproach8:
+    """Container for Approach 8 results with GDP-dependent response.
+
+    Model: h(Y,T) = (Y/Y_ref)^(-beta) * (h1*T + h2*T^2)
+    """
+    approach: str           # Name of the approach
+    h1: float              # Linear temperature coefficient
+    h2: float              # Quadratic temperature coefficient
+    h1_se: float           # Standard error of h1
+    h2_se: float           # Standard error of h2
+    beta: float            # GDP scaling exponent
+    beta_se: float         # Standard error of beta
+    Y_ref: float           # Reference GDP used
+    k: Dict[int, float]    # Year fixed effects (year -> value)
+    r_squared: float       # R-squared
+    adj_r_squared: float   # Adjusted R-squared
+    rmse: float            # Root mean squared error
+    n_obs: int             # Number of observations
+    n_params: int          # Number of parameters (3: h1, h2, beta)
     residuals: np.ndarray  # Residuals
     T_optimal: float       # Optimal temperature = -h1 / (2*h2)
     total_r_squared: float # Variance explained in original dy
@@ -566,6 +592,173 @@ def fit_approach7_precomputed_k_quadratic(
     )
 
 
+def compute_beta_se_numerical(
+    sse_func: callable,
+    beta_opt: float,
+    beta_bounds: tuple,
+    n_obs: int,
+    n_params: int = 3,
+) -> float:
+    """Compute standard error of beta from curvature of SSE profile.
+
+    Uses numerical second derivative of the SSE function at the optimum.
+    SE(beta) is approximated from the profile likelihood curvature.
+
+    Args:
+        sse_func: Function that computes SSE for a given beta
+        beta_opt: Optimal beta value
+        beta_bounds: Bounds for beta (to ensure step stays in bounds)
+        n_obs: Number of observations
+        n_params: Number of parameters (default 3: h1, h2, beta)
+
+    Returns:
+        Standard error of beta (or np.nan if curvature is non-positive)
+    """
+    # Step size for finite differences
+    h = 0.01
+    # Ensure we stay within bounds
+    h = min(h, (beta_bounds[1] - beta_opt) / 2, (beta_opt - beta_bounds[0]) / 2)
+
+    sse_minus = sse_func(beta_opt - h)
+    sse_center = sse_func(beta_opt)
+    sse_plus = sse_func(beta_opt + h)
+
+    # Second derivative: d2(SSE)/d(beta)^2 ~ (f(x+h) - 2*f(x) + f(x-h)) / h^2
+    d2_sse = (sse_plus - 2 * sse_center + sse_minus) / (h ** 2)
+
+    if d2_sse <= 0:
+        # Curvature is non-positive, cannot estimate SE this way
+        return np.nan
+
+    # Approximate SE from profile likelihood curvature
+    # sigma^2 ~ SSE / (n - p)
+    sigma_sq = sse_center / (n_obs - n_params)
+    se = np.sqrt(2 * sigma_sq / d2_sse)
+
+    return se
+
+
+def fit_approach8_gdp_response(
+    data: AnalysisData,
+    trends: CountryTrends,
+    year_means: dict,
+    Y_ref: float,
+    beta_bounds: tuple = (0.01, 0.99),
+) -> FitResultApproach8:
+    """Approach 8: GDP-dependent temperature response with quadratic detrending.
+
+    Model: dy*_i(t) = (Y_i(t)/Y_ref)^(-beta) * [h1*T* + h2*T*^2]
+
+    where:
+    - dy* = dy_i(t) - k[t] - j_i(t) (same as Approach 7)
+    - T* = T - (T0 + T1*t + T2*t^2) (quadratic detrended temperature)
+    - (Y_i(t)/Y_ref)^(-beta) scales the response by GDP level
+
+    Uses nested optimization:
+    - Outer: minimize_scalar over beta in beta_bounds using Brent's method
+    - Inner: for fixed beta, solve linear OLS for h1, h2
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends (with trends fit to dy - k[t])
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        Y_ref: Reference GDP (computed once on full dataset)
+        beta_bounds: Bounds for beta optimization (default [0.01, 0.99])
+
+    Returns:
+        FitResultApproach8 with beta, h1, h2, and standard errors
+    """
+    # Compute detrended temperature terms (quadratic, same as Approach 7)
+    T_star = compute_detrended_temperature_quadratic(data, trends)
+    T2_star = compute_detrended_temp_squared_quadratic(data, trends)
+
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach 7)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        # j_i[t] = y0 + y1*t + y2*t² (fit to dy - k)
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Define objective function: SSE for given beta
+    def compute_sse_for_beta(beta):
+        """Compute SSE for a given beta by solving inner OLS problem."""
+        # Compute GDP scaling factor g = (Y/Y_ref)^(-beta)
+        g = (data.pcGDP / Y_ref) ** (-beta)
+
+        # Build design matrix: X = [g*T*, g*T*^2]
+        X = np.column_stack([g * T_star, g * T2_star])
+
+        # Solve OLS: min ||y - X @ [h1, h2]||^2
+        try:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
+
+    # Optimize beta using Brent's method
+    result = minimize_scalar(
+        compute_sse_for_beta,
+        bounds=beta_bounds,
+        method='bounded',
+        options={'xatol': 1e-6}
+    )
+    beta_opt = result.x
+
+    # Re-fit at optimal beta to get h1, h2 and covariance
+    g_opt = (data.pcGDP / Y_ref) ** (-beta_opt)
+    X_opt = np.column_stack([g_opt * T_star, g_opt * T2_star])
+
+    beta_ols, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute beta SE via numerical second derivative
+    beta_se = compute_beta_se_numerical(
+        compute_sse_for_beta, beta_opt, beta_bounds, data.n_obs
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1, h2, beta
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResultApproach8(
+        approach="GDP-Response Quadratic",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        beta=beta_opt,
+        beta_se=beta_se,
+        Y_ref=Y_ref,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+    )
+
+
 def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
@@ -663,7 +856,8 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
 
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
-    trends_with_k: CountryTrends = None, year_means: dict = None
+    trends_with_k: CountryTrends = None, year_means: dict = None,
+    Y_ref: float = None
 ) -> dict:
     """Fit all approaches and return results.
 
@@ -676,6 +870,14 @@ def fit_all_approaches(
         'approach5': Combined detrending (quadratic T trend, quadratic GDP trend)
         'approach6': Pre-computed k with linear trends (if trends_with_k and year_means provided)
         'approach7': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
+        'approach8': GDP-dependent response (if Y_ref provided)
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends for approaches 0-5
+        trends_with_k: CountryTrends for approaches 6-8 (fit to dy - k)
+        year_means: Pre-computed k[t] for approaches 6-8
+        Y_ref: Reference GDP for approach 8 (computed once on full dataset)
     """
     results = {
         'approach0': fit_approach0_no_detrending(data),
@@ -694,5 +896,11 @@ def fit_all_approaches(
         results['approach7'] = fit_approach7_precomputed_k_quadratic(
             data, trends_with_k, year_means
         )
+
+        # Add approach 8 if Y_ref is provided
+        if Y_ref is not None:
+            results['approach8'] = fit_approach8_gdp_response(
+                data, trends_with_k, year_means, Y_ref
+            )
 
     return results
