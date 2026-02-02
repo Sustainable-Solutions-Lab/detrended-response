@@ -163,7 +163,7 @@ h(Y,T) = (Y/Y_ref)^(-β) · (h₁·T* + h₂·T*²)
 
 where:
 - `Y` is per capita GDP
-- `Y_ref` is a reference GDP level (mean pcGDP computed once on the full dataset)
+- `Y_ref` is a reference GDP level (mean pcGDP in the most recent year of the dataset)
 - `β` is the GDP scaling exponent
 - `T* = T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)` is quadratic-detrended temperature (same as Approach 7)
 

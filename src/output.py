@@ -512,6 +512,7 @@ def plot_residual_diagnostics(
 def plot_gdp_scaling_factor(
     results: Dict[str, FitResult],
     output_dir: Path,
+    data: AnalysisData = None,
     Y_range: tuple = None,
 ) -> None:
     """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 8.
@@ -522,6 +523,7 @@ def plot_gdp_scaling_factor(
     Args:
         results: Dictionary of FitResult objects (must include 'approach8')
         output_dir: Output directory
+        data: AnalysisData for adding GDP histogram (optional)
         Y_range: GDP range for x-axis (default: from data min to max)
     """
     if 'approach8' not in results:
@@ -545,6 +547,24 @@ def plot_gdp_scaling_factor(
     g = (Y / Y_ref) ** (-beta)
 
     fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Add GDP histogram on secondary y-axis (if data provided)
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        gdp_recent = data.pcGDP[mask_recent]
+
+        ax2 = ax.twinx()
+        # Create histogram with log-spaced bins
+        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
+        ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
+        ax2.set_ylim(bottom=0)
+        # Ensure histogram is behind main plot
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
 
     ax.plot(Y, g, 'purple', linewidth=2, label=f'β = {beta:.3f}')
     ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='g = 1 (at Y = Y_ref)')
@@ -606,7 +626,7 @@ def save_all_outputs(
 
     # Plot GDP scaling factor for Approach 8
     if 'approach8' in results:
-        plot_gdp_scaling_factor(results, output_dir)
+        plot_gdp_scaling_factor(results, output_dir, data=data)
 
     print("All outputs saved.")
     return output_dir
@@ -930,7 +950,8 @@ def plot_bootstrap_temperature_response(
     output_dir: Path,
     approaches: list = None,
     filename: str = "bootstrap_temperature_response.pdf",
-    T_range: tuple = (0, 30)
+    T_range: tuple = (0, 30),
+    data: AnalysisData = None,
 ) -> None:
     """Plot h(T) - h(T*) with 90% CI bands in multi-panel layout.
 
@@ -944,6 +965,7 @@ def plot_bootstrap_temperature_response(
         approaches: List of approach keys to include (default: all)
         filename: Output filename (should end in .pdf)
         T_range: Temperature range for x-axis
+        data: AnalysisData for adding temperature histogram (optional)
     """
     T = np.linspace(T_range[0], T_range[1], 200)
 
@@ -1023,18 +1045,39 @@ def plot_bootstrap_temperature_response(
     else:
         axes = axes.flatten()
 
+    # Get temperature data from most recent year for histogram (if data provided)
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+
     # Second pass: create the plots
     for idx, name in enumerate(approaches):
         ax = axes[idx]
         result = results[name]
         color = colors.get(name, 'steelblue')
-        data = plot_data[name]
+        pdata = plot_data[name]
+
+        # Add temperature histogram on secondary y-axis (if data provided)
+        if temp_recent is not None:
+            ax2 = ax.twinx()
+            # Create histogram
+            bins = np.linspace(T_range[0], T_range[1], 30)
+            ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax2.set_ylabel('Data density', fontsize=8, color='gray')
+            ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+            ax2.set_ylim(bottom=0)
+            # Ensure histogram is behind main plot
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.set_zorder(ax2.get_zorder() + 1)
+            ax.patch.set_visible(False)
 
         # Plot CI band
-        ax.fill_between(T, data['h_lower'], data['h_upper'], alpha=0.3, color=color, label='90% CI')
+        ax.fill_between(T, pdata['h_lower'], pdata['h_upper'], alpha=0.3, color=color, label='90% CI')
 
         # Plot point estimate
-        ax.plot(T, data['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
+        ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
 
         # Mark optimal temperature
         ax.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
@@ -1303,6 +1346,7 @@ def plot_bootstrap_gdp_scaling(
     Y_ref: float,
     Y_range: tuple = None,
     filename: str = 'bootstrap_gdp_scaling.png',
+    data: AnalysisData = None,
 ) -> None:
     """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 8.
 
@@ -1314,6 +1358,7 @@ def plot_bootstrap_gdp_scaling(
         Y_ref: Reference GDP value (same as used in fitting)
         Y_range: GDP range for x-axis (default: 500 to 100000)
         filename: Output filename
+        data: AnalysisData for adding GDP histogram (optional)
     """
     if 'approach8' not in results:
         return
@@ -1359,6 +1404,24 @@ def plot_bootstrap_gdp_scaling(
     g_p75 = np.percentile(g_samples, 75, axis=0)
     g_p95 = np.percentile(g_samples, 95, axis=0)
 
+    # Add GDP histogram on secondary y-axis (if data provided)
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        gdp_recent = data.pcGDP[mask_recent]
+
+        ax2 = ax.twinx()
+        # Create histogram with log-spaced bins
+        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
+        ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
+        ax2.set_ylim(bottom=0)
+        # Ensure histogram is behind main plot
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
     # Plot uncertainty bands
     ax.fill_between(Y, g_p5, g_p95, color='purple', alpha=0.2, label='90% CI')
     ax.fill_between(Y, g_p25, g_p75, color='purple', alpha=0.3, label='IQR')
@@ -1398,6 +1461,7 @@ def save_all_bootstrap_plots(
     output_dir: Path,
     T_range: tuple = (0, 30),
     Y_ref: float = None,
+    data: AnalysisData = None,
 ) -> None:
     """Generate all bootstrap plots.
 
@@ -1414,6 +1478,7 @@ def save_all_bootstrap_plots(
         output_dir: Directory to save plots
         T_range: Temperature range for response plots
         Y_ref: Reference GDP for Approach 8 GDP scaling plot
+        data: AnalysisData for adding data density histograms (optional)
     """
     # Generate combined distribution plot for all approaches
     plot_all_bootstrap_distributions(results, all_stats, output_dir)
@@ -1425,7 +1490,8 @@ def save_all_bootstrap_plots(
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8'],
         filename='bootstrap_temperature_response.pdf',
-        T_range=T_range
+        T_range=T_range,
+        data=data
     )
     print("      Saved bootstrap_temperature_response.pdf")
 
@@ -1445,5 +1511,5 @@ def save_all_bootstrap_plots(
 
     # GDP scaling factor with bootstrap uncertainty (Approach 8)
     if 'approach8' in results and Y_ref is not None:
-        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref)
+        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data)
         print("      Saved bootstrap_gdp_scaling.png")

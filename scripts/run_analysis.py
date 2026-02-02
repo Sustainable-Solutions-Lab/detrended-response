@@ -123,9 +123,11 @@ def main():
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
-    # Compute Y_ref for Approach 8 (once on full dataset)
-    Y_ref = np.mean(data.pcGDP)
-    print(f"      Y_ref (mean pcGDP): {Y_ref:.2f}")
+    # Compute Y_ref for Approach 8 (based on most recent year)
+    max_year = data.year_range[1]
+    mask_recent = data.year == max_year
+    Y_ref = np.mean(data.pcGDP[mask_recent])
+    print(f"      Y_ref (mean pcGDP in {max_year}): {Y_ref:.2f}")
 
     # Fit all approaches
     results = {}
