@@ -70,6 +70,26 @@ APPROACH_LINESTYLES = {
 }
 
 
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+def get_valid_bootstrap_samples(
+    result: "BootstrapResult"
+) -> tuple:
+    """Extract valid (non-NaN) bootstrap samples for h1 and h2.
+
+    Args:
+        result: BootstrapResult containing h1_samples and h2_samples
+
+    Returns:
+        Tuple of (h1_valid, h2_valid, valid_mask) where valid_mask is a boolean
+        array indicating which samples are valid.
+    """
+    valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
+    return result.h1_samples[valid_mask], result.h2_samples[valid_mask], valid_mask
+
+
 def create_output_dir(base_dir: str = "data/output") -> Path:
     """Create timestamped output directory."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -804,9 +824,7 @@ def compute_h_response_uncertainty_bands(
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
     # Get valid bootstrap samples (exclude NaN)
-    valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
-    h1_valid = result.h1_samples[valid_mask]
-    h2_valid = result.h2_samples[valid_mask]
+    h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
 
     if len(h1_valid) == 0:
         return (np.full_like(T_range, np.nan),
@@ -1247,9 +1265,7 @@ def compute_derivative_uncertainty_bands(
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
     # Get valid bootstrap samples (exclude NaN)
-    valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
-    h1_valid = result.h1_samples[valid_mask]
-    h2_valid = result.h2_samples[valid_mask]
+    h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
 
     if len(h1_valid) == 0:
         return (np.full_like(T_range, np.nan),

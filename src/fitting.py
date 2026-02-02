@@ -11,13 +11,6 @@ Approach 3: Combined detrending
 """
 
 import numpy as np
-
-# ==============================================================================
-# Constants
-# ==============================================================================
-
-# Bounds for beta optimization in GDP-dependent response approaches
-DEFAULT_BETA_BOUNDS = (0.01, 0.99)
 from scipy import linalg
 from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
@@ -35,6 +28,62 @@ from .detrending import (
     compute_growth_trend_values,
     compute_growth_trend_values_linear,
 )
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Bounds for beta optimization in GDP-dependent response approaches
+DEFAULT_BETA_BOUNDS = (0.01, 0.99)
+
+
+# ==============================================================================
+# Helper Functions
+# ==============================================================================
+
+def compute_T_optimal(h1: float, h2: float) -> float:
+    """Compute optimal temperature from quadratic response coefficients.
+
+    For the quadratic response h(T) = h1*T + h2*T², the optimal temperature
+    is at dh/dT = 0, which gives T_opt = -h1 / (2*h2).
+
+    Args:
+        h1: Linear temperature coefficient
+        h2: Quadratic temperature coefficient
+
+    Returns:
+        Optimal temperature, or np.nan if h2 == 0
+    """
+    return -h1 / (2 * h2) if h2 != 0 else np.nan
+
+
+def compute_gdp_scaling(pcGDP: np.ndarray, Y_ref: float, beta: float) -> np.ndarray:
+    """Compute GDP scaling factors for GDP-dependent response approaches.
+
+    Args:
+        pcGDP: Per capita GDP values for each observation
+        Y_ref: Reference GDP level
+        beta: GDP scaling exponent
+
+    Returns:
+        Array of scaling factors g = (Y/Y_ref)^(-beta)
+    """
+    return (pcGDP / Y_ref) ** (-beta)
+
+
+def compute_rms_h(h1: float, h2: float, temp: np.ndarray) -> float:
+    """Compute RMS of climate response h(T) = h1*T + h2*T².
+
+    Args:
+        h1: Linear temperature coefficient
+        h2: Quadratic temperature coefficient
+        temp: Temperature array
+
+    Returns:
+        RMS of h(T) across all observations
+    """
+    h_T = h1 * temp + h2 * temp ** 2
+    return np.sqrt(np.mean(h_T ** 2))
 
 
 @dataclass
@@ -249,7 +298,7 @@ def fit_approach1_temperature_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 1: T_trend = T0 + T1*t (linear), j_trend = 0
@@ -265,8 +314,7 @@ def fit_approach1_temperature_detrending(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -326,7 +374,7 @@ def fit_approach2_growth_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 2: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
@@ -342,8 +390,7 @@ def fit_approach2_growth_detrending(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -405,7 +452,7 @@ def fit_approach3_combined_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 3: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -422,8 +469,7 @@ def fit_approach3_combined_detrending(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -487,7 +533,7 @@ def fit_approach4_combined_linear_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 4: T_trend = T0 + T1*t (linear), j_trend = y0_lin + y1_lin*t (linear)
@@ -504,8 +550,7 @@ def fit_approach4_combined_linear_detrending(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -570,7 +615,7 @@ def fit_approach5_combined_quadratic_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -587,8 +632,7 @@ def fit_approach5_combined_quadratic_detrending(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -663,7 +707,7 @@ def fit_approach6_precomputed_k_linear(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 6: T_trend = T0 + T1*t (linear), j_trend = y0_lin + y1_lin*t (linear)
@@ -680,8 +724,7 @@ def fit_approach6_precomputed_k_linear(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -756,7 +799,7 @@ def fit_approach7_precomputed_k_quadratic(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 7: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -773,8 +816,7 @@ def fit_approach7_precomputed_k_quadratic(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -892,7 +934,7 @@ def fit_approach8_gdp_response(
     def compute_sse_for_beta(beta):
         """Compute SSE for a given beta by solving inner OLS problem."""
         # Compute GDP scaling factor g = (Y/Y_ref)^(-beta)
-        g = (data.pcGDP / Y_ref) ** (-beta)
+        g = compute_gdp_scaling(data.pcGDP, Y_ref, beta)
 
         # Build design matrix: X = [g*T*, g*T*^2]
         X = np.column_stack([g * T_star, g * T2_star])
@@ -916,7 +958,7 @@ def fit_approach8_gdp_response(
     beta_opt = result.x
 
     # Re-fit at optimal beta to get h1, h2 and covariance
-    g_opt = (data.pcGDP / Y_ref) ** (-beta_opt)
+    g_opt = compute_gdp_scaling(data.pcGDP, Y_ref, beta_opt)
     X_opt = np.column_stack([g_opt * T_star, g_opt * T2_star])
 
     beta_ols, residuals, sigma_sq, cov = fit_ols(y, X_opt)
@@ -942,7 +984,7 @@ def fit_approach8_gdp_response(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: (Y/Y_ref)^(-beta) * h(T_trend) + j_trend + k
     # Approach 8: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -957,7 +999,7 @@ def fit_approach8_gdp_response(
         j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
         k_values[i] = year_means[yr]
     # GDP-scaled climate response to trend
-    g = (data.pcGDP / Y_ref) ** (-beta_opt)
+    g = compute_gdp_scaling(data.pcGDP, Y_ref, beta_opt)
     h_T_trend = g * (h1 * T_trend + h2 * T_trend ** 2)
     imbalance = h_T_trend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
@@ -1044,7 +1086,7 @@ def fit_approach9_precomputed_k_loess(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 9: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
@@ -1054,8 +1096,7 @@ def fit_approach9_precomputed_k_loess(
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
@@ -1124,7 +1165,7 @@ def fit_approach10_gdp_response_loess(
     def compute_sse_for_beta(beta):
         """Compute SSE for a given beta by solving inner OLS problem."""
         # Compute GDP scaling factor g = (Y/Y_ref)^(-beta)
-        g = (data.pcGDP / Y_ref) ** (-beta)
+        g = compute_gdp_scaling(data.pcGDP, Y_ref, beta)
 
         # Build design matrix: X = [g*T*, g*T*^2]
         X = np.column_stack([g * T_star, g * T2_star])
@@ -1148,7 +1189,7 @@ def fit_approach10_gdp_response_loess(
     beta_opt = result.x
 
     # Re-fit at optimal beta to get h1, h2 and covariance
-    g_opt = (data.pcGDP / Y_ref) ** (-beta_opt)
+    g_opt = compute_gdp_scaling(data.pcGDP, Y_ref, beta_opt)
     X_opt = np.column_stack([g_opt * T_star, g_opt * T2_star])
 
     beta_ols, residuals, sigma_sq, cov = fit_ols(y, X_opt)
@@ -1174,7 +1215,7 @@ def fit_approach10_gdp_response_loess(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: (Y/Y_ref)^(-beta) * h(T_trend) + j_trend + k
     # Approach 10: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
@@ -1182,7 +1223,7 @@ def fit_approach10_gdp_response_loess(
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
     # GDP-scaled climate response to trend
-    g = (data.pcGDP / Y_ref) ** (-beta_opt)
+    g = compute_gdp_scaling(data.pcGDP, Y_ref, beta_opt)
     h_T_trend = g * (h1 * T_trend + h2 * T_trend ** 2)
     imbalance = h_T_trend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
@@ -1291,7 +1332,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+    T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 0: T_trend = T (raw), j_trend from fitted coefficients
@@ -1314,8 +1355,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    h_T = h1 * data.temp + h2 * data.temp ** 2
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     return FitResult(
