@@ -15,6 +15,60 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .bootstrap import BootstrapResult
 
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Number of points for temperature response plots
+TEMPERATURE_PLOT_POINTS = 200
+
+# Number of bins for histogram plots
+HISTOGRAM_BINS = 30
+
+# Z-score for 95% confidence interval
+CONFIDENCE_Z_SCORE = 1.96
+
+# Color scheme for approaches (degree of detrending)
+# - Conjoined OLS fit: black
+# - Mixed (linear T + quadratic GDP): red
+# - Linear: green
+# - Quadratic: blue
+# - GDP-dependent: purple
+# - LOESS: orange/brown
+APPROACH_COLORS = {
+    'approach0': 'black',
+    'approach1': 'green',
+    'approach2': 'blue',
+    'approach3': 'red',
+    'approach4': 'green',
+    'approach5': 'blue',
+    'approach6': 'green',
+    'approach7': 'blue',
+    'approach8': 'purple',
+    'approach9': 'orange',
+    'approach10': 'brown',
+}
+
+# Line style scheme for approaches
+# - Conjoined OLS or combined (both): solid
+# - GDP growth detrending only: dashed
+# - Temperature detrending only: dotted
+# - Precomputed k approaches: dash-dot
+# - LOESS approaches: densely dashed
+APPROACH_LINESTYLES = {
+    'approach0': '-',
+    'approach1': ':',
+    'approach2': '--',
+    'approach3': '-',
+    'approach4': '-',
+    'approach5': '-',
+    'approach6': '-.',
+    'approach7': '-.',
+    'approach8': '-.',
+    'approach9': (0, (5, 1)),   # densely dashed
+    'approach10': (0, (5, 1)),  # densely dashed
+}
+
 
 def create_output_dir(base_dir: str = "data/output") -> Path:
     """Create timestamped output directory."""
@@ -172,45 +226,7 @@ def _plot_temperature_response_subset(
     """
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    T = np.linspace(T_range[0], T_range[1], 200)
-
-    # Color scheme (degree of detrending):
-    # - Conjoined OLS fit: black
-    # - Mixed (linear T + quadratic GDP): red
-    # - Linear: green
-    # - Quadratic: blue
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',      # Linear Temperature Detrending
-        'approach2': 'blue',       # Quadratic GDP Growth Detrending
-        'approach3': 'red',        # Combined Detrending (Mixed)
-        'approach4': 'green',      # Combined Linear Detrending
-        'approach5': 'blue',       # Combined Quadratic Detrending
-        'approach6': 'green',      # Precomputed k Linear
-        'approach7': 'blue',       # Precomputed k Quadratic
-        'approach8': 'purple',     # GDP-dependent Response
-        'approach9': 'orange',     # Precomputed k LOESS
-        'approach10': 'brown',     # GDP-dependent Response LOESS
-    }
-    # Line style scheme (what's being detrended):
-    # - Conjoined OLS or combined (both): solid
-    # - GDP growth detrending only: dashed
-    # - Temperature detrending only: dotted
-    # - Precomputed k approaches: dash-dot
-    # - LOESS approaches: densely dashed
-    linestyles = {
-        'approach0': '-',
-        'approach1': ':',
-        'approach2': '--',
-        'approach3': '-',
-        'approach4': '-',
-        'approach5': '-',
-        'approach6': '-.',
-        'approach7': '-.',
-        'approach8': '-.',
-        'approach9': (0, (5, 1)),   # densely dashed
-        'approach10': (0, (5, 1)),  # densely dashed
-    }
+    T = np.linspace(T_range[0], T_range[1], TEMPERATURE_PLOT_POINTS)
 
     for name in approaches:
         if name not in results:
@@ -229,11 +245,11 @@ def _plot_temperature_response_subset(
         h_relative = h_T - h_T_opt
 
         label = f"{r.approach} (T_opt = {r.T_optimal:.1f}°C)"
-        ax.plot(T, h_relative, color=colors.get(name, 'gray'),
-                linestyle=linestyles.get(name, '-'), label=label, linewidth=2)
+        ax.plot(T, h_relative, color=APPROACH_COLORS.get(name, 'gray'),
+                linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
 
         # Mark optimal temperature
-        ax.axvline(r.T_optimal, color=colors.get(name, 'gray'),
+        ax.axvline(r.T_optimal, color=APPROACH_COLORS.get(name, 'gray'),
                    linestyle=':', alpha=0.5)
 
     ax.axhline(0, color='gray', linewidth=0.5)
@@ -295,45 +311,7 @@ def _plot_temperature_derivative_subset(
     """Plot dh/dT = h1 + 2*h2*T for a subset of approaches."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    T = np.linspace(T_range[0], T_range[1], 200)
-
-    # Color scheme (degree of detrending):
-    # - Conjoined OLS fit: black
-    # - Mixed (linear T + quadratic GDP): red
-    # - Linear: green
-    # - Quadratic: blue
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',      # Linear Temperature Detrending
-        'approach2': 'blue',       # Quadratic GDP Growth Detrending
-        'approach3': 'red',        # Combined Detrending (Mixed)
-        'approach4': 'green',      # Combined Linear Detrending
-        'approach5': 'blue',       # Combined Quadratic Detrending
-        'approach6': 'green',      # Precomputed k Linear
-        'approach7': 'blue',       # Precomputed k Quadratic
-        'approach8': 'purple',     # GDP-dependent Response
-        'approach9': 'orange',     # Precomputed k LOESS
-        'approach10': 'brown',     # GDP-dependent Response LOESS
-    }
-    # Line style scheme (what's being detrended):
-    # - Conjoined OLS or combined (both): solid
-    # - GDP growth detrending only: dashed
-    # - Temperature detrending only: dotted
-    # - Precomputed k approaches: dash-dot
-    # - LOESS approaches: densely dashed
-    linestyles = {
-        'approach0': '-',
-        'approach1': ':',
-        'approach2': '--',
-        'approach3': '-',
-        'approach4': '-',
-        'approach5': '-',
-        'approach6': '-.',
-        'approach7': '-.',
-        'approach8': '-.',
-        'approach9': (0, (5, 1)),   # densely dashed
-        'approach10': (0, (5, 1)),  # densely dashed
-    }
+    T = np.linspace(T_range[0], T_range[1], TEMPERATURE_PLOT_POINTS)
 
     for name in approaches:
         if name not in results:
@@ -341,8 +319,8 @@ def _plot_temperature_derivative_subset(
         r = results[name]
         dh_dT = r.h1 + 2 * r.h2 * T
         label = f"{r.approach}"
-        ax.plot(T, dh_dT, color=colors.get(name, 'gray'),
-                linestyle=linestyles.get(name, '-'), label=label, linewidth=2)
+        ax.plot(T, dh_dT, color=APPROACH_COLORS.get(name, 'gray'),
+                linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
 
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
@@ -421,7 +399,7 @@ def plot_coefficient_comparison(
 
     # h2 coefficients
     h2_vals = [results[a].h2 for a in approaches]
-    h2_errs = [results[a].h2_se * 1.96 for a in approaches]  # 95% CI
+    h2_errs = [results[a].h2_se * CONFIDENCE_Z_SCORE for a in approaches]  # 95% CI
 
     axes[1].bar(x, h2_vals, yerr=h2_errs, capsize=5, color='coral', alpha=0.7)
     axes[1].set_xticks(x)
@@ -447,21 +425,7 @@ def plot_optimal_temperature_comparison(
     labels = [results[a].approach for a in approaches]
     T_opt = [results[a].T_optimal for a in approaches]
 
-    # Colors mapping for approaches
-    color_map = {
-        'approach0': 'black',
-        'approach1': 'green',
-        'approach2': 'blue',
-        'approach3': 'red',
-        'approach4': 'green',
-        'approach5': 'blue',
-        'approach6': 'green',
-        'approach7': 'blue',
-        'approach8': 'purple',
-        'approach9': 'orange',
-        'approach10': 'brown',
-    }
-    colors = [color_map.get(a, 'gray') for a in approaches]
+    colors = [APPROACH_COLORS.get(a, 'gray') for a in approaches]
     x = np.arange(len(approaches))
 
     bars = ax.bar(x, T_opt, color=colors, alpha=0.7)
@@ -502,27 +466,9 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Color scheme (same as other plots, except approach6 is black here)
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',
-        'approach2': 'blue',
-        'approach3': 'red',
-        'approach4': 'green',
-        'approach5': 'blue',
-        'approach6': 'black',  # Black for precomputed k on this plot
-        'approach8': 'purple',
-    }
-    linestyles = {
-        'approach0': '-',
-        'approach1': ':',
-        'approach2': '--',
-        'approach3': '-',
-        'approach4': '-',
-        'approach5': '-',
-        'approach6': '-.',
-        'approach8': '-.',
-    }
+    # Override color for approach6 to black on this plot (to distinguish precomputed k)
+    year_effects_colors = dict(APPROACH_COLORS)
+    year_effects_colors['approach6'] = 'black'
 
     for name, r in results.items():
         # Skip approach7, approach8, approach9, approach10 - they use the same k values as approach6 (precomputed year means)
@@ -553,8 +499,8 @@ def plot_year_effects(
             k_values_plot = k_values
             label = f"{r.approach}"
 
-        ax.plot(unique_years, k_values_plot, color=colors.get(name, 'gray'),
-                linestyle=linestyles.get(name, '-'), linewidth=1.5,
+        ax.plot(unique_years, k_values_plot, color=year_effects_colors.get(name, 'gray'),
+                linestyle=APPROACH_LINESTYLES.get(name, '-'), linewidth=1.5,
                 label=label)
 
     ax.axhline(0, color='gray', linewidth=0.5)
@@ -581,7 +527,7 @@ def plot_residual_diagnostics(
         residuals = r.residuals
 
         # Histogram of residuals
-        axes[0, 0].hist(residuals, bins=50, density=True, alpha=0.7, color='steelblue')
+        axes[0, 0].hist(residuals, bins=HISTOGRAM_BINS, density=True, alpha=0.7, color='steelblue')
         axes[0, 0].set_xlabel('Residual')
         axes[0, 0].set_ylabel('Density')
         axes[0, 0].set_title('Residual Distribution')
@@ -1104,21 +1050,6 @@ def plot_bootstrap_temperature_response(
     if n_approaches == 0:
         return
 
-    # Color scheme (same as existing plots)
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',
-        'approach2': 'blue',
-        'approach3': 'red',
-        'approach4': 'green',
-        'approach5': 'blue',
-        'approach6': 'green',
-        'approach7': 'blue',
-        'approach8': 'purple',
-        'approach9': 'orange',
-        'approach10': 'brown',
-    }
-
     # First pass: compute all data and find global y-axis range
     plot_data = {}
     y_min, y_max = np.inf, -np.inf
@@ -1191,7 +1122,7 @@ def plot_bootstrap_temperature_response(
     for idx, name in enumerate(approaches):
         ax = axes[idx]
         result = results[name]
-        color = colors.get(name, 'steelblue')
+        color = APPROACH_COLORS.get(name, 'steelblue')
         pdata = plot_data[name]
 
         # Add temperature histogram on secondary y-axis (if data provided)
@@ -1256,21 +1187,6 @@ def plot_bootstrap_T_optimal_comparison(
     """
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Color scheme
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',
-        'approach2': 'blue',
-        'approach3': 'red',
-        'approach4': 'green',
-        'approach5': 'blue',
-        'approach6': 'green',
-        'approach7': 'blue',
-        'approach8': 'purple',
-        'approach9': 'orange',
-        'approach10': 'brown',
-    }
-
     approach_names = list(results.keys())
     n_approaches = len(approach_names)
     y_positions = np.arange(n_approaches)
@@ -1278,7 +1194,7 @@ def plot_bootstrap_T_optimal_comparison(
     for i, name in enumerate(approach_names):
         result = results[name]
         stats = all_stats[name]['T_optimal']
-        color = colors.get(name, 'gray')
+        color = APPROACH_COLORS.get(name, 'gray')
 
         point_est = result.T_optimal_point
         p5, p25, p50, p75, p95 = stats['p5'], stats['p25'], stats['p50'], stats['p75'], stats['p95']
@@ -1392,21 +1308,6 @@ def plot_bootstrap_temperature_derivative(
     if n_approaches == 0:
         return
 
-    # Color scheme (same as existing plots)
-    colors = {
-        'approach0': 'black',
-        'approach1': 'green',
-        'approach2': 'blue',
-        'approach3': 'red',
-        'approach4': 'green',
-        'approach5': 'blue',
-        'approach6': 'green',
-        'approach7': 'blue',
-        'approach8': 'purple',
-        'approach9': 'orange',
-        'approach10': 'brown',
-    }
-
     # First pass: compute all data and find global y-axis range
     plot_data = {}
     y_min, y_max = np.inf, -np.inf
@@ -1463,7 +1364,7 @@ def plot_bootstrap_temperature_derivative(
     for idx, name in enumerate(approaches):
         ax = axes[idx]
         result = results[name]
-        color = colors.get(name, 'steelblue')
+        color = APPROACH_COLORS.get(name, 'steelblue')
         data = plot_data[name]
 
         # Plot CI band

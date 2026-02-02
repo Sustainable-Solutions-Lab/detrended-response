@@ -17,6 +17,19 @@ This preserves within-country correlation structure across years.
 """
 
 import numpy as np
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Default number of bootstrap iterations
+DEFAULT_N_BOOTSTRAP = 1000
+
+# Default random seed for reproducibility
+DEFAULT_RANDOM_SEED = 42
+
+# Default percentiles for computing bootstrap statistics
+DEFAULT_PERCENTILES = (5, 25, 50, 75, 95)
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -27,6 +40,7 @@ from .detrending import (
     compute_year_means,
     compute_country_trends_with_k,
     compute_country_trends_loess,
+    DEFAULT_LOESS_WINDOW_YEARS,
 )
 from .fitting import fit_all_approaches, FitResult
 
@@ -124,11 +138,11 @@ def run_bootstrap(
     data: AnalysisData,
     trends: CountryTrends,
     original_results: Dict[str, FitResult],
-    n_bootstrap: int = 1000,
-    random_seed: int = 42,
+    n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
+    random_seed: int = DEFAULT_RANDOM_SEED,
     verbose: bool = True,
     Y_ref: float = None,
-    loess_window: int = 25,
+    loess_window: int = None,
 ) -> Dict[str, BootstrapResult]:
     """Run bootstrap analysis for all approaches.
 
@@ -147,11 +161,16 @@ def run_bootstrap(
         random_seed: Random seed for reproducibility
         verbose: Print progress messages
         Y_ref: Reference GDP for Approach 8 and 10 (computed once on full dataset)
-        loess_window: Window size in years for LOESS smoothing (default: 25)
+        loess_window: Window size in years for LOESS smoothing
+            (default: DEFAULT_LOESS_WINDOW_YEARS)
 
     Returns:
         Dict mapping approach name to BootstrapResult
     """
+    # Handle default for loess_window
+    if loess_window is None:
+        loess_window = DEFAULT_LOESS_WINDOW_YEARS
+
     rng = np.random.default_rng(random_seed)
     n_countries = data.n_countries
 
@@ -259,7 +278,7 @@ def run_bootstrap(
 
 def compute_bootstrap_statistics(
     result: BootstrapResult,
-    percentiles: Tuple[float, ...] = (5, 25, 50, 75, 95)
+    percentiles: Tuple[float, ...] = DEFAULT_PERCENTILES
 ) -> Dict[str, Dict[str, float]]:
     """Compute summary statistics from bootstrap samples.
 

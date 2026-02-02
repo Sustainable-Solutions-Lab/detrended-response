@@ -6,6 +6,16 @@ This module computes:
 """
 
 import numpy as np
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Default window size in years for LOESS smoothing
+DEFAULT_LOESS_WINDOW_YEARS = 25
+
+# Minimum number of points required for LOESS fitting
+MIN_LOESS_POINTS = 3
 from dataclasses import dataclass
 from typing import Dict
 from statsmodels.nonparametric.smoothers_lowess import lowess
@@ -343,7 +353,9 @@ def compute_country_trends_with_k(
     )
 
 
-def fit_loess_trend(t: np.ndarray, y: np.ndarray, window_years: int = 25) -> np.ndarray:
+def fit_loess_trend(
+    t: np.ndarray, y: np.ndarray, window_years: int = DEFAULT_LOESS_WINDOW_YEARS
+) -> np.ndarray:
     """Fit LOESS (locally weighted scatterplot smoothing) trend.
 
     Args:
@@ -355,7 +367,7 @@ def fit_loess_trend(t: np.ndarray, y: np.ndarray, window_years: int = 25) -> np.
         Smoothed values at each input time point
     """
     n = len(t)
-    if n < 3:
+    if n < MIN_LOESS_POINTS:
         # Not enough points for LOESS, return original values
         return y.copy()
 
@@ -367,8 +379,8 @@ def fit_loess_trend(t: np.ndarray, y: np.ndarray, window_years: int = 25) -> np.
 
     # frac should give roughly window_years worth of data
     frac = min(window_years / t_range, 1.0)
-    # Ensure we use at least 3 points
-    frac = max(frac, 3.0 / n)
+    # Ensure we use at least MIN_LOESS_POINTS
+    frac = max(frac, float(MIN_LOESS_POINTS) / n)
 
     # Sort data by t for LOESS
     sort_idx = np.argsort(t)
@@ -386,7 +398,8 @@ def fit_loess_trend(t: np.ndarray, y: np.ndarray, window_years: int = 25) -> np.
 
 
 def compute_country_trends_loess(
-    data: AnalysisData, year_means: Dict[int, float], window_years: int = 25
+    data: AnalysisData, year_means: Dict[int, float],
+    window_years: int = DEFAULT_LOESS_WINDOW_YEARS
 ) -> CountryTrendsLoess:
     """Compute LOESS-smoothed trends for temperature and GDP growth.
 

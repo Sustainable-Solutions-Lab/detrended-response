@@ -11,6 +11,13 @@ Approach 3: Combined detrending
 """
 
 import numpy as np
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Bounds for beta optimization in GDP-dependent response approaches
+DEFAULT_BETA_BOUNDS = (0.01, 0.99)
 from scipy import linalg
 from scipy.optimize import minimize_scalar
 from dataclasses import dataclass
@@ -842,7 +849,7 @@ def fit_approach8_gdp_response(
     trends: CountryTrends,
     year_means: dict,
     Y_ref: float,
-    beta_bounds: tuple = (0.01, 0.99),
+    beta_bounds: tuple = DEFAULT_BETA_BOUNDS,
 ) -> FitResultApproach8:
     """Approach 8: GDP-dependent temperature response with quadratic detrending.
 
@@ -1077,7 +1084,7 @@ def fit_approach10_gdp_response_loess(
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     Y_ref: float,
-    beta_bounds: tuple = (0.01, 0.99),
+    beta_bounds: tuple = DEFAULT_BETA_BOUNDS,
 ) -> FitResultApproach8:
     """Approach 10: GDP-dependent temperature response with LOESS detrending.
 
