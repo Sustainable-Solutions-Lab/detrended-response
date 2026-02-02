@@ -48,9 +48,9 @@ If the quadratic time trend is meant to be one or both of these detrending funct
 
 ## Nine Approaches
 
-### Approach 0: No Detrending
+### Approach 0: Conjoined OLS Fit
 
-Fit all terms in a single fitting process. With this approach, it is unclear how much `jᵢ(t)` is acting to detrend temperature versus per capita GDP growth rates, and how much of the error term is being absorbed into these many additional degrees of freedom.
+Fit all terms in a single (conjoined) ordinary least squares fitting process. With this approach, it is unclear how much `jᵢ(t)` is acting to detrend temperature versus per capita GDP growth rates, and how much of the error term is being absorbed into these many additional degrees of freedom.
 
 ```
 Δyᵢ(t) = h₁·T + h₂·T² + j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² + kₜ
@@ -192,7 +192,7 @@ In the output plots:
 
 | Approach | Color | Line Style | Description |
 |----------|-------|------------|-------------|
-| 0 | Black | Solid | No detrending |
+| 0 | Black | Solid | Conjoined OLS fit |
 | 1 | Green | Dotted | Linear (temperature only) |
 | 2 | Blue | Dashed | Quadratic (GDP growth only) |
 | 3 | Red | Solid | Mixed (linear T + quadratic GDP) |

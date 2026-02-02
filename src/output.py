@@ -24,7 +24,25 @@ def create_output_dir(base_dir: str = "data/output") -> Path:
     return output_dir
 
 
-def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
+def add_input_file_annotation(fig, input_file: str = None) -> None:
+    """Add input filename annotation to the lower right corner of a figure.
+
+    Args:
+        fig: matplotlib Figure object
+        input_file: Path to input data file (if None, no annotation is added)
+    """
+    if input_file:
+        # Get just the filename, not the full path
+        filename = Path(input_file).name
+        fig.text(0.99, 0.01, f"Data: {filename}",
+                 fontsize=6, color='gray', alpha=0.7,
+                 ha='right', va='bottom',
+                 transform=fig.transFigure)
+
+
+def save_summary_table(
+    results: Dict[str, FitResult], output_dir: Path, input_file: str = None
+) -> None:
     """Save comparison table of all approaches."""
     rows = []
     for name, r in results.items():
@@ -50,12 +68,31 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    df.to_csv(output_dir / 'comparison_table.csv', index=False)
-    df.to_excel(output_dir / 'comparison_table.xlsx', index=False)
+
+    # Add input file as first row comment in CSV
+    csv_path = output_dir / 'comparison_table.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+
+    # For Excel, add input file info in a header row
+    xlsx_path = output_dir / 'comparison_table.xlsx'
+    with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+        # Write header info
+        if input_file:
+            header_df = pd.DataFrame({'Input Data': [Path(input_file).name]})
+            header_df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=0)
+            df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=2)
+        else:
+            df.to_excel(writer, sheet_name='Sheet1', index=False)
 
     # Also save as formatted text
     with open(output_dir / 'comparison_summary.txt', 'w') as f:
         f.write("Detrended Response Analysis - Comparison of Approaches\n")
+        f.write("=" * 70 + "\n")
+        if input_file:
+            f.write(f"Input data: {Path(input_file).name}\n")
         f.write("=" * 70 + "\n\n")
 
         for name, r in results.items():
@@ -78,7 +115,8 @@ def save_summary_table(results: Dict[str, FitResult], output_dir: Path) -> None:
 
 
 def save_country_trends(
-    data: AnalysisData, trends: CountryTrends, output_dir: Path
+    data: AnalysisData, trends: CountryTrends, output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Save country-level trend coefficients."""
     rows = []
@@ -94,14 +132,29 @@ def save_country_trends(
         })
 
     df = pd.DataFrame(rows)
-    df.to_csv(output_dir / 'country_trends.csv', index=False)
-    df.to_excel(output_dir / 'country_trends.xlsx', index=False)
+
+    # Add input file as first row comment in CSV
+    csv_path = output_dir / 'country_trends.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+
+    # For Excel, add input file info in a header row
+    xlsx_path = output_dir / 'country_trends.xlsx'
+    with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+        if input_file:
+            header_df = pd.DataFrame({'Input Data': [Path(input_file).name]})
+            header_df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=0)
+            df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=2)
+        else:
+            df.to_excel(writer, sheet_name='Sheet1', index=False)
 
 
 def _plot_temperature_response_subset(
     results: Dict[str, FitResult], output_dir: Path,
     approaches: list, filename: str, title_suffix: str = "",
-    T_range: tuple = (0, 30)
+    T_range: tuple = (0, 30), input_file: str = None
 ) -> None:
     """Plot h(T) - h(T*) for a subset of approaches.
 
@@ -113,7 +166,7 @@ def _plot_temperature_response_subset(
     T = np.linspace(T_range[0], T_range[1], 200)
 
     # Color scheme (degree of detrending):
-    # - No detrending: black
+    # - Conjoined OLS fit: black
     # - Mixed (linear T + quadratic GDP): red
     # - Linear: green
     # - Quadratic: blue
@@ -131,7 +184,7 @@ def _plot_temperature_response_subset(
         'approach10': 'brown',     # GDP-dependent Response LOESS
     }
     # Line style scheme (what's being detrended):
-    # - No detrending or combined (both): solid
+    # - Conjoined OLS or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
     # - Precomputed k approaches: dash-dot
@@ -186,12 +239,14 @@ def _plot_temperature_response_subset(
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, dpi=150)
     plt.close()
 
 
 def plot_temperature_response(
-    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
+    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
+    input_file: str = None
 ) -> None:
     """Plot h(T) - h(T*) for approaches, generating three separate plots."""
     # Plot 1: Approaches 0-5 (all original approaches)
@@ -200,7 +255,8 @@ def plot_temperature_response(
         approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
         filename='temperature_response_all.png',
         title_suffix='Approaches 0-5',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
     # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
     _plot_temperature_response_subset(
@@ -208,7 +264,8 @@ def plot_temperature_response(
         approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_response_precomputed_k.png',
         title_suffix='Approaches 0, 6, 7, 8',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
     # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
     _plot_temperature_response_subset(
@@ -216,14 +273,15 @@ def plot_temperature_response(
         approaches=['approach7', 'approach8', 'approach9', 'approach10'],
         filename='temperature_response_loess.png',
         title_suffix='Quadratic vs LOESS',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
 
 
 def _plot_temperature_derivative_subset(
     results: Dict[str, FitResult], output_dir: Path,
     approaches: list, filename: str, title_suffix: str = "",
-    T_range: tuple = (0, 30)
+    T_range: tuple = (0, 30), input_file: str = None
 ) -> None:
     """Plot dh/dT = h1 + 2*h2*T for a subset of approaches."""
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -231,7 +289,7 @@ def _plot_temperature_derivative_subset(
     T = np.linspace(T_range[0], T_range[1], 200)
 
     # Color scheme (degree of detrending):
-    # - No detrending: black
+    # - Conjoined OLS fit: black
     # - Mixed (linear T + quadratic GDP): red
     # - Linear: green
     # - Quadratic: blue
@@ -249,7 +307,7 @@ def _plot_temperature_derivative_subset(
         'approach10': 'brown',     # GDP-dependent Response LOESS
     }
     # Line style scheme (what's being detrended):
-    # - No detrending or combined (both): solid
+    # - Conjoined OLS or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
     # - Precomputed k approaches: dash-dot
@@ -289,12 +347,14 @@ def _plot_temperature_derivative_subset(
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, dpi=150)
     plt.close()
 
 
 def plot_temperature_derivative(
-    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
+    results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
+    input_file: str = None
 ) -> None:
     """Plot dh/dT for approaches, generating three separate plots."""
     # Plot 1: Approaches 0-5 (all original approaches)
@@ -303,7 +363,8 @@ def plot_temperature_derivative(
         approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
         filename='temperature_derivative_all.png',
         title_suffix='Approaches 0-5',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
     # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
     _plot_temperature_derivative_subset(
@@ -311,7 +372,8 @@ def plot_temperature_derivative(
         approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_derivative_precomputed_k.png',
         title_suffix='Approaches 0, 6, 7, 8',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
     # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
     _plot_temperature_derivative_subset(
@@ -319,11 +381,14 @@ def plot_temperature_derivative(
         approaches=['approach7', 'approach8', 'approach9', 'approach10'],
         filename='temperature_derivative_loess.png',
         title_suffix='Quadratic vs LOESS',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
 
 
-def plot_coefficient_comparison(results: Dict[str, FitResult], output_dir: Path) -> None:
+def plot_coefficient_comparison(
+    results: Dict[str, FitResult], output_dir: Path, input_file: str = None
+) -> None:
     """Plot T_opt and h2 coefficients for each approach."""
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -358,12 +423,13 @@ def plot_coefficient_comparison(results: Dict[str, FitResult], output_dir: Path)
     axes[1].grid(True, alpha=0.3, axis='y')
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / 'coefficient_comparison.png', dpi=150)
     plt.close()
 
 
 def plot_optimal_temperature_comparison(
-    results: Dict[str, FitResult], output_dir: Path
+    results: Dict[str, FitResult], output_dir: Path, input_file: str = None
 ) -> None:
     """Plot optimal temperature comparison across approaches."""
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -402,18 +468,20 @@ def plot_optimal_temperature_comparison(
                 f'{val:.1f}°C', ha='center', va='bottom', fontsize=10)
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / 'optimal_temperature_comparison.png', dpi=150)
     plt.close()
 
 
 def plot_year_effects(
-    results: Dict[str, FitResult], data: AnalysisData, output_dir: Path
+    results: Dict[str, FitResult], data: AnalysisData, output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Plot year fixed effects k(t) for all approaches.
 
     All approaches now use year fixed effects k_t.
 
-    For Approach 0 (no detrending), we subtract a least-squares best-fit quadratic
+    For Approach 0 (Conjoined OLS fit), we subtract a least-squares best-fit quadratic
     from k_t. This shows what the year effects would look like if the quadratic
     trend were absorbed into the country-specific j_i(t) terms. The subtracted
     quadratic is what would be added to all j_i(t) under an alternative
@@ -468,7 +536,7 @@ def plot_year_effects(
             coeffs, _, _, _ = np.linalg.lstsq(A, k_values, rcond=None)
             quadratic_fit = A @ coeffs
             k_values_plot = k_values - quadratic_fit
-            label = "No Detrending (minus best-fit quadratic)"
+            label = "Conjoined OLS Fit (minus best-fit quadratic)"
         elif name == 'approach6':
             k_values_plot = k_values
             label = "Precomputed k (year means)"
@@ -488,12 +556,14 @@ def plot_year_effects(
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / 'year_effects.png', dpi=150)
     plt.close()
 
 
 def plot_residual_diagnostics(
-    results: Dict[str, FitResult], data: AnalysisData, output_dir: Path
+    results: Dict[str, FitResult], data: AnalysisData, output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Plot residual diagnostics for each approach."""
     for name, r in results.items():
@@ -530,6 +600,7 @@ def plot_residual_diagnostics(
 
         fig.suptitle(f'Residual Diagnostics: {r.approach}', fontsize=14)
         plt.tight_layout()
+        add_input_file_annotation(fig, input_file)
 
         # Safe filename
         safe_name = name.replace(' ', '_').lower()
@@ -542,6 +613,7 @@ def plot_gdp_scaling_factor(
     output_dir: Path,
     data: AnalysisData = None,
     Y_range: tuple = None,
+    input_file: str = None,
 ) -> None:
     """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 8.
 
@@ -614,6 +686,7 @@ def plot_gdp_scaling_factor(
                 fontsize=10, color='darkgreen')
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / 'gdp_scaling_factor.png', dpi=150)
     plt.close()
 
@@ -623,6 +696,7 @@ def save_all_outputs(
     trends: CountryTrends,
     results: Dict[str, FitResult],
     output_dir: Path = None,
+    input_file: str = None,
 ) -> Path:
     """Save all outputs to the specified directory.
 
@@ -631,6 +705,7 @@ def save_all_outputs(
         trends: CountryTrends object
         results: Dictionary of FitResult objects
         output_dir: Output directory (created if None)
+        input_file: Path to input data file (for annotation)
 
     Returns:
         Path to output directory
@@ -641,20 +716,20 @@ def save_all_outputs(
     print(f"Saving outputs to: {output_dir}")
 
     # Save tables
-    save_summary_table(results, output_dir)
-    save_country_trends(data, trends, output_dir)
+    save_summary_table(results, output_dir, input_file=input_file)
+    save_country_trends(data, trends, output_dir, input_file=input_file)
 
     # Generate plots
-    plot_temperature_response(results, output_dir)
-    plot_temperature_derivative(results, output_dir)
-    plot_coefficient_comparison(results, output_dir)
-    plot_optimal_temperature_comparison(results, output_dir)
-    plot_year_effects(results, data, output_dir)
-    plot_residual_diagnostics(results, data, output_dir)
+    plot_temperature_response(results, output_dir, input_file=input_file)
+    plot_temperature_derivative(results, output_dir, input_file=input_file)
+    plot_coefficient_comparison(results, output_dir, input_file=input_file)
+    plot_optimal_temperature_comparison(results, output_dir, input_file=input_file)
+    plot_year_effects(results, data, output_dir, input_file=input_file)
+    plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
 
     # Plot GDP scaling factor for Approach 8
     if 'approach8' in results:
-        plot_gdp_scaling_factor(results, output_dir, data=data)
+        plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
     print("All outputs saved.")
     return output_dir
@@ -662,7 +737,8 @@ def save_all_outputs(
 
 def save_bootstrap_coefficients_csv(
     results: Dict[str, "BootstrapResult"],
-    output_dir: Path
+    output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Save bootstrap samples to CSV for each approach.
 
@@ -686,14 +762,19 @@ def save_bootstrap_coefficients_csv(
             })
 
     df = pd.DataFrame(rows)
-    df.to_csv(output_dir / 'bootstrap_coefficients.csv', index=False)
+    csv_path = output_dir / 'bootstrap_coefficients.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
     print(f"  Saved bootstrap_coefficients.csv ({len(df)} rows)")
 
 
 def save_bootstrap_summary_txt(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
-    output_dir: Path
+    output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Save text summary with confidence intervals.
 
@@ -705,6 +786,9 @@ def save_bootstrap_summary_txt(
     """
     with open(output_dir / 'bootstrap_summary.txt', 'w') as f:
         f.write("Bootstrap Uncertainty Analysis - Summary\n")
+        f.write("=" * 70 + "\n")
+        if input_file:
+            f.write(f"Input data: {Path(input_file).name}\n")
         f.write("=" * 70 + "\n\n")
 
         # Write metadata
@@ -865,7 +949,8 @@ def plot_all_bootstrap_distributions(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
     output_dir: Path,
-    filename: str = "bootstrap_distributions.pdf"
+    filename: str = "bootstrap_distributions.pdf",
+    input_file: str = None
 ) -> None:
     """Plot h1, h2, T_optimal distributions for all approaches in a single PDF.
 
@@ -877,6 +962,7 @@ def plot_all_bootstrap_distributions(
         all_stats: Dict mapping approach key to statistics dict
         output_dir: Directory to save the plot
         filename: Output filename (should end in .pdf)
+        input_file: Path to input data file (for annotation)
     """
     from matplotlib.backends.backend_pdf import PdfPages
 
@@ -969,6 +1055,7 @@ def plot_all_bootstrap_distributions(
 
         fig.suptitle('Bootstrap Parameter Distributions by Approach', fontsize=14, y=1.01)
         plt.tight_layout()
+        add_input_file_annotation(fig, input_file)
         pdf.savefig(fig, dpi=150, bbox_inches='tight')
         plt.close()
 
@@ -980,6 +1067,7 @@ def plot_bootstrap_temperature_response(
     filename: str = "bootstrap_temperature_response.pdf",
     T_range: tuple = (0, 30),
     data: AnalysisData = None,
+    input_file: str = None,
 ) -> None:
     """Plot h(T) - h(T*) with 90% CI bands in multi-panel layout.
 
@@ -1139,6 +1227,7 @@ def plot_bootstrap_temperature_response(
 
     fig.suptitle('Temperature Response with Bootstrap 90% CI and IQR', fontsize=14, y=1.02)
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
     plt.close()
 
@@ -1146,7 +1235,8 @@ def plot_bootstrap_temperature_response(
 def plot_bootstrap_T_optimal_comparison(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
-    output_dir: Path
+    output_dir: Path,
+    input_file: str = None
 ) -> None:
     """Horizontal error bar plot: point estimate + 90% CI + IQR for each approach.
 
@@ -1211,6 +1301,7 @@ def plot_bootstrap_T_optimal_comparison(
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / 'bootstrap_T_optimal_comparison.png', dpi=150)
     plt.close()
 
@@ -1263,7 +1354,8 @@ def plot_bootstrap_temperature_derivative(
     output_dir: Path,
     approaches: list = None,
     filename: str = "bootstrap_temperature_derivative.pdf",
-    T_range: tuple = (0, 30)
+    T_range: tuple = (0, 30),
+    input_file: str = None
 ) -> None:
     """Plot dh/dT = h1 + 2*h2*T with 90% CI bands in multi-panel layout.
 
@@ -1277,6 +1369,7 @@ def plot_bootstrap_temperature_derivative(
         approaches: List of approach keys to include (default: all)
         filename: Output filename (should end in .pdf)
         T_range: Temperature range for x-axis
+        input_file: Path to input data file (for annotation)
     """
     T = np.linspace(T_range[0], T_range[1], 200)
 
@@ -1385,6 +1478,7 @@ def plot_bootstrap_temperature_derivative(
 
     fig.suptitle('Temperature Derivative with Bootstrap 90% CI', fontsize=14, y=1.02)
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
     plt.close()
 
@@ -1396,6 +1490,7 @@ def plot_bootstrap_gdp_scaling(
     Y_range: tuple = None,
     filename: str = 'bootstrap_gdp_scaling.png',
     data: AnalysisData = None,
+    input_file: str = None,
 ) -> None:
     """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 8.
 
@@ -1500,6 +1595,7 @@ def plot_bootstrap_gdp_scaling(
     ax_inset.tick_params(labelsize=8)
 
     plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, dpi=150)
     plt.close()
 
@@ -1511,6 +1607,7 @@ def save_all_bootstrap_plots(
     T_range: tuple = (0, 30),
     Y_ref: float = None,
     data: AnalysisData = None,
+    input_file: str = None,
 ) -> None:
     """Generate all bootstrap plots.
 
@@ -1528,9 +1625,10 @@ def save_all_bootstrap_plots(
         T_range: Temperature range for response plots
         Y_ref: Reference GDP for Approach 8 GDP scaling plot
         data: AnalysisData for adding data density histograms (optional)
+        input_file: Path to input data file (for annotation)
     """
     # Generate combined distribution plot for all approaches
-    plot_all_bootstrap_distributions(results, all_stats, output_dir)
+    plot_all_bootstrap_distributions(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_distributions.pdf")
 
     # Temperature response plot - all 9 approaches in one PDF
@@ -1541,7 +1639,8 @@ def save_all_bootstrap_plots(
                     'approach9', 'approach10'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
-        data=data
+        data=data,
+        input_file=input_file
     )
     print("      Saved bootstrap_temperature_response.pdf")
 
@@ -1552,15 +1651,16 @@ def save_all_bootstrap_plots(
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
                     'approach9', 'approach10'],
         filename='bootstrap_temperature_derivative.pdf',
-        T_range=T_range
+        T_range=T_range,
+        input_file=input_file
     )
     print("      Saved bootstrap_temperature_derivative.pdf")
 
     # T_optimal comparison across all approaches
-    plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir)
+    plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_T_optimal_comparison.png")
 
     # GDP scaling factor with bootstrap uncertainty (Approach 8)
     if 'approach8' in results and Y_ref is not None:
-        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data)
+        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file)
         print("      Saved bootstrap_gdp_scaling.png")

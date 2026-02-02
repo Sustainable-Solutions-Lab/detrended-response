@@ -1031,7 +1031,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
 
     return FitResult(
-        approach="No Detrending",
+        approach="Conjoined OLS Fit",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1056,7 +1056,7 @@ def fit_all_approaches(
     """Fit all approaches and return results.
 
     Returns dict with keys:
-        'approach0': No detrending, with j terms and year fixed effects
+        'approach0': Conjoined OLS fit, with j terms and year fixed effects
         'approach1': Temperature detrending (linear T trend)
         'approach2': GDP growth detrending (quadratic GDP trend)
         'approach3': Combined detrending (linear T trend, quadratic GDP trend)

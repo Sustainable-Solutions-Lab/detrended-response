@@ -38,5 +38,6 @@ wheels/
 .DS_Store
 Thumbs.db
 
-# Output data (optional - uncomment if you want to exclude)
-# data/output/
+# Output data (ignore generated output, but keep reference)
+data/output/*
+!data/output/reference/

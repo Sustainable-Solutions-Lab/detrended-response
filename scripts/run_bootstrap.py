@@ -52,8 +52,8 @@ def main():
     parser.add_argument(
         "--use-csv",
         type=str,
-        default="data/input/df_base_withPop.csv",
-        help="Use pre-processed CSV file (default: data/input/df_base_withPop.csv). "
+        default="data/input/Maddison_CRU_dataset.csv",
+        help="Use pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv). "
              "Set to empty string to use Maddison/CRU instead.",
     )
     parser.add_argument(
@@ -104,8 +104,10 @@ def main():
     print("=" * 70)
 
     # Load data
+    input_file = None  # Track which input file was used
     if args.use_csv and args.use_csv.strip():
         csv_path = Path(args.use_csv).expanduser()
+        input_file = str(csv_path)
         print(f"\n[1/7] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
@@ -115,6 +117,7 @@ def main():
     else:
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
+        input_file = f"{args.maddison} + {args.cru}"
         print(f"\n[1/7] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
@@ -181,12 +184,12 @@ def main():
     else:
         output_dir = create_output_dir()
 
-    save_bootstrap_coefficients_csv(bootstrap_results, output_dir)
-    save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir)
+    save_bootstrap_coefficients_csv(bootstrap_results, output_dir, input_file=input_file)
+    save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
 
     # Generate bootstrap plots
     print("\n[7/7] Generating bootstrap plots...")
-    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, Y_ref=Y_ref, data=data)
+    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, Y_ref=Y_ref, data=data, input_file=input_file)
     print("      Done.")
 
     print(f"      Output saved to: {output_dir}")
