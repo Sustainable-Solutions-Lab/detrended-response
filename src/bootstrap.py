@@ -54,6 +54,8 @@ class BootstrapResult:
     h1_point: float
     h2_point: float
     T_optimal_point: float
+    r_squared_point: float
+    total_r_squared_point: float
 
     # Bootstrap samples - shape (n_bootstrap,)
     h1_samples: np.ndarray
@@ -66,8 +68,8 @@ class BootstrapResult:
     n_bootstrap: int
     n_successful: int  # Number of successful fits
 
-    # Approach 8 specific (optional)
-    beta_point: float = None       # GDP scaling exponent (for Approach 8)
+    # Approach 8 and 10 specific (optional)
+    beta_point: float = None       # GDP scaling exponent
     beta_samples: np.ndarray = None  # Bootstrap samples for beta
 
 
@@ -255,13 +257,15 @@ def run_bootstrap(
     results = {}
     for name in approach_names:
         orig = original_results[name]
-        # Get beta point estimate if available (Approach 8)
+        # Get beta point estimate if available (Approach 8 and 10)
         beta_point = getattr(orig, 'beta', None)
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
             h2_point=orig.h2,
             T_optimal_point=orig.T_optimal,
+            r_squared_point=orig.r_squared,
+            total_r_squared_point=orig.total_r_squared,
             h1_samples=h1_samples[name],
             h2_samples=h2_samples[name],
             T_optimal_samples=T_optimal_samples[name],
@@ -313,8 +317,8 @@ def compute_bootstrap_statistics(
     stats['h1'] = get_percentile_stats(result.h1_samples, result.h1_point)
     stats['h2'] = get_percentile_stats(result.h2_samples, result.h2_point)
     stats['T_optimal'] = get_percentile_stats(result.T_optimal_samples, result.T_optimal_point)
-    stats['r_squared'] = get_percentile_stats(result.r_squared_samples, np.nan)
-    stats['total_r_squared'] = get_percentile_stats(result.total_r_squared_samples, np.nan)
+    stats['r_squared'] = get_percentile_stats(result.r_squared_samples, result.r_squared_point)
+    stats['total_r_squared'] = get_percentile_stats(result.total_r_squared_samples, result.total_r_squared_point)
 
     # Add beta statistics if present (Approach 8)
     if result.beta_point is not None and result.beta_samples is not None:

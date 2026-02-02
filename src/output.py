@@ -871,6 +871,7 @@ def save_bootstrap_summary_table(
             'T_optimal_std': stats['T_optimal']['std'],
 
             # total_r_squared statistics
+            'total_r_squared_point': result.total_r_squared_point,
             'total_r_squared_median': stats['total_r_squared']['p50'],
             'total_r_squared_p5': stats['total_r_squared']['p5'],
             'total_r_squared_p25': stats['total_r_squared']['p25'],
@@ -879,6 +880,7 @@ def save_bootstrap_summary_table(
             'total_r_squared_std': stats['total_r_squared']['std'],
 
             # r_squared statistics (within-model R²)
+            'r_squared_point': result.r_squared_point,
             'r_squared_median': stats['r_squared']['p50'],
             'r_squared_p5': stats['r_squared']['p5'],
             'r_squared_p25': stats['r_squared']['p25'],

@@ -194,6 +194,12 @@ GDP-Response Quadratic
     90% CI:          [ -0.000298,  -0.000082]
     IQR:             [ -0.000227,  -0.000138]
     Std:               0.000066
+  beta (GDP scaling exponent):
+    Point estimate:      0.6928
+    Bootstrap median:    0.7273
+    90% CI:          [    0.4417,     0.9900]
+    IQR:             [    0.6125,     0.8446]
+    Std:                 0.1736
 
 Precomputed k LOESS
 --------------------------------------------------
@@ -236,4 +242,10 @@ GDP-Response LOESS
     90% CI:          [ -0.000397,  -0.000134]
     IQR:             [ -0.000290,  -0.000193]
     Std:               0.000084
+  beta (GDP scaling exponent):
+    Point estimate:      0.6103
+    Bootstrap median:    0.6465
+    90% CI:          [    0.2317,     0.9453]
+    IQR:             [    0.5221,     0.7646]
+    Std:                 0.2031
 
