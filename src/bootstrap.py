@@ -106,15 +106,15 @@ def create_bootstrap_data(
     year = data.year[obs_indices]
 
     # Build new iso mappings for selected countries
-    # Map new_idx -> original iso code
+    # Map idx -> original iso code
     new_idx_to_iso = {}
     new_iso_to_idx = {}
-    for new_idx, orig_idx in enumerate(selected_country_indices):
+    for idx, orig_idx in enumerate(selected_country_indices):
         orig_iso = data.idx_to_iso[orig_idx]
         # If the same country is selected multiple times, append a suffix
-        iso_key = f"{orig_iso}_{new_idx}"
-        new_idx_to_iso[new_idx] = iso_key
-        new_iso_to_idx[iso_key] = new_idx
+        iso_key = f"{orig_iso}_{idx}"
+        new_idx_to_iso[idx] = iso_key
+        new_iso_to_idx[iso_key] = idx
 
     # Create new AnalysisData with resampled observations
     return AnalysisData(
