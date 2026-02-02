@@ -1297,11 +1297,107 @@ def plot_bootstrap_temperature_derivative(
     plt.close()
 
 
+def plot_bootstrap_gdp_scaling(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    Y_ref: float,
+    Y_range: tuple = None,
+    filename: str = 'bootstrap_gdp_scaling.png',
+) -> None:
+    """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 8.
+
+    Shows the spread of (Y/Y_ref)^(-beta) curves across bootstrap samples.
+
+    Args:
+        results: Dict of BootstrapResult (must include 'approach8')
+        output_dir: Directory to save the plot
+        Y_ref: Reference GDP value (same as used in fitting)
+        Y_range: GDP range for x-axis (default: 500 to 100000)
+        filename: Output filename
+    """
+    if 'approach8' not in results:
+        return
+
+    result = results['approach8']
+    if result.beta_point is None or result.beta_samples is None:
+        return
+
+    beta_point = result.beta_point
+    beta_samples = result.beta_samples
+
+    # Filter out NaN values
+    valid_betas = beta_samples[~np.isnan(beta_samples)]
+    if len(valid_betas) == 0:
+        return
+
+    # Default Y range
+    if Y_range is None:
+        Y_range = (500, 100000)
+
+    # Create GDP array (log-spaced)
+    Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot individual bootstrap samples (thin gray lines)
+    n_samples_to_plot = min(100, len(valid_betas))  # Limit for clarity
+    sample_indices = np.linspace(0, len(valid_betas) - 1, n_samples_to_plot, dtype=int)
+
+    for idx in sample_indices:
+        beta_b = valid_betas[idx]
+        g_b = (Y / Y_ref) ** (-beta_b)
+        ax.plot(Y, g_b, color='purple', alpha=0.05, linewidth=0.5)
+
+    # Compute percentile bands
+    g_samples = np.zeros((len(valid_betas), len(Y)))
+    for i, beta_b in enumerate(valid_betas):
+        g_samples[i, :] = (Y / Y_ref) ** (-beta_b)
+
+    g_p5 = np.percentile(g_samples, 5, axis=0)
+    g_p25 = np.percentile(g_samples, 25, axis=0)
+    g_p50 = np.percentile(g_samples, 50, axis=0)
+    g_p75 = np.percentile(g_samples, 75, axis=0)
+    g_p95 = np.percentile(g_samples, 95, axis=0)
+
+    # Plot uncertainty bands
+    ax.fill_between(Y, g_p5, g_p95, color='purple', alpha=0.2, label='90% CI')
+    ax.fill_between(Y, g_p25, g_p75, color='purple', alpha=0.3, label='IQR')
+
+    # Plot point estimate
+    g_point = (Y / Y_ref) ** (-beta_point)
+    ax.plot(Y, g_point, 'purple', linewidth=2.5, label=f'Point estimate (β = {beta_point:.3f})')
+
+    # Reference lines
+    ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
+    ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref ≈ ${Y_ref:,.0f}')
+
+    ax.set_xscale('log')
+    ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
+    ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+    ax.set_title('GDP-Dependent Temperature Response Scaling with Bootstrap Uncertainty', fontsize=14)
+    ax.legend(loc='upper right')
+    ax.grid(True, alpha=0.3)
+
+    # Add beta distribution inset
+    ax_inset = ax.inset_axes([0.02, 0.55, 0.25, 0.35])
+    ax_inset.hist(valid_betas, bins=30, color='purple', alpha=0.7, density=True)
+    ax_inset.axvline(beta_point, color='red', linewidth=1.5, label='Point est.')
+    ax_inset.set_xlabel('β', fontsize=9)
+    ax_inset.set_ylabel('Density', fontsize=9)
+    ax_inset.set_title('Bootstrap β distribution', fontsize=9)
+    ax_inset.tick_params(labelsize=8)
+
+    plt.tight_layout()
+    plt.savefig(output_dir / filename, dpi=150)
+    plt.close()
+
+
 def save_all_bootstrap_plots(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
     output_dir: Path,
-    T_range: tuple = (0, 30)
+    T_range: tuple = (0, 30),
+    Y_ref: float = None,
 ) -> None:
     """Generate all bootstrap plots.
 
@@ -1310,12 +1406,14 @@ def save_all_bootstrap_plots(
     - plot_bootstrap_temperature_response() for approaches 0-5 and 0,6,7
     - plot_bootstrap_temperature_derivative() for approaches 0-5 and 0,6,7
     - plot_bootstrap_T_optimal_comparison() for all approaches
+    - plot_bootstrap_gdp_scaling() for Approach 8 (if Y_ref provided)
 
     Args:
         results: Dict of BootstrapResult for each approach
         all_stats: Dict mapping approach key to statistics dict
         output_dir: Directory to save plots
         T_range: Temperature range for response plots
+        Y_ref: Reference GDP for Approach 8 GDP scaling plot
     """
     # Generate combined distribution plot for all approaches
     plot_all_bootstrap_distributions(results, all_stats, output_dir)
@@ -1344,3 +1442,8 @@ def save_all_bootstrap_plots(
     # T_optimal comparison across all approaches
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir)
     print("      Saved bootstrap_T_optimal_comparison.png")
+
+    # GDP scaling factor with bootstrap uncertainty (Approach 8)
+    if 'approach8' in results and Y_ref is not None:
+        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref)
+        print("      Saved bootstrap_gdp_scaling.png")

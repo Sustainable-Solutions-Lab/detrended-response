@@ -97,3 +97,17 @@ Precomputed k Quadratic
   Observations: 9404
   Parameters: 2
 
+GDP-Response Quadratic
+--------------------------------------------------
+  h1 =     0.011005  (SE: 0.001865)
+  h2 =    -0.000262  (SE: 0.000043)
+  beta =     0.6928  (SE: 0.1514)
+  Y_ref = 11525.68
+  T_optimal = 20.98 C
+  R² = 0.0040
+  Total R² = 0.1974
+  Adjusted R² = 0.0037
+  RMSE = 0.058058
+  Observations: 9404
+  Parameters: 3
+

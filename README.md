@@ -150,7 +150,12 @@ Same as Approach 6, but with quadratic trends for both GDP growth and temperatur
 
 Approaches 0-7 assume that the temperature response function h(T) is the same for all countries regardless of income level. However, wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and other infrastructure.
 
-Approach 8 introduces a GDP-dependent scaling of the climate response:
+Approach 8 extends Approach 7 by introducing a GDP-dependent scaling of the climate response. Like Approach 7, it uses:
+- Pre-computed year effects: `k(t) = mean_i(Δyᵢ(t))`
+- Quadratic country trends for GDP growth: `jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t²` fit to `Δyᵢ(t) - k(t)`
+- Quadratic temperature trends: `T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²`
+
+The climate response function becomes:
 
 ```
 h(Y,T) = (Y/Y_ref)^(-β) · (h₁·T* + h₂·T*²)
@@ -160,7 +165,7 @@ where:
 - `Y` is per capita GDP
 - `Y_ref` is a reference GDP level (mean pcGDP computed once on the full dataset)
 - `β` is the GDP scaling exponent
-- `T*` is quadratic-detrended temperature (same as Approach 7)
+- `T* = T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)` is quadratic-detrended temperature (same as Approach 7)
 
 Note: `Y_ref` is computed once on the full dataset and held fixed during bootstrap resampling to ensure all samples are compared to the same reference.
 

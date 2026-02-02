@@ -172,7 +172,7 @@ def main():
 
     # Generate bootstrap plots
     print("\n[7/7] Generating bootstrap plots...")
-    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir)
+    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, Y_ref=Y_ref)
     print("      Done.")
 
     print(f"      Output saved to: {output_dir}")
