@@ -1,0 +1,139 @@
+Detrended Response Analysis - Comparison of Approaches
+======================================================================
+
+No Detrending
+--------------------------------------------------
+  h1 =     0.014068  (SE: 0.002809)
+  h2 =    -0.000495  (SE: 0.000089)
+  T_optimal = 14.20 C
+  R² = 0.2576
+  Total R² = 0.2576
+  Adjusted R² = 0.2041
+  RMSE = 0.052600
+  Observations: 8479
+  Parameters: 571
+
+Linear Temperature Detrending
+--------------------------------------------------
+  h1 =     0.014782  (SE: 0.002967)
+  h2 =    -0.000523  (SE: 0.000094)
+  T_optimal = 14.14 C
+  R² = 0.0868
+  Total R² = 0.0868
+  Adjusted R² = 0.0800
+  RMSE = 0.058337
+  Observations: 8479
+  Parameters: 64
+
+Quadratic GDP Growth Detrending
+--------------------------------------------------
+  h1 =     0.000241  (SE: 0.000357)
+  h2 =    -0.000007  (SE: 0.000010)
+  T_optimal = 17.44 C
+  R² = 0.0768
+  Total R² = 0.2526
+  Adjusted R² = 0.0699
+  RMSE = 0.052777
+  Observations: 8479
+  Parameters: 64
+
+Combined Detrending (Mixed)
+--------------------------------------------------
+  h1 =     0.013538  (SE: 0.002679)
+  h2 =    -0.000471  (SE: 0.000085)
+  T_optimal = 14.36 C
+  R² = 0.0802
+  Total R² = 0.2553
+  Adjusted R² = 0.0733
+  RMSE = 0.052680
+  Observations: 8479
+  Parameters: 64
+
+Combined Linear Detrending
+--------------------------------------------------
+  h1 =     0.014463  (SE: 0.002781)
+  h2 =    -0.000503  (SE: 0.000088)
+  T_optimal = 14.37 C
+  R² = 0.0863
+  Total R² = 0.1980
+  Adjusted R² = 0.0795
+  RMSE = 0.054670
+  Observations: 8479
+  Parameters: 64
+
+Combined Quadratic Detrending
+--------------------------------------------------
+  h1 =     0.014209  (SE: 0.002727)
+  h2 =    -0.000497  (SE: 0.000087)
+  T_optimal = 14.30 C
+  R² = 0.0804
+  Total R² = 0.2555
+  Adjusted R² = 0.0735
+  RMSE = 0.052674
+  Observations: 8479
+  Parameters: 64
+
+Precomputed k Linear
+--------------------------------------------------
+  h1 =     0.013360  (SE: 0.002681)
+  h2 =    -0.000453  (SE: 0.000082)
+  T_optimal = 14.73 C
+  R² = 0.0036
+  Total R² = 0.1990
+  Adjusted R² = 0.0035
+  RMSE = 0.054636
+  Observations: 8479
+  Parameters: 2
+
+Precomputed k Quadratic
+--------------------------------------------------
+  h1 =     0.012919  (SE: 0.002628)
+  h2 =    -0.000442  (SE: 0.000081)
+  T_optimal = 14.61 C
+  R² = 0.0035
+  Total R² = 0.2564
+  Adjusted R² = 0.0034
+  RMSE = 0.052644
+  Observations: 8479
+  Parameters: 2
+
+GDP-Response Quadratic
+--------------------------------------------------
+  h1 =     0.008820  (SE: 0.001434)
+  h2 =    -0.000241  (SE: 0.000034)
+  beta =     0.5469  (SE: 0.1208)
+  Y_ref = 15045.90
+  T_optimal = 18.28 C
+  R² = 0.0061
+  Total R² = 0.2583
+  Adjusted R² = 0.0059
+  RMSE = 0.052576
+  Observations: 8479
+  Parameters: 3
+
+Precomputed k LOESS
+--------------------------------------------------
+  h1 =     0.014322  (SE: 0.002703)
+  h2 =    -0.000483  (SE: 0.000084)
+  T_optimal = 14.84 C
+  R² = 0.0020
+  Total R² = 0.2467
+  Adjusted R² = 0.0019
+  RMSE = 0.052986
+  Observations: 8479
+  Parameters: 2
+
+GDP-Response LOESS
+--------------------------------------------------
+  h1 =     0.009026  (SE: 0.001264)
+  h2 =    -0.000237  (SE: 0.000030)
+  beta =     0.6030  (SE: 0.1144)
+  Y_ref = 15045.90
+  T_optimal = 19.08 C
+  R² = 0.0055
+  Total R² = 0.2493
+  Adjusted R² = 0.0052
+  RMSE = 0.052894
+  Observations: 8479
+  Parameters: 3
+

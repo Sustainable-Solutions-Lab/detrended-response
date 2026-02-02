@@ -21,6 +21,7 @@ from src.detrending import (
     compute_country_trends,
     compute_year_means,
     compute_country_trends_with_k,
+    compute_country_trends_loess,
 )
 from src.fitting import fit_all_approaches
 from src.bootstrap import run_bootstrap, compute_bootstrap_statistics
@@ -88,6 +89,12 @@ def main():
         action="store_true",
         help="Suppress progress messages",
     )
+    parser.add_argument(
+        "--loess-window",
+        type=int,
+        default=25,
+        help="Window size in years for LOESS smoothing (default: 25)",
+    )
 
     args = parser.parse_args()
     verbose = not args.quiet
@@ -124,11 +131,14 @@ def main():
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
+    # Compute LOESS trends for approaches 9 and 10
+    trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
     # Compute Y_ref based on most recent year (used for all bootstrap iterations)
     max_year = data.year_range[1]
     mask_recent = data.year == max_year
     Y_ref = np.mean(data.pcGDP[mask_recent])
     print(f"      Y_ref (mean pcGDP in {max_year}): {Y_ref:.2f}")
+    print(f"      LOESS window: {args.loess_window} years")
     print("      Done.")
 
     # Fit original model (point estimates)
@@ -137,7 +147,8 @@ def main():
         data, trends,
         trends_with_k=trends_with_k,
         year_means=year_means,
-        Y_ref=Y_ref
+        Y_ref=Y_ref,
+        trends_loess=trends_loess
     )
     print("      Done.")
 
@@ -151,6 +162,7 @@ def main():
         random_seed=args.random_seed,
         verbose=verbose,
         Y_ref=Y_ref,
+        loess_window=args.loess_window,
     )
     print("      Done.")
 

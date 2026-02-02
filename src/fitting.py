@@ -18,10 +18,13 @@ from typing import Dict
 from .data_loader import AnalysisData
 from .detrending import (
     CountryTrends,
+    CountryTrendsLoess,
     compute_detrended_temperature,
     compute_detrended_temp_squared,
     compute_detrended_temperature_quadratic,
     compute_detrended_temp_squared_quadratic,
+    compute_detrended_temperature_loess,
+    compute_detrended_temp_squared_loess,
     compute_growth_trend_values,
     compute_growth_trend_values_linear,
 )
@@ -759,6 +762,197 @@ def fit_approach8_gdp_response(
     )
 
 
+def fit_approach9_precomputed_k_loess(
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
+) -> FitResult:
+    """Approach 9: Pre-computed k[t] with LOESS country/temperature trends.
+
+    LOESS version of Approach 7:
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) are LOESS-smoothed (dy_i[t] - k[t])
+    3. Temperature is detrended with LOESS: T* = T - T_loess
+    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+
+    Returns:
+        FitResult
+    """
+    # Compute detrended temperature terms (LOESS)
+    T_star = compute_detrended_temperature_loess(data, trends_loess)
+    T2_detrend = compute_detrended_temp_squared_loess(data, trends_loess)
+
+    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
+    # where j_i[t] is the LOESS smoothed (dy - k)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Design matrix: just [T*, T*²] - no year fixed effects
+    X = np.column_stack([T_star, T2_detrend])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResult(
+        approach="Precomputed k LOESS",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+    )
+
+
+def fit_approach10_gdp_response_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    Y_ref: float,
+    beta_bounds: tuple = (0.01, 0.99),
+) -> FitResultApproach8:
+    """Approach 10: GDP-dependent temperature response with LOESS detrending.
+
+    LOESS version of Approach 8:
+    Model: dy*_i(t) = (Y_i(t)/Y_ref)^(-beta) * [h1*T* + h2*T*^2]
+
+    where:
+    - dy* = dy_i(t) - k[t] - j_i(t) (same as Approach 9)
+    - T* = T - T_loess (LOESS detrended temperature)
+    - (Y_i(t)/Y_ref)^(-beta) scales the response by GDP level
+
+    Uses nested optimization:
+    - Outer: minimize_scalar over beta in beta_bounds using Brent's method
+    - Inner: for fixed beta, solve linear OLS for h1, h2
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        Y_ref: Reference GDP (computed once on full dataset)
+        beta_bounds: Bounds for beta optimization (default [0.01, 0.99])
+
+    Returns:
+        FitResultApproach8 with beta, h1, h2, and standard errors
+    """
+    # Compute detrended temperature terms (LOESS)
+    T_star = compute_detrended_temperature_loess(data, trends_loess)
+    T2_star = compute_detrended_temp_squared_loess(data, trends_loess)
+
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach 9)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Define objective function: SSE for given beta
+    def compute_sse_for_beta(beta):
+        """Compute SSE for a given beta by solving inner OLS problem."""
+        # Compute GDP scaling factor g = (Y/Y_ref)^(-beta)
+        g = (data.pcGDP / Y_ref) ** (-beta)
+
+        # Build design matrix: X = [g*T*, g*T*^2]
+        X = np.column_stack([g * T_star, g * T2_star])
+
+        # Solve OLS: min ||y - X @ [h1, h2]||^2
+        try:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
+
+    # Optimize beta using Brent's method
+    result = minimize_scalar(
+        compute_sse_for_beta,
+        bounds=beta_bounds,
+        method='bounded',
+        options={'xatol': 1e-6}
+    )
+    beta_opt = result.x
+
+    # Re-fit at optimal beta to get h1, h2 and covariance
+    g_opt = (data.pcGDP / Y_ref) ** (-beta_opt)
+    X_opt = np.column_stack([g_opt * T_star, g_opt * T2_star])
+
+    beta_ols, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute beta SE via numerical second derivative
+    beta_se = compute_beta_se_numerical(
+        compute_sse_for_beta, beta_opt, beta_bounds, data.n_obs
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1, h2, beta
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = -h1 / (2 * h2) if h2 != 0 else np.nan
+
+    return FitResultApproach8(
+        approach="GDP-Response LOESS",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        beta=beta_opt,
+        beta_se=beta_se,
+        Y_ref=Y_ref,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+    )
+
+
 def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
@@ -857,7 +1051,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
-    Y_ref: float = None
+    Y_ref: float = None, trends_loess: CountryTrendsLoess = None
 ) -> dict:
     """Fit all approaches and return results.
 
@@ -871,13 +1065,16 @@ def fit_all_approaches(
         'approach6': Pre-computed k with linear trends (if trends_with_k and year_means provided)
         'approach7': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
         'approach8': GDP-dependent response (if Y_ref provided)
+        'approach9': Pre-computed k with LOESS trends (if trends_loess provided)
+        'approach10': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
 
     Args:
         data: AnalysisData object
         trends: CountryTrends for approaches 0-5
         trends_with_k: CountryTrends for approaches 6-8 (fit to dy - k)
-        year_means: Pre-computed k[t] for approaches 6-8
-        Y_ref: Reference GDP for approach 8 (computed once on full dataset)
+        year_means: Pre-computed k[t] for approaches 6-10
+        Y_ref: Reference GDP for approach 8 and 10 (computed once on full dataset)
+        trends_loess: CountryTrendsLoess for approaches 9-10 (LOESS detrending)
     """
     results = {
         'approach0': fit_approach0_no_detrending(data),
@@ -901,6 +1098,18 @@ def fit_all_approaches(
         if Y_ref is not None:
             results['approach8'] = fit_approach8_gdp_response(
                 data, trends_with_k, year_means, Y_ref
+            )
+
+    # Add approaches 9 and 10 if trends_loess and year_means are provided
+    if trends_loess is not None and year_means is not None:
+        results['approach9'] = fit_approach9_precomputed_k_loess(
+            data, trends_loess, year_means
+        )
+
+        # Add approach 10 if Y_ref is provided
+        if Y_ref is not None:
+            results['approach10'] = fit_approach10_gdp_response_loess(
+                data, trends_loess, year_means, Y_ref
             )
 
     return results

@@ -26,6 +26,7 @@ from .detrending import (
     compute_country_trends,
     compute_year_means,
     compute_country_trends_with_k,
+    compute_country_trends_loess,
 )
 from .fitting import fit_all_approaches, FitResult
 
@@ -127,6 +128,7 @@ def run_bootstrap(
     random_seed: int = 42,
     verbose: bool = True,
     Y_ref: float = None,
+    loess_window: int = 25,
 ) -> Dict[str, BootstrapResult]:
     """Run bootstrap analysis for all approaches.
 
@@ -134,8 +136,8 @@ def run_bootstrap(
     1. Sample M countries with replacement
     2. Create bootstrap dataset
     3. Recompute country trends for bootstrap sample
-    4. Fit all approaches (including Approach 8 if Y_ref provided)
-    5. Store h1, h2, T_optimal, R², Total R², and beta (for Approach 8)
+    4. Fit all approaches (including Approach 8, 9, 10 if Y_ref provided)
+    5. Store h1, h2, T_optimal, R², Total R², and beta (for Approaches 8 and 10)
 
     Args:
         data: Original AnalysisData
@@ -144,7 +146,8 @@ def run_bootstrap(
         n_bootstrap: Number of bootstrap iterations
         random_seed: Random seed for reproducibility
         verbose: Print progress messages
-        Y_ref: Reference GDP for Approach 8 (computed once on full dataset)
+        Y_ref: Reference GDP for Approach 8 and 10 (computed once on full dataset)
+        loess_window: Window size in years for LOESS smoothing (default: 25)
 
     Returns:
         Dict mapping approach name to BootstrapResult
@@ -161,7 +164,7 @@ def run_bootstrap(
     T_optimal_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
-    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8
+    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8 and 10
 
     n_successful = 0
 
@@ -180,16 +183,20 @@ def run_bootstrap(
             # Recompute country trends for bootstrap sample
             boot_trends = compute_country_trends(boot_data)
 
-            # Compute year means and adjusted trends for approaches 6 and 7
+            # Compute year means and adjusted trends for approaches 6, 7, 9, 10
             boot_year_means = compute_year_means(boot_data)
             boot_trends_with_k = compute_country_trends_with_k(boot_data, boot_year_means)
 
-            # Fit all approaches (pass Y_ref for Approach 8)
+            # Compute LOESS trends for approaches 9 and 10
+            boot_trends_loess = compute_country_trends_loess(boot_data, boot_year_means, loess_window)
+
+            # Fit all approaches (pass Y_ref for Approach 8 and 10)
             boot_results = fit_all_approaches(
                 boot_data, boot_trends,
                 trends_with_k=boot_trends_with_k,
                 year_means=boot_year_means,
-                Y_ref=Y_ref
+                Y_ref=Y_ref,
+                trends_loess=boot_trends_loess
             )
 
             # Store results

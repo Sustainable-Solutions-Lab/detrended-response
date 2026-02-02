@@ -24,6 +24,7 @@ from src.detrending import (
     compute_country_trends,
     compute_year_means,
     compute_country_trends_with_k,
+    compute_country_trends_loess,
 )
 import numpy as np
 from src.fitting import (
@@ -36,6 +37,8 @@ from src.fitting import (
     fit_approach6_precomputed_k_linear,
     fit_approach7_precomputed_k_quadratic,
     fit_approach8_gdp_response,
+    fit_approach9_precomputed_k_loess,
+    fit_approach10_gdp_response_loess,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -79,6 +82,12 @@ def main():
         default=None,
         help="Output directory (default: timestamped)",
     )
+    parser.add_argument(
+        "--loess-window",
+        type=int,
+        default=25,
+        help="Window size in years for LOESS smoothing (default: 25)",
+    )
 
     args = parser.parse_args()
 
@@ -90,7 +99,7 @@ def main():
     if args.use_csv and args.use_csv.strip():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
-        print(f"\n[1/11] Loading data from {csv_path}...")
+        print(f"\n[1/13] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -100,7 +109,7 @@ def main():
         # Load from Maddison/CRU files
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
-        print(f"\n[1/11] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/13] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -113,17 +122,22 @@ def main():
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\n[2/11] Computing country-level trends...")
+    print("\n[2/13] Computing country-level trends...")
     trends = compute_country_trends(data)
     print("      Done.")
 
     # Compute year means and country trends with k for Approaches 6, 7, and 8
-    print("\n[3/11] Computing year means k[t] and adjusted country trends...")
+    print("\n[3/13] Computing year means k[t] and adjusted country trends...")
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
-    # Compute Y_ref for Approach 8 (based on most recent year)
+    # Compute LOESS trends for Approaches 9 and 10
+    print(f"\n[4/13] Computing LOESS trends (window={args.loess_window} years)...")
+    trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
+    print("      Done.")
+
+    # Compute Y_ref for Approach 8 and 10 (based on most recent year)
     max_year = data.year_range[1]
     mask_recent = data.year == max_year
     Y_ref = np.mean(data.pcGDP[mask_recent])
@@ -132,37 +146,42 @@ def main():
     # Fit all approaches
     results = {}
 
-    print("\n[4/11] Fitting Approach 0: No detrending...")
+    print("\n[5/13] Fitting Approach 0: No detrending...")
     results['approach0'] = fit_approach0_no_detrending(data)
     print("      Done.")
 
-    print("\n[5/11] Fitting Approach 1: Temperature detrending...")
+    print("\n[6/13] Fitting Approach 1: Temperature detrending...")
     results['approach1'] = fit_approach1_temperature_detrending(data, trends)
     print("      Done.")
 
-    print("\n[6/11] Fitting Approach 2: GDP growth detrending...")
+    print("\n[7/13] Fitting Approach 2: GDP growth detrending...")
     results['approach2'] = fit_approach2_growth_detrending(data, trends)
     print("      Done.")
 
-    print("\n[7/11] Fitting Approach 3: Combined detrending (quadratic GDP, linear T)...")
+    print("\n[8/13] Fitting Approach 3: Combined detrending (quadratic GDP, linear T)...")
     results['approach3'] = fit_approach3_combined_detrending(data, trends)
     print("      Done.")
 
-    print("\n[8/11] Fitting Approach 4: Combined detrending (linear GDP, linear T)...")
+    print("\n[9/13] Fitting Approach 4: Combined detrending (linear GDP, linear T)...")
     results['approach4'] = fit_approach4_combined_linear_detrending(data, trends)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approach 5: Combined detrending (quadratic GDP, quadratic T)...")
+    print("\n[10/13] Fitting Approach 5: Combined detrending (quadratic GDP, quadratic T)...")
     results['approach5'] = fit_approach5_combined_quadratic_detrending(data, trends)
     print("      Done.")
 
-    print("\n[10/11] Fitting Approaches 6 & 7: Precomputed k with linear/quadratic trends...")
+    print("\n[11/13] Fitting Approaches 6 & 7: Precomputed k with linear/quadratic trends...")
     results['approach6'] = fit_approach6_precomputed_k_linear(data, trends_with_k, year_means)
     results['approach7'] = fit_approach7_precomputed_k_quadratic(data, trends_with_k, year_means)
     print("      Done.")
 
-    print("\n[11/11] Fitting Approach 8: GDP-dependent temperature response...")
+    print("\n[12/13] Fitting Approach 8: GDP-dependent temperature response...")
     results['approach8'] = fit_approach8_gdp_response(data, trends_with_k, year_means, Y_ref)
+    print("      Done.")
+
+    print("\n[13/13] Fitting Approaches 9 & 10: LOESS detrending...")
+    results['approach9'] = fit_approach9_precomputed_k_loess(data, trends_loess, year_means)
+    results['approach10'] = fit_approach10_gdp_response_loess(data, trends_loess, year_means, Y_ref)
     print("      Done.")
 
     # Print summary

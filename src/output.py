@@ -127,12 +127,15 @@ def _plot_temperature_response_subset(
         'approach6': 'green',      # Precomputed k Linear
         'approach7': 'blue',       # Precomputed k Quadratic
         'approach8': 'purple',     # GDP-dependent Response
+        'approach9': 'orange',     # Precomputed k LOESS
+        'approach10': 'brown',     # GDP-dependent Response LOESS
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
     # - Precomputed k approaches: dash-dot
+    # - LOESS approaches: densely dashed
     linestyles = {
         'approach0': '-',
         'approach1': ':',
@@ -143,6 +146,8 @@ def _plot_temperature_response_subset(
         'approach6': '-.',
         'approach7': '-.',
         'approach8': '-.',
+        'approach9': (0, (5, 1)),   # densely dashed
+        'approach10': (0, (5, 1)),  # densely dashed
     }
 
     for name in approaches:
@@ -188,7 +193,7 @@ def _plot_temperature_response_subset(
 def plot_temperature_response(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
 ) -> None:
-    """Plot h(T) - h(T*) for approaches, generating two separate plots."""
+    """Plot h(T) - h(T*) for approaches, generating three separate plots."""
     # Plot 1: Approaches 0-5 (all original approaches)
     _plot_temperature_response_subset(
         results, output_dir,
@@ -203,6 +208,14 @@ def plot_temperature_response(
         approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_response_precomputed_k.png',
         title_suffix='Approaches 0, 6, 7, 8',
+        T_range=T_range
+    )
+    # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
+    _plot_temperature_response_subset(
+        results, output_dir,
+        approaches=['approach7', 'approach8', 'approach9', 'approach10'],
+        filename='temperature_response_loess.png',
+        title_suffix='Quadratic vs LOESS',
         T_range=T_range
     )
 
@@ -232,12 +245,15 @@ def _plot_temperature_derivative_subset(
         'approach6': 'green',      # Precomputed k Linear
         'approach7': 'blue',       # Precomputed k Quadratic
         'approach8': 'purple',     # GDP-dependent Response
+        'approach9': 'orange',     # Precomputed k LOESS
+        'approach10': 'brown',     # GDP-dependent Response LOESS
     }
     # Line style scheme (what's being detrended):
     # - No detrending or combined (both): solid
     # - GDP growth detrending only: dashed
     # - Temperature detrending only: dotted
     # - Precomputed k approaches: dash-dot
+    # - LOESS approaches: densely dashed
     linestyles = {
         'approach0': '-',
         'approach1': ':',
@@ -248,6 +264,8 @@ def _plot_temperature_derivative_subset(
         'approach6': '-.',
         'approach7': '-.',
         'approach8': '-.',
+        'approach9': (0, (5, 1)),   # densely dashed
+        'approach10': (0, (5, 1)),  # densely dashed
     }
 
     for name in approaches:
@@ -278,7 +296,7 @@ def _plot_temperature_derivative_subset(
 def plot_temperature_derivative(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30)
 ) -> None:
-    """Plot dh/dT for approaches, generating two separate plots."""
+    """Plot dh/dT for approaches, generating three separate plots."""
     # Plot 1: Approaches 0-5 (all original approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
@@ -293,6 +311,14 @@ def plot_temperature_derivative(
         approaches=['approach0', 'approach6', 'approach7', 'approach8'],
         filename='temperature_derivative_precomputed_k.png',
         title_suffix='Approaches 0, 6, 7, 8',
+        T_range=T_range
+    )
+    # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
+    _plot_temperature_derivative_subset(
+        results, output_dir,
+        approaches=['approach7', 'approach8', 'approach9', 'approach10'],
+        filename='temperature_derivative_loess.png',
+        title_suffix='Quadratic vs LOESS',
         T_range=T_range
     )
 
@@ -357,6 +383,8 @@ def plot_optimal_temperature_comparison(
         'approach6': 'green',
         'approach7': 'blue',
         'approach8': 'purple',
+        'approach9': 'orange',
+        'approach10': 'brown',
     }
     colors = [color_map.get(a, 'gray') for a in approaches]
     x = np.arange(len(approaches))
@@ -420,8 +448,8 @@ def plot_year_effects(
     }
 
     for name, r in results.items():
-        # Skip approach7 and approach8 - they use the same k values as approach6 (precomputed year means)
-        if name in ('approach7', 'approach8'):
+        # Skip approach7, approach8, approach9, approach10 - they use the same k values as approach6 (precomputed year means)
+        if name in ('approach7', 'approach8', 'approach9', 'approach10'):
             continue
 
         # k is stored with actual year as key
@@ -990,6 +1018,8 @@ def plot_bootstrap_temperature_response(
         'approach6': 'green',
         'approach7': 'blue',
         'approach8': 'purple',
+        'approach9': 'orange',
+        'approach10': 'brown',
     }
 
     # First pass: compute all data and find global y-axis range
@@ -1040,8 +1070,12 @@ def plot_bootstrap_temperature_response(
         n_rows, n_cols = 2, 3
     elif n_approaches <= 8:
         n_rows, n_cols = 4, 2
-    else:
+    elif n_approaches <= 9:
         n_rows, n_cols = 3, 3
+    elif n_approaches <= 12:
+        n_rows, n_cols = 4, 3
+    else:
+        n_rows, n_cols = 4, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     if n_approaches == 1:
@@ -1134,6 +1168,8 @@ def plot_bootstrap_T_optimal_comparison(
         'approach6': 'green',
         'approach7': 'blue',
         'approach8': 'purple',
+        'approach9': 'orange',
+        'approach10': 'brown',
     }
 
     approach_names = list(results.keys())
@@ -1265,6 +1301,8 @@ def plot_bootstrap_temperature_derivative(
         'approach6': 'green',
         'approach7': 'blue',
         'approach8': 'purple',
+        'approach9': 'orange',
+        'approach10': 'brown',
     }
 
     # First pass: compute all data and find global y-axis range
@@ -1306,8 +1344,12 @@ def plot_bootstrap_temperature_derivative(
         n_rows, n_cols = 2, 3
     elif n_approaches <= 8:
         n_rows, n_cols = 4, 2
-    else:
+    elif n_approaches <= 9:
         n_rows, n_cols = 3, 3
+    elif n_approaches <= 12:
+        n_rows, n_cols = 4, 3
+    else:
+        n_rows, n_cols = 4, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     if n_approaches == 1:
@@ -1495,18 +1537,20 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_response(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8'],
+                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
+                    'approach9', 'approach10'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
         data=data
     )
     print("      Saved bootstrap_temperature_response.pdf")
 
-    # Temperature derivative plot - all 9 approaches in one PDF
+    # Temperature derivative plot - all 11 approaches in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8'],
+                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
+                    'approach9', 'approach10'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range
     )
