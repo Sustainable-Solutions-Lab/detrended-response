@@ -29,6 +29,7 @@ from src.output import (
     create_output_dir,
     save_bootstrap_coefficients_csv,
     save_bootstrap_summary_txt,
+    save_bootstrap_summary_table,
     save_all_bootstrap_plots,
 )
 
@@ -186,6 +187,7 @@ def main():
 
     save_bootstrap_coefficients_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
+    save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)
 
     # Generate bootstrap plots
     print("\n[7/7] Generating bootstrap plots...")

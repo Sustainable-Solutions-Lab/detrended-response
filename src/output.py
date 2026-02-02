@@ -819,6 +819,111 @@ def save_bootstrap_summary_txt(
     print(f"  Saved bootstrap_summary.txt")
 
 
+def save_bootstrap_summary_table(
+    results: Dict[str, "BootstrapResult"],
+    all_stats: Dict[str, Dict],
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save bootstrap summary as CSV and XLSX with approaches as rows.
+
+    Creates: bootstrap_summary_table.csv and bootstrap_summary_table.xlsx
+
+    Each row is an approach, with columns for each parameter's statistics:
+    - Point estimate, median, p5, p25, p75, p95, std for h1, h2, T_optimal, total_r_squared
+    - Beta statistics included for approaches where it's a free parameter
+    """
+    rows = []
+    for name, result in results.items():
+        stats = all_stats[name]
+
+        row = {
+            'approach': name,
+            'approach_name': result.approach,
+            'n_bootstrap': result.n_bootstrap,
+            'n_successful': result.n_successful,
+
+            # h1 statistics
+            'h1_point': result.h1_point,
+            'h1_median': stats['h1']['p50'],
+            'h1_p5': stats['h1']['p5'],
+            'h1_p25': stats['h1']['p25'],
+            'h1_p75': stats['h1']['p75'],
+            'h1_p95': stats['h1']['p95'],
+            'h1_std': stats['h1']['std'],
+
+            # h2 statistics
+            'h2_point': result.h2_point,
+            'h2_median': stats['h2']['p50'],
+            'h2_p5': stats['h2']['p5'],
+            'h2_p25': stats['h2']['p25'],
+            'h2_p75': stats['h2']['p75'],
+            'h2_p95': stats['h2']['p95'],
+            'h2_std': stats['h2']['std'],
+
+            # T_optimal statistics
+            'T_optimal_point': result.T_optimal_point,
+            'T_optimal_median': stats['T_optimal']['p50'],
+            'T_optimal_p5': stats['T_optimal']['p5'],
+            'T_optimal_p25': stats['T_optimal']['p25'],
+            'T_optimal_p75': stats['T_optimal']['p75'],
+            'T_optimal_p95': stats['T_optimal']['p95'],
+            'T_optimal_std': stats['T_optimal']['std'],
+
+            # total_r_squared statistics
+            'total_r_squared_median': stats['total_r_squared']['p50'],
+            'total_r_squared_p5': stats['total_r_squared']['p5'],
+            'total_r_squared_p25': stats['total_r_squared']['p25'],
+            'total_r_squared_p75': stats['total_r_squared']['p75'],
+            'total_r_squared_p95': stats['total_r_squared']['p95'],
+            'total_r_squared_std': stats['total_r_squared']['std'],
+
+            # r_squared statistics (within-model R²)
+            'r_squared_median': stats['r_squared']['p50'],
+            'r_squared_p5': stats['r_squared']['p5'],
+            'r_squared_p25': stats['r_squared']['p25'],
+            'r_squared_p75': stats['r_squared']['p75'],
+            'r_squared_p95': stats['r_squared']['p95'],
+            'r_squared_std': stats['r_squared']['std'],
+        }
+
+        # Add beta statistics for approaches where it's a free parameter
+        if result.beta_point is not None and 'beta' in stats:
+            row['beta_point'] = result.beta_point
+            row['beta_median'] = stats['beta']['p50']
+            row['beta_p5'] = stats['beta']['p5']
+            row['beta_p25'] = stats['beta']['p25']
+            row['beta_p75'] = stats['beta']['p75']
+            row['beta_p95'] = stats['beta']['p95']
+            row['beta_std'] = stats['beta']['std']
+        else:
+            # Fill with NaN for approaches without beta
+            row['beta_point'] = np.nan
+            row['beta_median'] = np.nan
+            row['beta_p5'] = np.nan
+            row['beta_p25'] = np.nan
+            row['beta_p75'] = np.nan
+            row['beta_p95'] = np.nan
+            row['beta_std'] = np.nan
+
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+
+    # Save as CSV
+    csv_path = output_dir / 'bootstrap_summary_table.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved bootstrap_summary_table.csv ({len(df)} rows)")
+
+    # Save as XLSX
+    xlsx_path = output_dir / 'bootstrap_summary_table.xlsx'
+    df.to_excel(xlsx_path, index=False, sheet_name='Bootstrap Summary')
+    print(f"  Saved bootstrap_summary_table.xlsx")
+
+
 def compute_h_response_uncertainty_bands(
     result: "BootstrapResult",
     T_range: np.ndarray,
