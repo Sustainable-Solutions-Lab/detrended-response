@@ -999,8 +999,10 @@ def plot_bootstrap_temperature_response(
     for name in approaches:
         result = results[name]
 
-        # Compute uncertainty bands
-        h_lower, h_median, h_upper = compute_h_response_uncertainty_bands(result, T)
+        # Compute uncertainty bands (90% CI and IQR)
+        h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+            result, T, percentiles=(5, 25, 50, 75, 95)
+        )
 
         # Compute point estimate response
         h1_point = result.h1_point
@@ -1013,14 +1015,16 @@ def plot_bootstrap_temperature_response(
         h_point = h_T_point - h_T_opt_point
 
         plot_data[name] = {
-            'h_lower': h_lower,
-            'h_upper': h_upper,
+            'h_p5': h_p5,
+            'h_p25': h_p25,
+            'h_p75': h_p75,
+            'h_p95': h_p95,
             'h_point': h_point,
         }
 
         # Update global y range
-        y_min = min(y_min, np.nanmin(h_lower), np.nanmin(h_point))
-        y_max = max(y_max, np.nanmax(h_upper), np.nanmax(h_point))
+        y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
+        y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
 
     # Add some padding to y range
     y_padding = (y_max - y_min) * 0.05
@@ -1073,8 +1077,11 @@ def plot_bootstrap_temperature_response(
             ax.set_zorder(ax2.get_zorder() + 1)
             ax.patch.set_visible(False)
 
-        # Plot CI band
-        ax.fill_between(T, pdata['h_lower'], pdata['h_upper'], alpha=0.3, color=color, label='90% CI')
+        # Plot 90% CI band
+        ax.fill_between(T, pdata['h_p5'], pdata['h_p95'], alpha=0.2, color=color, label='90% CI')
+
+        # Plot IQR band
+        ax.fill_between(T, pdata['h_p25'], pdata['h_p75'], alpha=0.3, color=color, label='IQR')
 
         # Plot point estimate
         ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
@@ -1096,7 +1103,7 @@ def plot_bootstrap_temperature_response(
     for idx in range(n_approaches, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle('Temperature Response with Bootstrap 90% CI', fontsize=14, y=1.02)
+    fig.suptitle('Temperature Response with Bootstrap 90% CI and IQR', fontsize=14, y=1.02)
     plt.tight_layout()
     plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
     plt.close()
@@ -1441,8 +1448,8 @@ def plot_bootstrap_gdp_scaling(
     ax.legend(loc='upper right')
     ax.grid(True, alpha=0.3)
 
-    # Add beta distribution inset
-    ax_inset = ax.inset_axes([0.02, 0.55, 0.25, 0.35])
+    # Add beta distribution inset (positioned below legend in upper right)
+    ax_inset = ax.inset_axes([0.72, 0.42, 0.25, 0.30])
     ax_inset.hist(valid_betas, bins=30, color='purple', alpha=0.7, density=True)
     ax_inset.axvline(beta_point, color='red', linewidth=1.5, label='Point est.')
     ax_inset.set_xlabel('β', fontsize=9)
