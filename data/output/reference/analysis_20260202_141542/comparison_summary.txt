@@ -17,6 +17,17 @@ Conjoined OLS Fit
   Imbalance Ratio = 0.3905
   Observations: 9404
   Parameters: 532
+  RMS j(t) = 0.057302
+  RMS k(t) = 0.111738
+  RMS dy = 0.064804
+  Var fraction h = 0.1752
+  Var fraction j = 0.3151
+  Var fraction k = 0.1219
+  Var fraction resid = 0.8038
+  Cov fraction h-j = -0.3384
+  Cov fraction h-k = -0.0046
+  Cov fraction j-k = -0.0729
+  Sum of fractions = 1.0000
 
 Linear Temperature Detrending
 --------------------------------------------------
@@ -32,6 +43,17 @@ Linear Temperature Detrending
   Imbalance Ratio = 1.1940
   Observations: 9404
   Parameters: 64
+  RMS j(t) = 0.000000
+  RMS k(t) = 0.027756
+  RMS dy = 0.064804
+  Var fraction h = 0.2075
+  Var fraction j = 0.0000
+  Var fraction k = 0.0921
+  Var fraction resid = 0.9073
+  Cov fraction h-j = 0.0000
+  Cov fraction h-k = -0.0004
+  Cov fraction j-k = 0.0000
+  Sum of fractions = 1.2065
 
 Quadratic GDP Growth Detrending
 --------------------------------------------------
@@ -47,6 +69,17 @@ Quadratic GDP Growth Detrending
   Imbalance Ratio = 49.7537
   Observations: 9404
   Parameters: 64
+  RMS j(t) = 0.028803
+  RMS k(t) = 0.018897
+  RMS dy = 0.064804
+  Var fraction h = 0.0000
+  Var fraction j = 0.1069
+  Var fraction k = 0.0849
+  Var fraction resid = 0.8082
+  Cov fraction h-j = 0.0002
+  Cov fraction h-k = -0.0000
+  Cov fraction j-k = 0.0033
+  Sum of fractions = 1.0035
 
 Combined Detrending (Mixed)
 --------------------------------------------------
@@ -62,6 +95,17 @@ Combined Detrending (Mixed)
   Imbalance Ratio = 1.2390
   Observations: 9404
   Parameters: 64
+  RMS j(t) = 0.028803
+  RMS k(t) = 0.019092
+  RMS dy = 0.064804
+  Var fraction h = 0.1670
+  Var fraction j = 0.1069
+  Var fraction k = 0.0868
+  Var fraction resid = 0.8062
+  Cov fraction h-j = 0.0005
+  Cov fraction h-k = -0.0013
+  Cov fraction j-k = 0.0031
+  Sum of fractions = 1.1691
 
 Combined Linear Detrending
 --------------------------------------------------
@@ -77,6 +121,17 @@ Combined Linear Detrending
   Imbalance Ratio = 1.1896
   Observations: 9404
   Parameters: 64
+  RMS j(t) = 0.026968
+  RMS k(t) = 0.019188
+  RMS dy = 0.064804
+  Var fraction h = 0.2279
+  Var fraction j = 0.0825
+  Var fraction k = 0.0877
+  Var fraction resid = 0.8292
+  Cov fraction h-j = -0.0035
+  Cov fraction h-k = -0.0009
+  Cov fraction j-k = 0.0035
+  Sum of fractions = 1.2264
 
 Combined Quadratic Detrending
 --------------------------------------------------
@@ -92,6 +147,17 @@ Combined Quadratic Detrending
   Imbalance Ratio = 1.2447
   Observations: 9404
   Parameters: 64
+  RMS j(t) = 0.028803
+  RMS k(t) = 0.019100
+  RMS dy = 0.064804
+  Var fraction h = 0.1722
+  Var fraction j = 0.1069
+  Var fraction k = 0.0869
+  Var fraction resid = 0.8062
+  Cov fraction h-j = 0.0026
+  Cov fraction h-k = -0.0015
+  Cov fraction j-k = 0.0032
+  Sum of fractions = 1.1765
 
 Precomputed k Linear
 --------------------------------------------------
@@ -107,6 +173,17 @@ Precomputed k Linear
   Imbalance Ratio = 1.2245
   Observations: 9404
   Parameters: 2
+  RMS j(t) = 0.018118
+  RMS k(t) = 0.027563
+  RMS dy = 0.064804
+  Var fraction h = 0.1655
+  Var fraction j = 0.0782
+  Var fraction k = 0.0902
+  Var fraction resid = 0.8294
+  Cov fraction h-j = -0.0053
+  Cov fraction h-k = 0.0007
+  Cov fraction j-k = 0.0032
+  Sum of fractions = 1.1620
 
 Precomputed k Quadratic
 --------------------------------------------------
@@ -122,6 +199,17 @@ Precomputed k Quadratic
   Imbalance Ratio = 1.2659
   Observations: 9404
   Parameters: 2
+  RMS j(t) = 0.020892
+  RMS k(t) = 0.027563
+  RMS dy = 0.064804
+  Var fraction h = 0.1304
+  Var fraction j = 0.1039
+  Var fraction k = 0.0902
+  Var fraction resid = 0.8042
+  Cov fraction h-j = -0.0028
+  Cov fraction h-k = 0.0005
+  Cov fraction j-k = -0.0014
+  Sum of fractions = 1.1250
 
 GDP-Response Quadratic
 --------------------------------------------------
@@ -139,6 +227,17 @@ GDP-Response Quadratic
   Imbalance Ratio = 1.0465
   Observations: 9404
   Parameters: 3
+  RMS j(t) = 0.020892
+  RMS k(t) = 0.027563
+  RMS dy = 0.064804
+  Var fraction h = 8.3931
+  Var fraction j = 0.1039
+  Var fraction k = 0.0902
+  Var fraction resid = 0.8026
+  Cov fraction h-j = -0.4784
+  Cov fraction h-k = 0.0394
+  Cov fraction j-k = -0.0014
+  Sum of fractions = 8.9494
 
 Precomputed k LOESS
 --------------------------------------------------
@@ -154,6 +253,17 @@ Precomputed k LOESS
   Imbalance Ratio = 1.2876
   Observations: 9404
   Parameters: 2
+  RMS j(t) = 0.023665
+  RMS k(t) = 0.027563
+  RMS dy = 0.064804
+  Var fraction h = 0.2019
+  Var fraction j = 0.1313
+  Var fraction k = 0.0902
+  Var fraction resid = 0.7663
+  Cov fraction h-j = 0.0146
+  Cov fraction h-k = -0.0007
+  Cov fraction j-k = -0.0120
+  Sum of fractions = 1.1916
 
 GDP-Response LOESS
 --------------------------------------------------
@@ -171,4 +281,15 @@ GDP-Response LOESS
   Imbalance Ratio = 1.0539
   Observations: 9404
   Parameters: 3
+  RMS j(t) = 0.023665
+  RMS k(t) = 0.027563
+  RMS dy = 0.064804
+  Var fraction h = 8.1899
+  Var fraction j = 0.1313
+  Var fraction k = 0.0902
+  Var fraction resid = 0.7651
+  Cov fraction h-j = -0.5236
+  Cov fraction h-k = 0.0382
+  Cov fraction j-k = -0.0120
+  Sum of fractions = 8.6791
 

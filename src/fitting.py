@@ -86,6 +86,68 @@ def compute_rms_h(h1: float, h2: float, temp: np.ndarray) -> float:
     return np.sqrt(np.mean(h_T ** 2))
 
 
+def compute_component_diagnostics(
+    h_values: np.ndarray,
+    j_values: np.ndarray,
+    k_values: np.ndarray,
+    residuals: np.ndarray,
+    dy: np.ndarray,
+) -> dict:
+    """Compute RMS and variance decomposition metrics for model components.
+
+    This computes Option A (RMS magnitudes) and Option C (variance fractions)
+    diagnostics for understanding the relative contributions of each component.
+
+    The variance decomposition satisfies:
+        Var(dy) = Var(h) + Var(j) + Var(k) + Var(ε) + 2*Cov(h,j) + 2*Cov(h,k) + 2*Cov(j,k)
+
+    So the fractions sum to 1:
+        var_frac_h + var_frac_j + var_frac_k + var_frac_resid
+        + cov_frac_hj + cov_frac_hk + cov_frac_jk = 1
+
+    Args:
+        h_values: h(T) for each observation - climate response
+        j_values: j(t) for each observation - country growth trends
+        k_values: k(t) for each observation - year effects
+        residuals: ε for each observation
+        dy: original Δy (GDP growth rate)
+
+    Returns:
+        Dict with RMS and variance fraction metrics
+    """
+    # Option A - RMS metrics
+    rms_h = np.sqrt(np.mean(h_values ** 2))
+    rms_j = np.sqrt(np.mean(j_values ** 2))
+    rms_k = np.sqrt(np.mean(k_values ** 2))
+    rms_dy = np.std(dy)  # = √(mean((dy - mean(dy))²))
+
+    # Option C - Variance decomposition
+    var_dy = np.var(dy)
+    var_h = np.var(h_values)
+    var_j = np.var(j_values)
+    var_k = np.var(k_values)
+    var_resid = np.var(residuals)
+
+    # Covariances (using np.cov which returns a 2x2 matrix)
+    cov_hj = np.cov(h_values, j_values)[0, 1]
+    cov_hk = np.cov(h_values, k_values)[0, 1]
+    cov_jk = np.cov(j_values, k_values)[0, 1]
+
+    return {
+        'rms_h': rms_h,
+        'rms_j': rms_j,
+        'rms_k': rms_k,
+        'rms_dy': rms_dy,
+        'var_frac_h': var_h / var_dy,
+        'var_frac_j': var_j / var_dy,
+        'var_frac_k': var_k / var_dy,
+        'var_frac_resid': var_resid / var_dy,
+        'cov_frac_hj': 2 * cov_hj / var_dy,
+        'cov_frac_hk': 2 * cov_hk / var_dy,
+        'cov_frac_jk': 2 * cov_jk / var_dy,
+    }
+
+
 @dataclass
 class FitResult:
     """Container for regression results."""
@@ -106,6 +168,20 @@ class FitResult:
     rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
     rms_h: float = None          # RMS of h(T) - climate response magnitude
     imbalance_ratio: float = None  # rms_imbalance / rms_h
+
+    # Option A - RMS magnitudes
+    rms_j: float = None          # RMS of j(t) - country growth trends
+    rms_k: float = None          # RMS of k(t) - year effects
+    rms_dy: float = None         # RMS of (dy - mean(dy)) - total variation
+
+    # Option C - Variance fractions (sum to 1)
+    var_frac_h: float = None     # Var(h) / Var(dy)
+    var_frac_j: float = None     # Var(j) / Var(dy)
+    var_frac_k: float = None     # Var(k) / Var(dy)
+    var_frac_resid: float = None # Var(resid) / Var(dy)
+    cov_frac_hj: float = None    # 2*Cov(h,j) / Var(dy)
+    cov_frac_hk: float = None    # 2*Cov(h,k) / Var(dy)
+    cov_frac_jk: float = None    # 2*Cov(j,k) / Var(dy)
 
 
 @dataclass
@@ -134,6 +210,20 @@ class FitResultApproach8:
     rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
     rms_h: float = None          # RMS of h(T) - climate response magnitude
     imbalance_ratio: float = None  # rms_imbalance / rms_h
+
+    # Option A - RMS magnitudes
+    rms_j: float = None          # RMS of j(t) - country growth trends
+    rms_k: float = None          # RMS of k(t) - year effects
+    rms_dy: float = None         # RMS of (dy - mean(dy)) - total variation
+
+    # Option C - Variance fractions (sum to 1)
+    var_frac_h: float = None     # Var(h) / Var(dy)
+    var_frac_j: float = None     # Var(j) / Var(dy)
+    var_frac_k: float = None     # Var(k) / Var(dy)
+    var_frac_resid: float = None # Var(resid) / Var(dy)
+    cov_frac_hj: float = None    # 2*Cov(h,j) / Var(dy)
+    cov_frac_hk: float = None    # 2*Cov(h,k) / Var(dy)
+    cov_frac_jk: float = None    # 2*Cov(j,k) / Var(dy)
 
 
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
@@ -317,6 +407,10 @@ def fit_approach1_temperature_detrending(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Linear Temperature Detrending",
         h1=h1,
@@ -335,6 +429,16 @@ def fit_approach1_temperature_detrending(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -393,6 +497,10 @@ def fit_approach2_growth_detrending(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Quadratic GDP Growth Detrending",
         h1=h1,
@@ -411,6 +519,16 @@ def fit_approach2_growth_detrending(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -472,6 +590,10 @@ def fit_approach3_combined_detrending(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Combined Detrending (Mixed)",
         h1=h1,
@@ -490,6 +612,16 @@ def fit_approach3_combined_detrending(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -553,6 +685,10 @@ def fit_approach4_combined_linear_detrending(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Combined Linear Detrending",
         h1=h1,
@@ -571,6 +707,16 @@ def fit_approach4_combined_linear_detrending(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -635,6 +781,10 @@ def fit_approach5_combined_quadratic_detrending(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Combined Quadratic Detrending",
         h1=h1,
@@ -653,6 +803,16 @@ def fit_approach5_combined_quadratic_detrending(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -727,6 +887,10 @@ def fit_approach6_precomputed_k_linear(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k Linear",
         h1=h1,
@@ -745,6 +909,16 @@ def fit_approach6_precomputed_k_linear(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -819,6 +993,10 @@ def fit_approach7_precomputed_k_quadratic(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k Quadratic",
         h1=h1,
@@ -837,6 +1015,16 @@ def fit_approach7_precomputed_k_quadratic(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -1005,9 +1193,12 @@ def fit_approach8_gdp_response(
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h(T) - GDP-scaled climate response to actual temperature
-    h_T = g * (h1 * data.temp + h2 * data.temp ** 2)
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    h_values = g * (h1 * data.temp + h2 * data.temp ** 2)
+    rms_h = np.sqrt(np.mean(h_values ** 2))
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute component diagnostics
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
 
     return FitResultApproach8(
         approach="GDP-Response Quadratic",
@@ -1030,6 +1221,16 @@ def fit_approach8_gdp_response(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -1099,6 +1300,10 @@ def fit_approach9_precomputed_k_loess(
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k LOESS",
         h1=h1,
@@ -1117,6 +1322,16 @@ def fit_approach9_precomputed_k_loess(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -1229,9 +1444,12 @@ def fit_approach10_gdp_response_loess(
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h(T) - GDP-scaled climate response to actual temperature
-    h_T = g * (h1 * data.temp + h2 * data.temp ** 2)
-    rms_h = np.sqrt(np.mean(h_T ** 2))
+    h_values = g * (h1 * data.temp + h2 * data.temp ** 2)
+    rms_h = np.sqrt(np.mean(h_values ** 2))
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute component diagnostics
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
 
     return FitResultApproach8(
         approach="GDP-Response LOESS",
@@ -1254,6 +1472,16 @@ def fit_approach10_gdp_response_loess(
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 
@@ -1358,6 +1586,10 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
+    # Compute component diagnostics
+    h_values = h1 * data.temp + h2 * data.temp ** 2
+    diag = compute_component_diagnostics(h_values, j_trend, k_values, residuals, data.growth_pcGDP)
+
     return FitResult(
         approach="Conjoined OLS Fit",
         h1=h1,
@@ -1376,6 +1608,16 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
         rms_imbalance=rms_imb,
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
+        rms_j=diag['rms_j'],
+        rms_k=diag['rms_k'],
+        rms_dy=diag['rms_dy'],
+        var_frac_h=diag['var_frac_h'],
+        var_frac_j=diag['var_frac_j'],
+        var_frac_k=diag['var_frac_k'],
+        var_frac_resid=diag['var_frac_resid'],
+        cov_frac_hj=diag['cov_frac_hj'],
+        cov_frac_hk=diag['cov_frac_hk'],
+        cov_frac_jk=diag['cov_frac_jk'],
     )
 
 

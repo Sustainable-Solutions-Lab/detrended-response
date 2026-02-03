@@ -136,6 +136,18 @@ def save_summary_table(
             'Imbalance_Ratio': result.imbalance_ratio,
             'n_obs': result.n_obs,
             'n_params': result.n_params,
+            # Option A - RMS magnitudes
+            'rms_j': result.rms_j,
+            'rms_k': result.rms_k,
+            'rms_dy': result.rms_dy,
+            # Option C - Variance fractions
+            'var_frac_h': result.var_frac_h,
+            'var_frac_j': result.var_frac_j,
+            'var_frac_k': result.var_frac_k,
+            'var_frac_resid': result.var_frac_resid,
+            'cov_frac_hj': result.cov_frac_hj,
+            'cov_frac_hk': result.cov_frac_hk,
+            'cov_frac_jk': result.cov_frac_jk,
         }
         # Add beta for Approach 8
         if hasattr(result, 'beta'):
@@ -194,6 +206,27 @@ def save_summary_table(
                 f.write(f"  Imbalance Ratio = {result.imbalance_ratio:.4f}\n")
             f.write(f"  Observations: {result.n_obs}\n")
             f.write(f"  Parameters: {result.n_params}\n")
+            # Option A - RMS magnitudes
+            if result.rms_j is not None:
+                f.write(f"  RMS j(t) = {result.rms_j:.6f}\n")
+            if result.rms_k is not None:
+                f.write(f"  RMS k(t) = {result.rms_k:.6f}\n")
+            if result.rms_dy is not None:
+                f.write(f"  RMS dy = {result.rms_dy:.6f}\n")
+            # Option C - Variance fractions
+            if result.var_frac_h is not None:
+                f.write(f"  Var fraction h = {result.var_frac_h:.4f}\n")
+                f.write(f"  Var fraction j = {result.var_frac_j:.4f}\n")
+                f.write(f"  Var fraction k = {result.var_frac_k:.4f}\n")
+                f.write(f"  Var fraction resid = {result.var_frac_resid:.4f}\n")
+                f.write(f"  Cov fraction h-j = {result.cov_frac_hj:.4f}\n")
+                f.write(f"  Cov fraction h-k = {result.cov_frac_hk:.4f}\n")
+                f.write(f"  Cov fraction j-k = {result.cov_frac_jk:.4f}\n")
+                # Sum check
+                total = (result.var_frac_h + result.var_frac_j + result.var_frac_k +
+                         result.var_frac_resid + result.cov_frac_hj + result.cov_frac_hk +
+                         result.cov_frac_jk)
+                f.write(f"  Sum of fractions = {total:.4f}\n")
             f.write("\n")
 
 
@@ -590,75 +623,84 @@ def plot_gdp_scaling_factor(
     Y_range: tuple = None,
     input_file: str = None,
 ) -> None:
-    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 8.
+    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approaches 8 and 10.
 
     This shows how the temperature response is scaled by per capita GDP level.
     Countries with lower GDP have larger scaling factors (more affected).
+    Creates a two-panel figure when both approaches are present.
 
     Args:
-        results: Dictionary of FitResult objects (must include 'approach8')
+        results: Dictionary of FitResult objects
         output_dir: Output directory
         data: AnalysisData for adding GDP histogram (optional)
         Y_range: GDP range for x-axis (default: from data min to max)
+        input_file: Path to input data file (for annotation)
     """
-    if 'approach8' not in results:
+    # Collect panels to plot
+    panels = []
+    for key, title, color in [
+        ('approach8', 'GDP-Response Quadratic (Approach 8)', 'purple'),
+        ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
+    ]:
+        if key in results:
+            r = results[key]
+            if hasattr(r, 'beta') and hasattr(r, 'Y_ref'):
+                panels.append((r, title, color))
+
+    if not panels:
         return
 
-    r = results['approach8']
-    if not hasattr(r, 'beta') or not hasattr(r, 'Y_ref'):
-        return
-
-    beta = r.beta
-    Y_ref = r.Y_ref
-
-    # Default Y range: from ~500 to ~100000 (covers most country GDPs)
+    # Default Y range
     if Y_range is None:
         Y_range = (500, 100000)
 
     # Create GDP array (log-spaced for better visualization)
     Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
 
-    # Compute scaling factor
-    g = (Y / Y_ref) ** (-beta)
+    n_panels = len(panels)
+    fig, axes = plt.subplots(1, n_panels, figsize=(10 * n_panels, 6), squeeze=False)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    def _draw_panel(ax, r, title, color):
+        beta = r.beta
+        Y_ref = r.Y_ref
+        g = (Y / Y_ref) ** (-beta)
 
-    # Add GDP histogram on secondary y-axis (if data provided)
-    if data is not None:
-        max_year = data.year_range[1]
-        mask_recent = data.year == max_year
-        gdp_recent = data.pcGDP[mask_recent]
+        # Add GDP histogram on secondary y-axis (if data provided)
+        if data is not None:
+            max_year = data.year_range[1]
+            mask_recent = data.year == max_year
+            gdp_recent = data.pcGDP[mask_recent]
 
-        ax2 = ax.twinx()
-        # Create histogram with log-spaced bins
-        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
-        ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
-        ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
-        ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
-        ax2.set_ylim(bottom=0)
-        # Ensure histogram is behind main plot
-        ax2.set_zorder(ax.get_zorder() - 1)
-        ax.set_zorder(ax2.get_zorder() + 1)
-        ax.patch.set_visible(False)
+            ax2 = ax.twinx()
+            bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
+            ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
+            ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
+            ax2.set_ylim(bottom=0)
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.set_zorder(ax2.get_zorder() + 1)
+            ax.patch.set_visible(False)
 
-    ax.plot(Y, g, 'purple', linewidth=2, label=f'β = {beta:.3f}')
-    ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='g = 1 (at Y = Y_ref)')
-    ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref = ${Y_ref:,.0f}')
+        ax.plot(Y, g, color=color, linewidth=2, label=f'β = {beta:.3f}')
+        ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='g = 1 (at Y = Y_ref)')
+        ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref = ${Y_ref:,.0f}')
 
-    ax.set_xscale('log')
-    ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
-    ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
-    ax.set_title('GDP-Dependent Temperature Response Scaling (Approach 8)', fontsize=14)
-    ax.legend(loc='upper right')
-    ax.grid(True, alpha=0.3)
+        ax.set_xscale('log')
+        ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
+        ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+        ax.set_title(title, fontsize=14)
+        ax.legend(loc='upper right')
+        ax.grid(True, alpha=0.3)
 
-    # Add annotations for interpretation
-    ax.annotate('Poorer countries:\nmore affected',
-                xy=(Y_range[0] * 2, g[0] * 0.9),
-                fontsize=10, color='darkred')
-    ax.annotate('Richer countries:\nless affected',
-                xy=(Y_range[1] * 0.3, g[-1] * 1.1),
-                fontsize=10, color='darkgreen')
+        ax.annotate('Poorer countries:\nmore affected',
+                    xy=(Y_range[0] * 2, g[0] * 0.9),
+                    fontsize=10, color='darkred')
+        ax.annotate('Richer countries:\nless affected',
+                    xy=(Y_range[1] * 0.3, g[-1] * 1.1),
+                    fontsize=10, color='darkgreen')
+
+    for i, (r, title, color) in enumerate(panels):
+        _draw_panel(axes[0, i], r, title, color)
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
@@ -702,8 +744,8 @@ def save_all_outputs(
     plot_year_effects(results, data, output_dir, input_file=input_file)
     plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
 
-    # Plot GDP scaling factor for Approach 8
-    if 'approach8' in results:
+    # Plot GDP scaling factor for Approaches 8 and 10
+    if 'approach8' in results or 'approach10' in results:
         plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
     print("All outputs saved.")
@@ -814,6 +856,51 @@ def save_bootstrap_summary_txt(
                 f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
 
+            # Option A - RMS magnitudes
+            if result.rms_j_point is not None and 'rms_j' in stats:
+                f.write(f"  rms_j (RMS of country trends):\n")
+                f.write(f"    Point estimate:  {result.rms_j_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['rms_j']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['rms_j']['p5']:10.6f}, {stats['rms_j']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['rms_j']['std']:10.6f}\n")
+
+            if result.rms_k_point is not None and 'rms_k' in stats:
+                f.write(f"  rms_k (RMS of year effects):\n")
+                f.write(f"    Point estimate:  {result.rms_k_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['rms_k']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['rms_k']['p5']:10.6f}, {stats['rms_k']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['rms_k']['std']:10.6f}\n")
+
+            if result.rms_dy_point is not None and 'rms_dy' in stats:
+                f.write(f"  rms_dy (RMS of total variation):\n")
+                f.write(f"    Point estimate:  {result.rms_dy_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['rms_dy']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['rms_dy']['p5']:10.6f}, {stats['rms_dy']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['rms_dy']['std']:10.6f}\n")
+
+            # Option C - Variance fractions
+            if result.var_frac_h_point is not None and 'var_frac_h' in stats:
+                f.write(f"  Variance Decomposition (fractions sum to ~1):\n")
+                f.write(f"    var_frac_h (climate):     {result.var_frac_h_point:8.4f}  "
+                        f"[{stats['var_frac_h']['p5']:7.4f}, {stats['var_frac_h']['p95']:7.4f}]\n")
+                f.write(f"    var_frac_j (country):     {result.var_frac_j_point:8.4f}  "
+                        f"[{stats['var_frac_j']['p5']:7.4f}, {stats['var_frac_j']['p95']:7.4f}]\n")
+                f.write(f"    var_frac_k (year):        {result.var_frac_k_point:8.4f}  "
+                        f"[{stats['var_frac_k']['p5']:7.4f}, {stats['var_frac_k']['p95']:7.4f}]\n")
+                f.write(f"    var_frac_resid:           {result.var_frac_resid_point:8.4f}  "
+                        f"[{stats['var_frac_resid']['p5']:7.4f}, {stats['var_frac_resid']['p95']:7.4f}]\n")
+                f.write(f"    cov_frac_hj:              {result.cov_frac_hj_point:8.4f}  "
+                        f"[{stats['cov_frac_hj']['p5']:7.4f}, {stats['cov_frac_hj']['p95']:7.4f}]\n")
+                f.write(f"    cov_frac_hk:              {result.cov_frac_hk_point:8.4f}  "
+                        f"[{stats['cov_frac_hk']['p5']:7.4f}, {stats['cov_frac_hk']['p95']:7.4f}]\n")
+                f.write(f"    cov_frac_jk:              {result.cov_frac_jk_point:8.4f}  "
+                        f"[{stats['cov_frac_jk']['p5']:7.4f}, {stats['cov_frac_jk']['p95']:7.4f}]\n")
+                # Sum check
+                total = (result.var_frac_h_point + result.var_frac_j_point + result.var_frac_k_point +
+                         result.var_frac_resid_point + result.cov_frac_hj_point + result.cov_frac_hk_point +
+                         result.cov_frac_jk_point)
+                f.write(f"    Sum of fractions:         {total:8.4f}\n")
+
             f.write("\n")
 
     print(f"  Saved bootstrap_summary.txt")
@@ -907,6 +994,47 @@ def save_bootstrap_summary_table(
             row['beta_p75'] = np.nan
             row['beta_p95'] = np.nan
             row['beta_std'] = np.nan
+
+        # Option A - RMS magnitudes
+        for metric in ['rms_j', 'rms_k', 'rms_dy']:
+            point_attr = f'{metric}_point'
+            if hasattr(result, point_attr) and getattr(result, point_attr) is not None and metric in stats:
+                row[f'{metric}_point'] = getattr(result, point_attr)
+                row[f'{metric}_median'] = stats[metric]['p50']
+                row[f'{metric}_p5'] = stats[metric]['p5']
+                row[f'{metric}_p25'] = stats[metric]['p25']
+                row[f'{metric}_p75'] = stats[metric]['p75']
+                row[f'{metric}_p95'] = stats[metric]['p95']
+                row[f'{metric}_std'] = stats[metric]['std']
+            else:
+                row[f'{metric}_point'] = np.nan
+                row[f'{metric}_median'] = np.nan
+                row[f'{metric}_p5'] = np.nan
+                row[f'{metric}_p25'] = np.nan
+                row[f'{metric}_p75'] = np.nan
+                row[f'{metric}_p95'] = np.nan
+                row[f'{metric}_std'] = np.nan
+
+        # Option C - Variance fractions
+        for metric in ['var_frac_h', 'var_frac_j', 'var_frac_k', 'var_frac_resid',
+                       'cov_frac_hj', 'cov_frac_hk', 'cov_frac_jk']:
+            point_attr = f'{metric}_point'
+            if hasattr(result, point_attr) and getattr(result, point_attr) is not None and metric in stats:
+                row[f'{metric}_point'] = getattr(result, point_attr)
+                row[f'{metric}_median'] = stats[metric]['p50']
+                row[f'{metric}_p5'] = stats[metric]['p5']
+                row[f'{metric}_p25'] = stats[metric]['p25']
+                row[f'{metric}_p75'] = stats[metric]['p75']
+                row[f'{metric}_p95'] = stats[metric]['p95']
+                row[f'{metric}_std'] = stats[metric]['std']
+            else:
+                row[f'{metric}_point'] = np.nan
+                row[f'{metric}_median'] = np.nan
+                row[f'{metric}_p5'] = np.nan
+                row[f'{metric}_p25'] = np.nan
+                row[f'{metric}_p75'] = np.nan
+                row[f'{metric}_p95'] = np.nan
+                row[f'{metric}_std'] = np.nan
 
         rows.append(row)
 
@@ -1535,35 +1663,38 @@ def plot_bootstrap_gdp_scaling(
     output_dir: Path,
     Y_ref: float,
     Y_range: tuple = None,
-    filename: str = 'bootstrap_gdp_scaling.png',
+    filename: str = 'bootstrap_gdp_scaling.pdf',
     data: AnalysisData = None,
     input_file: str = None,
 ) -> None:
-    """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 8.
+    """Plot GDP scaling factor with bootstrap uncertainty bands for Approaches 8 and 10.
 
     Shows the spread of (Y/Y_ref)^(-beta) curves across bootstrap samples.
+    Creates a two-panel figure when both approaches are present.
 
     Args:
-        results: Dict of BootstrapResult (must include 'approach8')
+        results: Dict of BootstrapResult
         output_dir: Directory to save the plot
         Y_ref: Reference GDP value (same as used in fitting)
         Y_range: GDP range for x-axis (default: 500 to 100000)
         filename: Output filename
         data: AnalysisData for adding GDP histogram (optional)
+        input_file: Path to input data file (for annotation)
     """
-    if 'approach8' not in results:
-        return
+    # Collect panels to plot
+    panels = []
+    for key, title, color in [
+        ('approach8', 'GDP-Response Quadratic (Approach 8)', 'purple'),
+        ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
+    ]:
+        if key in results:
+            result = results[key]
+            if result.beta_point is not None and result.beta_samples is not None:
+                valid_betas = result.beta_samples[~np.isnan(result.beta_samples)]
+                if len(valid_betas) > 0:
+                    panels.append((result.beta_point, valid_betas, title, color))
 
-    result = results['approach8']
-    if result.beta_point is None or result.beta_samples is None:
-        return
-
-    beta_point = result.beta_point
-    beta_samples = result.beta_samples
-
-    # Filter out NaN values
-    valid_betas = beta_samples[~np.isnan(beta_samples)]
-    if len(valid_betas) == 0:
+    if not panels:
         return
 
     # Default Y range
@@ -1573,73 +1704,76 @@ def plot_bootstrap_gdp_scaling(
     # Create GDP array (log-spaced)
     Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    n_panels = len(panels)
+    fig, axes = plt.subplots(1, n_panels, figsize=(10 * n_panels, 6), squeeze=False)
 
-    # Plot individual bootstrap samples (thin gray lines)
-    n_samples_to_plot = min(100, len(valid_betas))  # Limit for clarity
-    sample_indices = np.linspace(0, len(valid_betas) - 1, n_samples_to_plot, dtype=int)
+    def _draw_panel(ax, beta_point, valid_betas, title, color):
+        # Plot individual bootstrap samples (thin lines)
+        n_samples_to_plot = min(100, len(valid_betas))
+        sample_indices = np.linspace(0, len(valid_betas) - 1, n_samples_to_plot, dtype=int)
 
-    for idx in sample_indices:
-        beta_b = valid_betas[idx]
-        g_b = (Y / Y_ref) ** (-beta_b)
-        ax.plot(Y, g_b, color='purple', alpha=0.05, linewidth=0.5)
+        for idx in sample_indices:
+            beta_b = valid_betas[idx]
+            g_b = (Y / Y_ref) ** (-beta_b)
+            ax.plot(Y, g_b, color=color, alpha=0.05, linewidth=0.5)
 
-    # Compute percentile bands
-    g_samples = np.zeros((len(valid_betas), len(Y)))
-    for i, beta_b in enumerate(valid_betas):
-        g_samples[i, :] = (Y / Y_ref) ** (-beta_b)
+        # Compute percentile bands
+        g_samples = np.zeros((len(valid_betas), len(Y)))
+        for i, beta_b in enumerate(valid_betas):
+            g_samples[i, :] = (Y / Y_ref) ** (-beta_b)
 
-    g_p5 = np.percentile(g_samples, 5, axis=0)
-    g_p25 = np.percentile(g_samples, 25, axis=0)
-    g_p50 = np.percentile(g_samples, 50, axis=0)
-    g_p75 = np.percentile(g_samples, 75, axis=0)
-    g_p95 = np.percentile(g_samples, 95, axis=0)
+        g_p5 = np.percentile(g_samples, 5, axis=0)
+        g_p25 = np.percentile(g_samples, 25, axis=0)
+        g_p75 = np.percentile(g_samples, 75, axis=0)
+        g_p95 = np.percentile(g_samples, 95, axis=0)
 
-    # Add GDP histogram on secondary y-axis (if data provided)
-    if data is not None:
-        max_year = data.year_range[1]
-        mask_recent = data.year == max_year
-        gdp_recent = data.pcGDP[mask_recent]
+        # Add GDP histogram on secondary y-axis (if data provided)
+        if data is not None:
+            max_year = data.year_range[1]
+            mask_recent = data.year == max_year
+            gdp_recent = data.pcGDP[mask_recent]
 
-        ax2 = ax.twinx()
-        # Create histogram with log-spaced bins
-        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
-        ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
-        ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
-        ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
-        ax2.set_ylim(bottom=0)
-        # Ensure histogram is behind main plot
-        ax2.set_zorder(ax.get_zorder() - 1)
-        ax.set_zorder(ax2.get_zorder() + 1)
-        ax.patch.set_visible(False)
+            ax2 = ax.twinx()
+            bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
+            ax2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
+            ax2.tick_params(axis='y', labelcolor='gray', labelsize=8)
+            ax2.set_ylim(bottom=0)
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.set_zorder(ax2.get_zorder() + 1)
+            ax.patch.set_visible(False)
 
-    # Plot uncertainty bands
-    ax.fill_between(Y, g_p5, g_p95, color='purple', alpha=0.2, label='90% CI')
-    ax.fill_between(Y, g_p25, g_p75, color='purple', alpha=0.3, label='IQR')
+        # Plot uncertainty bands
+        ax.fill_between(Y, g_p5, g_p95, color=color, alpha=0.2, label='90% CI')
+        ax.fill_between(Y, g_p25, g_p75, color=color, alpha=0.3, label='IQR')
 
-    # Plot point estimate
-    g_point = (Y / Y_ref) ** (-beta_point)
-    ax.plot(Y, g_point, 'purple', linewidth=2.5, label=f'Point estimate (β = {beta_point:.3f})')
+        # Plot point estimate
+        g_point = (Y / Y_ref) ** (-beta_point)
+        ax.plot(Y, g_point, color=color, linewidth=2.5,
+                label=f'Point estimate (β = {beta_point:.3f})')
 
-    # Reference lines
-    ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
-    ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref ≈ ${Y_ref:,.0f}')
+        # Reference lines
+        ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
+        ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref ≈ ${Y_ref:,.0f}')
 
-    ax.set_xscale('log')
-    ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
-    ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
-    ax.set_title('GDP-Dependent Temperature Response Scaling with Bootstrap Uncertainty', fontsize=14)
-    ax.legend(loc='upper right')
-    ax.grid(True, alpha=0.3)
+        ax.set_xscale('log')
+        ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
+        ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+        ax.set_title(title, fontsize=14)
+        ax.legend(loc='upper right')
+        ax.grid(True, alpha=0.3)
 
-    # Add beta distribution inset (positioned below legend in upper right)
-    ax_inset = ax.inset_axes([0.72, 0.42, 0.25, 0.30])
-    ax_inset.hist(valid_betas, bins=30, color='purple', alpha=0.7, density=True)
-    ax_inset.axvline(beta_point, color='red', linewidth=1.5, label='Point est.')
-    ax_inset.set_xlabel('β', fontsize=9)
-    ax_inset.set_ylabel('Density', fontsize=9)
-    ax_inset.set_title('Bootstrap β distribution', fontsize=9)
-    ax_inset.tick_params(labelsize=8)
+        # Add beta distribution inset
+        ax_inset = ax.inset_axes([0.72, 0.42, 0.25, 0.30])
+        ax_inset.hist(valid_betas, bins=30, color=color, alpha=0.7, density=True)
+        ax_inset.axvline(beta_point, color='red', linewidth=1.5, label='Point est.')
+        ax_inset.set_xlabel('β', fontsize=9)
+        ax_inset.set_ylabel('Density', fontsize=9)
+        ax_inset.set_title('Bootstrap β distribution', fontsize=9)
+        ax_inset.tick_params(labelsize=8)
+
+    for i, (beta_point, valid_betas, title, color) in enumerate(panels):
+        _draw_panel(axes[0, i], beta_point, valid_betas, title, color)
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
@@ -1663,7 +1797,7 @@ def save_all_bootstrap_plots(
     - plot_bootstrap_temperature_response() for approaches 0-5 and 0,6,7
     - plot_bootstrap_temperature_derivative() for approaches 0-5 and 0,6,7
     - plot_bootstrap_T_optimal_comparison() for all approaches
-    - plot_bootstrap_gdp_scaling() for Approach 8 (if Y_ref provided)
+    - plot_bootstrap_gdp_scaling() for Approaches 8 and 10 (if Y_ref provided)
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -1707,7 +1841,8 @@ def save_all_bootstrap_plots(
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_T_optimal_comparison.png")
 
-    # GDP scaling factor with bootstrap uncertainty (Approach 8)
-    if 'approach8' in results and Y_ref is not None:
-        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file)
-        print("      Saved bootstrap_gdp_scaling.png")
+    # GDP scaling factor with bootstrap uncertainty (Approaches 8 and 10)
+    if Y_ref is not None and ('approach8' in results or 'approach10' in results):
+        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file,
+                                   filename='bootstrap_gdp_scaling.pdf')
+        print("      Saved bootstrap_gdp_scaling.pdf")
