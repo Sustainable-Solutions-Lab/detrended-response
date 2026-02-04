@@ -40,11 +40,8 @@ APPROACH_COLORS = {
     'approach1': 'green',
     'approach2': 'blue',
     'approach3': 'red',
-    'approach4': 'green',
     'approach5': 'blue',
-    'approach6': 'green',
     'approach7': 'blue',
-    'approach8': 'purple',
     'approach9': 'orange',
     'approach10': 'brown',
 }
@@ -60,11 +57,8 @@ APPROACH_LINESTYLES = {
     'approach1': ':',
     'approach2': '--',
     'approach3': '-',
-    'approach4': '-',
     'approach5': '-',
-    'approach6': '-.',
     'approach7': '-.',
-    'approach8': '-.',
     'approach9': (0, (5, 1)),   # densely dashed
     'approach10': (0, (5, 1)),  # densely dashed
 }
@@ -338,28 +332,28 @@ def plot_temperature_response(
     input_file: str = None
 ) -> None:
     """Plot h(T) - h(T*) for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-5 (all original approaches)
+    # Plot 1: Approaches 0-5 (basic approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach5'],
         filename='temperature_response_all.png',
         title_suffix='Approaches 0-5',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
+    # Plot 2: Approaches 0, 7 (precomputed k approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7', 'approach8'],
+        approaches=['approach0', 'approach7'],
         filename='temperature_response_precomputed_k.png',
-        title_suffix='Approaches 0, 6, 7, 8',
+        title_suffix='Approaches 0, 7',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
+    # Plot 3: Quadratic vs LOESS comparison (7 vs 9, 10)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach7', 'approach8', 'approach9', 'approach10'],
+        approaches=['approach7', 'approach9', 'approach10'],
         filename='temperature_response_loess.png',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -408,28 +402,28 @@ def plot_temperature_derivative(
     input_file: str = None
 ) -> None:
     """Plot dh/dT for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-5 (all original approaches)
+    # Plot 1: Approaches 0-5 (basic approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach5'],
         filename='temperature_derivative_all.png',
         title_suffix='Approaches 0-5',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 6, 7, 8 (precomputed k approaches)
+    # Plot 2: Approaches 0, 7 (precomputed k approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach6', 'approach7', 'approach8'],
+        approaches=['approach0', 'approach7'],
         filename='temperature_derivative_precomputed_k.png',
-        title_suffix='Approaches 0, 6, 7, 8',
+        title_suffix='Approaches 0, 7',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (7, 8 vs 9, 10)
+    # Plot 3: Quadratic vs LOESS comparison (7 vs 9, 10)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach7', 'approach8', 'approach9', 'approach10'],
+        approaches=['approach7', 'approach9', 'approach10'],
         filename='temperature_derivative_loess.png',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -530,13 +524,9 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Override color for approach6 to black on this plot (to distinguish precomputed k)
-    year_effects_colors = dict(APPROACH_COLORS)
-    year_effects_colors['approach6'] = 'black'
-
     for name, result in results.items():
-        # Skip approaches that use the same k values as approach6 (precomputed year means)
-        if name in ('approach7', 'approach8', 'approach9', 'approach10'):
+        # Skip approaches that use the same k values as approach7 (precomputed year means)
+        if name in ('approach7', 'approach9', 'approach10'):
             continue
 
         # k is stored with actual year as key
@@ -556,14 +546,11 @@ def plot_year_effects(
             quadratic_fit = A @ coeffs
             k_values_plot = k_values - quadratic_fit
             label = "Conjoined OLS Fit (minus best-fit quadratic)"
-        elif name == 'approach6':
-            k_values_plot = k_values
-            label = "Precomputed k (year means)"
         else:
             k_values_plot = k_values
             label = f"{result.approach}"
 
-        ax.plot(unique_years, k_values_plot, color=year_effects_colors.get(name, 'gray'),
+        ax.plot(unique_years, k_values_plot, color=APPROACH_COLORS.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), linewidth=1.5,
                 label=label)
 
@@ -650,7 +637,6 @@ def plot_gdp_scaling_factor(
     # Collect panels to plot
     panels = []
     for key, title, color in [
-        ('approach8', 'GDP-Response Quadratic (Approach 8)', 'purple'),
         ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
     ]:
         if key in results:
@@ -756,7 +742,7 @@ def save_all_outputs(
     plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
 
     # Plot GDP scaling factor for Approaches 8 and 10
-    if 'approach8' in results or 'approach10' in results:
+    if 'approach10' in results:
         plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
     print("All outputs saved.")
@@ -1677,7 +1663,6 @@ def plot_bootstrap_gdp_scaling(
     # Collect panels to plot
     panels = []
     for key, title, color in [
-        ('approach8', 'GDP-Response Quadratic (Approach 8)', 'purple'),
         ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
     ]:
         if key in results:
@@ -1809,7 +1794,7 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_response(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
+                    'approach5', 'approach7',
                     'approach9', 'approach10'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
@@ -1822,7 +1807,7 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
+                    'approach5', 'approach7',
                     'approach9', 'approach10'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
@@ -1835,7 +1820,7 @@ def save_all_bootstrap_plots(
     print("      Saved bootstrap_T_optimal_comparison.png")
 
     # GDP scaling factor with bootstrap uncertainty (Approaches 8 and 10)
-    if Y_ref is not None and ('approach8' in results or 'approach10' in results):
+    if Y_ref is not None and 'approach10' in results:
         plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file,
                                    filename='bootstrap_gdp_scaling.pdf')
         print("      Saved bootstrap_gdp_scaling.pdf")
