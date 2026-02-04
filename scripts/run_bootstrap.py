@@ -212,6 +212,9 @@ def main():
         print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
         print(f"  h2: {result.h2_point:.6f}")
         print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+        # Note functional form for inverse-T approaches
+        if result.h_form != 'quadratic':
+            print(f"  h_form: {result.h_form}")
         # Print beta for Approach 8
         if result.beta_point is not None and 'beta' in stats:
             print(f"  beta: {result.beta_point:.4f}")

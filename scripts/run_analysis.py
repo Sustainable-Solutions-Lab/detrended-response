@@ -39,6 +39,8 @@ from src.fitting import (
     fit_approach8_gdp_response,
     fit_approach9_precomputed_k_loess,
     fit_approach10_gdp_response_loess,
+    fit_approach11_precomputed_k_quadratic_inverse_T,
+    fit_approach12_precomputed_k_loess_inverse_T,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -173,18 +175,20 @@ def main():
     results['approach5'] = fit_approach5_combined_quadratic_detrending(data, trends)
     print("      Done.")
 
-    print("\n[11/13] Fitting Approaches 6 & 7: Precomputed k with linear/quadratic trends...")
+    print("\n[11/13] Fitting Approaches 6, 7 & 11: Precomputed k (incl. inverse-T)...")
     results['approach6'] = fit_approach6_precomputed_k_linear(data, trends_with_k, year_means)
     results['approach7'] = fit_approach7_precomputed_k_quadratic(data, trends_with_k, year_means)
+    results['approach11'] = fit_approach11_precomputed_k_quadratic_inverse_T(data, trends_with_k, year_means)
     print("      Done.")
 
     print("\n[12/13] Fitting Approach 8: GDP-dependent temperature response...")
     results['approach8'] = fit_approach8_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[13/13] Fitting Approaches 9 & 10: LOESS detrending...")
+    print("\n[13/13] Fitting Approaches 9, 10 & 12: LOESS detrending (incl. inverse-T)...")
     results['approach9'] = fit_approach9_precomputed_k_loess(data, trends_loess, year_means)
     results['approach10'] = fit_approach10_gdp_response_loess(data, trends_loess, year_means, Y_ref)
+    results['approach12'] = fit_approach12_precomputed_k_loess_inverse_T(data, trends_loess, year_means)
     print("      Done.")
 
     # Print summary
@@ -197,6 +201,9 @@ def main():
         print("-" * 50)
         print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
         print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
+        h_form = getattr(r, 'h_form', 'quadratic')
+        if h_form != 'quadratic':
+            print(f"  h_form = {h_form}")
         # Print beta for Approach 8
         if hasattr(r, 'beta'):
             print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")

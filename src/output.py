@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict
 from .data_loader import AnalysisData
 from .detrending import CountryTrends
-from .fitting import FitResult
+from .fitting import FitResult, eval_h, eval_dh_dT, compute_T_optimal_inverse_T
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -47,6 +47,8 @@ APPROACH_COLORS = {
     'approach8': 'purple',
     'approach9': 'orange',
     'approach10': 'brown',
+    'approach11': 'cyan',
+    'approach12': 'magenta',
 }
 
 # Line style scheme for approaches
@@ -67,6 +69,8 @@ APPROACH_LINESTYLES = {
     'approach8': '-.',
     'approach9': (0, (5, 1)),   # densely dashed
     'approach10': (0, (5, 1)),  # densely dashed
+    'approach11': '-.',
+    'approach12': (0, (5, 1)),  # densely dashed
 }
 
 
@@ -126,6 +130,7 @@ def save_summary_table(
             'h1_SE': result.h1_se,
             'h2': result.h2,
             'h2_SE': result.h2_se,
+            'h_form': getattr(result, 'h_form', 'quadratic'),
             'T_optimal': result.T_optimal,
             'R_squared': result.r_squared,
             'Total_R_squared': result.total_r_squared,
@@ -136,24 +141,17 @@ def save_summary_table(
             'Imbalance_Ratio': result.imbalance_ratio,
             'n_obs': result.n_obs,
             'n_params': result.n_params,
-            # Option A - RMS magnitudes
-            'rms_j': result.rms_j,
-            'rms_k': result.rms_k,
-            'rms_dy': result.rms_dy,
-            # Option C - Variance fractions
-            'var_frac_h': result.var_frac_h,
-            'var_frac_j': result.var_frac_j,
-            'var_frac_k': result.var_frac_k,
-            'var_frac_resid': result.var_frac_resid,
-            'cov_frac_hj': result.cov_frac_hj,
-            'cov_frac_hk': result.cov_frac_hk,
-            'cov_frac_jk': result.cov_frac_jk,
         }
         # Add beta for Approach 8
         if hasattr(result, 'beta'):
             row['beta'] = result.beta
             row['beta_SE'] = result.beta_se
             row['Y_ref'] = result.Y_ref
+        # Add variance decomposition fields
+        if result.var_decomp is not None:
+            for key, val in result.var_decomp.items():
+                if isinstance(val, (int, float)):
+                    row[f'vd_{key}'] = val
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -189,6 +187,9 @@ def save_summary_table(
             f.write("-" * 50 + "\n")
             f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
             f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
+            h_form = getattr(result, 'h_form', 'quadratic')
+            if h_form != 'quadratic':
+                f.write(f"  h_form = {h_form}\n")
             # Add beta for Approach 8
             if hasattr(result, 'beta'):
                 f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
@@ -206,27 +207,46 @@ def save_summary_table(
                 f.write(f"  Imbalance Ratio = {result.imbalance_ratio:.4f}\n")
             f.write(f"  Observations: {result.n_obs}\n")
             f.write(f"  Parameters: {result.n_params}\n")
-            # Option A - RMS magnitudes
-            if result.rms_j is not None:
-                f.write(f"  RMS j(t) = {result.rms_j:.6f}\n")
-            if result.rms_k is not None:
-                f.write(f"  RMS k(t) = {result.rms_k:.6f}\n")
-            if result.rms_dy is not None:
-                f.write(f"  RMS dy = {result.rms_dy:.6f}\n")
-            # Option C - Variance fractions
-            if result.var_frac_h is not None:
-                f.write(f"  Var fraction h = {result.var_frac_h:.4f}\n")
-                f.write(f"  Var fraction j = {result.var_frac_j:.4f}\n")
-                f.write(f"  Var fraction k = {result.var_frac_k:.4f}\n")
-                f.write(f"  Var fraction resid = {result.var_frac_resid:.4f}\n")
-                f.write(f"  Cov fraction h-j = {result.cov_frac_hj:.4f}\n")
-                f.write(f"  Cov fraction h-k = {result.cov_frac_hk:.4f}\n")
-                f.write(f"  Cov fraction j-k = {result.cov_frac_jk:.4f}\n")
-                # Sum check
-                total = (result.var_frac_h + result.var_frac_j + result.var_frac_k +
-                         result.var_frac_resid + result.cov_frac_hj + result.cov_frac_hk +
-                         result.cov_frac_jk)
-                f.write(f"  Sum of fractions = {total:.4f}\n")
+            # Key variance ratios
+            if result.var_decomp is not None:
+                vd = result.var_decomp
+                f.write(f"  Key Variance Ratios (Var(component) / Var(dy)):\n")
+                if 'var_ratio_h_T' in vd:
+                    f.write(f"    h(T) total:    {vd['var_ratio_h_T']:.4f}   (climate response, full temperature)\n")
+                if 'var_ratio_h_Tstar' in vd:
+                    f.write(f"    h(T*) detrend: {vd['var_ratio_h_Tstar']:.4f}   (climate response, detrended temperature)\n")
+                if 'var_ratio_j' in vd:
+                    f.write(f"    j (trends):    {vd['var_ratio_j']:.4f}   (country growth trends)\n")
+                if 'var_ratio_k' in vd:
+                    f.write(f"    k (year FE):   {vd['var_ratio_k']:.4f}   (year fixed effects)\n")
+                if 'var_ratio_cross' in vd:
+                    f.write(f"    cross terms:   {vd['var_ratio_cross']:.4f}   (covariance remainder)\n")
+                if all(k in vd for k in ('var_ratio_h_T', 'var_ratio_j', 'var_ratio_k', 'var_ratio_cross')):
+                    ratio_sum = vd['var_ratio_h_T'] + vd['var_ratio_j'] + vd['var_ratio_k'] + vd['var_ratio_cross']
+                    f.write(f"    sum:           {ratio_sum:.4f}   (= Total R²)\n")
+            # Detailed variance decomposition
+            if result.var_decomp is not None:
+                vd = result.var_decomp
+                comp_names = vd.get('component_names', [])
+                f.write(f"  Detailed Variance Decomposition:\n")
+                f.write(f"    RMS dy = {vd.get('rms_dy', 0):.6f}\n")
+                # RMS of each component
+                for cn in comp_names:
+                    rms_key = f'rms_{cn}'
+                    if rms_key in vd:
+                        f.write(f"    RMS {cn} = {vd[rms_key]:.6f}\n")
+                # Variance fractions
+                for cn in comp_names:
+                    var_key = f'var_{cn}'
+                    if var_key in vd:
+                        f.write(f"    Var frac {cn} = {vd[var_key]:.4f}\n")
+                # Covariance fractions
+                for i in range(len(comp_names)):
+                    for j in range(i + 1, len(comp_names)):
+                        cov_key = f'cov_{comp_names[i]}_{comp_names[j]}'
+                        if cov_key in vd:
+                            f.write(f"    Cov frac {comp_names[i]}-{comp_names[j]} = {vd[cov_key]:.4f}\n")
+                f.write(f"    Sum check = {vd.get('sum_check', 0):.6f}\n")
             f.write("\n")
 
 
@@ -285,12 +305,13 @@ def _plot_temperature_response_subset(
         if name not in results:
             continue
         r = results[name]
-        # h(T) = h1*T + h2*T²
-        h_T = r.h1 * T + r.h2 * T ** 2
+        h_form = getattr(r, 'h_form', 'quadratic')
+        h_T = eval_h(r.h1, r.h2, T, h_form)
 
-        # h(T*) = h1*T* + h2*T*² = -h1²/(4*h2) when T* = -h1/(2*h2)
-        if r.h2 != 0:
-            h_T_opt = -r.h1 ** 2 / (4 * r.h2)
+        # h(T_opt) evaluated at optimal temperature
+        if not np.isnan(r.T_optimal):
+            T_opt = r.T_optimal
+            h_T_opt = eval_h(r.h1, r.h2, np.array([T_opt]), h_form)[0]
         else:
             h_T_opt = 0
 
@@ -354,6 +375,15 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
+    # Plot 4: Quadratic vs Inverse-T h(T) comparison
+    _plot_temperature_response_subset(
+        results, output_dir,
+        approaches=['approach7', 'approach11', 'approach9', 'approach12'],
+        filename='temperature_response_inverse_T.png',
+        title_suffix='Quadratic vs Inverse-T h(T)',
+        T_range=T_range,
+        input_file=input_file
+    )
 
 
 def _plot_temperature_derivative_subset(
@@ -370,7 +400,8 @@ def _plot_temperature_derivative_subset(
         if name not in results:
             continue
         r = results[name]
-        dh_dT = r.h1 + 2 * r.h2 * T
+        h_form = getattr(r, 'h_form', 'quadratic')
+        dh_dT = eval_dh_dT(r.h1, r.h2, T, h_form)
         label = f"{r.approach}"
         ax.plot(T, dh_dT, color=APPROACH_COLORS.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
@@ -421,6 +452,15 @@ def plot_temperature_derivative(
         approaches=['approach7', 'approach8', 'approach9', 'approach10'],
         filename='temperature_derivative_loess.png',
         title_suffix='Quadratic vs LOESS',
+        T_range=T_range,
+        input_file=input_file
+    )
+    # Plot 4: Quadratic vs Inverse-T h(T) comparison
+    _plot_temperature_derivative_subset(
+        results, output_dir,
+        approaches=['approach7', 'approach11', 'approach9', 'approach12'],
+        filename='temperature_derivative_inverse_T.png',
+        title_suffix='Quadratic vs Inverse-T h(T)',
         T_range=T_range,
         input_file=input_file
     )
@@ -524,8 +564,8 @@ def plot_year_effects(
     year_effects_colors['approach6'] = 'black'
 
     for name, result in results.items():
-        # Skip approach7, approach8, approach9, approach10 - they use the same k values as approach6 (precomputed year means)
-        if name in ('approach7', 'approach8', 'approach9', 'approach10'):
+        # Skip approaches that use the same k values as approach6 (precomputed year means)
+        if name in ('approach7', 'approach8', 'approach9', 'approach10', 'approach11', 'approach12'):
             continue
 
         # k is stored with actual year as key
@@ -847,6 +887,11 @@ def save_bootstrap_summary_txt(
             f.write(f"    IQR:             [{stats['h2']['p25']:10.6f}, {stats['h2']['p75']:10.6f}]\n")
             f.write(f"    Std:             {stats['h2']['std']:10.6f}\n")
 
+            # Note functional form for inverse-T approaches
+            if result.h_form != 'quadratic':
+                f.write(f"  h_form: {result.h_form}\n")
+                f.write(f"    (h1 is coefficient of T, h2 is coefficient of 1/(273.15+T))\n")
+
             # beta (for approaches where it's a free parameter)
             if result.beta_point is not None and 'beta' in stats:
                 f.write(f"  beta (GDP scaling exponent):\n")
@@ -856,50 +901,53 @@ def save_bootstrap_summary_txt(
                 f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
 
-            # Option A - RMS magnitudes
-            if result.rms_j_point is not None and 'rms_j' in stats:
-                f.write(f"  rms_j (RMS of country trends):\n")
-                f.write(f"    Point estimate:  {result.rms_j_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['rms_j']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['rms_j']['p5']:10.6f}, {stats['rms_j']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['rms_j']['std']:10.6f}\n")
+            # Key variance ratios with bootstrap CIs
+            if result.var_decomp_point is not None:
+                vd = result.var_decomp_point
+                f.write(f"  Key Variance Ratios (Var(component) / Var(dy)):\n")
+                for ratio_key, label in [
+                    ('var_ratio_h_T', 'h(T) total'),
+                    ('var_ratio_h_Tstar', 'h(T*) detrend'),
+                    ('var_ratio_j', 'j (trends)'),
+                    ('var_ratio_k', 'k (year FE)'),
+                    ('var_ratio_cross', 'cross terms'),
+                ]:
+                    if ratio_key in vd:
+                        point_val = vd[ratio_key]
+                        stat_key = f'vd_{ratio_key}'
+                        if stat_key in stats:
+                            f.write(f"    {label:20s} {point_val:8.4f}  "
+                                    f"[{stats[stat_key]['p5']:7.4f}, {stats[stat_key]['p95']:7.4f}]\n")
+                        else:
+                            f.write(f"    {label:20s} {point_val:8.4f}\n")
 
-            if result.rms_k_point is not None and 'rms_k' in stats:
-                f.write(f"  rms_k (RMS of year effects):\n")
-                f.write(f"    Point estimate:  {result.rms_k_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['rms_k']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['rms_k']['p5']:10.6f}, {stats['rms_k']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['rms_k']['std']:10.6f}\n")
-
-            if result.rms_dy_point is not None and 'rms_dy' in stats:
-                f.write(f"  rms_dy (RMS of total variation):\n")
-                f.write(f"    Point estimate:  {result.rms_dy_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['rms_dy']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['rms_dy']['p5']:10.6f}, {stats['rms_dy']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['rms_dy']['std']:10.6f}\n")
-
-            # Option C - Variance fractions
-            if result.var_frac_h_point is not None and 'var_frac_h' in stats:
-                f.write(f"  Variance Decomposition (fractions sum to ~1):\n")
-                f.write(f"    var_frac_h (climate):     {result.var_frac_h_point:8.4f}  "
-                        f"[{stats['var_frac_h']['p5']:7.4f}, {stats['var_frac_h']['p95']:7.4f}]\n")
-                f.write(f"    var_frac_j (country):     {result.var_frac_j_point:8.4f}  "
-                        f"[{stats['var_frac_j']['p5']:7.4f}, {stats['var_frac_j']['p95']:7.4f}]\n")
-                f.write(f"    var_frac_k (year):        {result.var_frac_k_point:8.4f}  "
-                        f"[{stats['var_frac_k']['p5']:7.4f}, {stats['var_frac_k']['p95']:7.4f}]\n")
-                f.write(f"    var_frac_resid:           {result.var_frac_resid_point:8.4f}  "
-                        f"[{stats['var_frac_resid']['p5']:7.4f}, {stats['var_frac_resid']['p95']:7.4f}]\n")
-                f.write(f"    cov_frac_hj:              {result.cov_frac_hj_point:8.4f}  "
-                        f"[{stats['cov_frac_hj']['p5']:7.4f}, {stats['cov_frac_hj']['p95']:7.4f}]\n")
-                f.write(f"    cov_frac_hk:              {result.cov_frac_hk_point:8.4f}  "
-                        f"[{stats['cov_frac_hk']['p5']:7.4f}, {stats['cov_frac_hk']['p95']:7.4f}]\n")
-                f.write(f"    cov_frac_jk:              {result.cov_frac_jk_point:8.4f}  "
-                        f"[{stats['cov_frac_jk']['p5']:7.4f}, {stats['cov_frac_jk']['p95']:7.4f}]\n")
-                # Sum check
-                total = (result.var_frac_h_point + result.var_frac_j_point + result.var_frac_k_point +
-                         result.var_frac_resid_point + result.cov_frac_hj_point + result.cov_frac_hk_point +
-                         result.cov_frac_jk_point)
-                f.write(f"    Sum of fractions:         {total:8.4f}\n")
+            # Detailed variance decomposition
+            if result.var_decomp_point is not None:
+                vd = result.var_decomp_point
+                comp_names = vd.get('component_names', [])
+                f.write(f"  Detailed Variance Decomposition (sum = 1.0 by construction):\n")
+                # Variance fractions
+                for cn in comp_names:
+                    var_key = f'var_{cn}'
+                    stat_key = f'vd_{var_key}'
+                    point_val = vd.get(var_key, np.nan)
+                    if stat_key in stats:
+                        f.write(f"    {var_key:30s} {point_val:8.4f}  "
+                                f"[{stats[stat_key]['p5']:7.4f}, {stats[stat_key]['p95']:7.4f}]\n")
+                    else:
+                        f.write(f"    {var_key:30s} {point_val:8.4f}\n")
+                # Covariance fractions
+                for i in range(len(comp_names)):
+                    for j in range(i + 1, len(comp_names)):
+                        cov_key = f'cov_{comp_names[i]}_{comp_names[j]}'
+                        stat_key = f'vd_{cov_key}'
+                        point_val = vd.get(cov_key, np.nan)
+                        if stat_key in stats:
+                            f.write(f"    {cov_key:30s} {point_val:8.4f}  "
+                                    f"[{stats[stat_key]['p5']:7.4f}, {stats[stat_key]['p95']:7.4f}]\n")
+                        else:
+                            f.write(f"    {cov_key:30s} {point_val:8.4f}\n")
+                f.write(f"    {'sum_check':30s} {vd.get('sum_check', 0):8.6f}\n")
 
             f.write("\n")
 
@@ -948,6 +996,9 @@ def save_bootstrap_summary_table(
             'h2_p95': stats['h2']['p95'],
             'h2_std': stats['h2']['std'],
 
+            # Functional form
+            'h_form': result.h_form,
+
             # T_optimal statistics
             'T_optimal_point': result.T_optimal_point,
             'T_optimal_median': stats['T_optimal']['p50'],
@@ -995,46 +1046,19 @@ def save_bootstrap_summary_table(
             row['beta_p95'] = np.nan
             row['beta_std'] = np.nan
 
-        # Option A - RMS magnitudes
-        for metric in ['rms_j', 'rms_k', 'rms_dy']:
-            point_attr = f'{metric}_point'
-            if hasattr(result, point_attr) and getattr(result, point_attr) is not None and metric in stats:
-                row[f'{metric}_point'] = getattr(result, point_attr)
-                row[f'{metric}_median'] = stats[metric]['p50']
-                row[f'{metric}_p5'] = stats[metric]['p5']
-                row[f'{metric}_p25'] = stats[metric]['p25']
-                row[f'{metric}_p75'] = stats[metric]['p75']
-                row[f'{metric}_p95'] = stats[metric]['p95']
-                row[f'{metric}_std'] = stats[metric]['std']
-            else:
-                row[f'{metric}_point'] = np.nan
-                row[f'{metric}_median'] = np.nan
-                row[f'{metric}_p5'] = np.nan
-                row[f'{metric}_p25'] = np.nan
-                row[f'{metric}_p75'] = np.nan
-                row[f'{metric}_p95'] = np.nan
-                row[f'{metric}_std'] = np.nan
-
-        # Option C - Variance fractions
-        for metric in ['var_frac_h', 'var_frac_j', 'var_frac_k', 'var_frac_resid',
-                       'cov_frac_hj', 'cov_frac_hk', 'cov_frac_jk']:
-            point_attr = f'{metric}_point'
-            if hasattr(result, point_attr) and getattr(result, point_attr) is not None and metric in stats:
-                row[f'{metric}_point'] = getattr(result, point_attr)
-                row[f'{metric}_median'] = stats[metric]['p50']
-                row[f'{metric}_p5'] = stats[metric]['p5']
-                row[f'{metric}_p25'] = stats[metric]['p25']
-                row[f'{metric}_p75'] = stats[metric]['p75']
-                row[f'{metric}_p95'] = stats[metric]['p95']
-                row[f'{metric}_std'] = stats[metric]['std']
-            else:
-                row[f'{metric}_point'] = np.nan
-                row[f'{metric}_median'] = np.nan
-                row[f'{metric}_p5'] = np.nan
-                row[f'{metric}_p25'] = np.nan
-                row[f'{metric}_p75'] = np.nan
-                row[f'{metric}_p95'] = np.nan
-                row[f'{metric}_std'] = np.nan
+        # Variance decomposition
+        if result.var_decomp_point is not None:
+            for key, val in result.var_decomp_point.items():
+                if isinstance(val, (int, float)):
+                    stat_key = f'vd_{key}'
+                    row[f'vd_{key}_point'] = val
+                    if stat_key in stats:
+                        row[f'vd_{key}_median'] = stats[stat_key]['p50']
+                        row[f'vd_{key}_p5'] = stats[stat_key]['p5']
+                        row[f'vd_{key}_p25'] = stats[stat_key]['p25']
+                        row[f'vd_{key}_p75'] = stats[stat_key]['p75']
+                        row[f'vd_{key}_p95'] = stats[stat_key]['p95']
+                        row[f'vd_{key}_std'] = stats[stat_key]['std']
 
         rows.append(row)
 
@@ -1080,9 +1104,9 @@ def compute_h_response_uncertainty_bands(
                 np.full_like(T_range, np.nan),
                 np.full_like(T_range, np.nan))
 
+    h_form = getattr(result, 'h_form', 'quadratic')
+
     # Compute h(T) - h(T*) for each bootstrap sample
-    # h(T) = h1*T + h2*T^2
-    # h(T*) = -h1^2 / (4*h2) when T* = -h1/(2*h2)
     n_samples = len(h1_valid)
     n_T = len(T_range)
     h_relative_samples = np.zeros((n_samples, n_T))
@@ -1090,9 +1114,16 @@ def compute_h_response_uncertainty_bands(
     for i in range(n_samples):
         h1 = h1_valid[i]
         h2 = h2_valid[i]
-        h_T = h1 * T_range + h2 * T_range ** 2
-        if h2 != 0:
-            h_T_opt = -h1 ** 2 / (4 * h2)
+        h_T = eval_h(h1, h2, T_range, h_form)
+        # Evaluate h at T_optimal
+        if h_form == 'inverse_T':
+            T_opt = compute_T_optimal_inverse_T(h1, h2)
+        elif h2 != 0:
+            T_opt = -h1 / (2 * h2)
+        else:
+            T_opt = np.nan
+        if not np.isnan(T_opt):
+            h_T_opt = eval_h(h1, h2, np.array([T_opt]), h_form)[0]
         else:
             h_T_opt = 0
         h_relative_samples[i, :] = h_T - h_T_opt
@@ -1124,13 +1155,24 @@ def plot_bootstrap_parameter_distributions(
         output_dir: Directory to save the plot
         approach_key: Key like 'approach0' for filename
     """
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
+    h_form = getattr(result, 'h_form', 'quadratic')
+    if h_form == 'inverse_T':
+        h1_label = 'h₁ (1/T Coefficient)'
+        h2_label = 'h₂ (1/T² Coefficient)'
+    else:
+        h1_label = 'h₁ (Linear Coefficient)'
+        h2_label = 'h₂ (Quadratic Coefficient)'
 
     params = [
-        ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
-        ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (Quadratic Coefficient)'),
+        ('h1', result.h1_samples, result.h1_point, stats['h1'], h1_label),
+        ('h2', result.h2_samples, result.h2_point, stats['h2'], h2_label),
         ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
     ]
+
+    n_panels = len(params)
+    fig, axes = plt.subplots(1, n_panels, figsize=(4.5 * n_panels, 5))
+    if n_panels == 1:
+        axes = [axes]
 
     for ax, (param_name, samples, point_est, param_stats, xlabel) in zip(axes, params):
         # Filter valid samples
@@ -1191,18 +1233,21 @@ def plot_all_bootstrap_distributions(
     approach_names = list(results.keys())
     n_approaches = len(approach_names)
 
+    n_cols = 3
+
     with PdfPages(output_dir / filename) as pdf:
         # Create a figure with all approaches - one row per approach, 3 columns
-        fig, axes = plt.subplots(n_approaches, 3, figsize=(14, 4 * n_approaches))
+        fig, axes = plt.subplots(n_approaches, n_cols, figsize=(4.5 * n_cols, 4 * n_approaches))
 
         if n_approaches == 1:
             axes = axes.reshape(1, -1)
 
         # First pass: determine x-axis ranges for each column
-        col_ranges = {0: [], 1: [], 2: []}  # h1, h2, T_optimal
+        col_ranges = {i: [] for i in range(n_cols)}  # h1, h2, T_optimal
         for name in approach_names:
             result = results[name]
-            for col_idx, samples in enumerate([result.h1_samples, result.h2_samples, result.T_optimal_samples]):
+            sample_lists = [result.h1_samples, result.h2_samples, result.T_optimal_samples]
+            for col_idx, samples in enumerate(sample_lists):
                 valid_samples = samples[~np.isnan(samples)]
                 if len(valid_samples) > 0:
                     col_ranges[col_idx].extend([valid_samples.min(), valid_samples.max()])
@@ -1222,8 +1267,8 @@ def plot_all_bootstrap_distributions(
             stats = all_stats[name]
 
             params = [
-                ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
-                ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (Quadratic Coefficient)'),
+                ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁'),
+                ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂'),
                 ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
             ]
 
@@ -1332,9 +1377,11 @@ def plot_bootstrap_temperature_response(
         # Compute point estimate response
         h1_point = result.h1_point
         h2_point = result.h2_point
-        h_T_point = h1_point * T + h2_point * T ** 2
-        if h2_point != 0:
-            h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+        h_form = getattr(result, 'h_form', 'quadratic')
+        h_T_point = eval_h(h1_point, h2_point, T, h_form)
+        T_opt_point = result.T_optimal_point
+        if not np.isnan(T_opt_point):
+            h_T_opt_point = eval_h(h1_point, h2_point, np.array([T_opt_point]), h_form)[0]
         else:
             h_T_opt_point = 0
         h_point = h_T_point - h_T_opt_point
@@ -1466,9 +1513,9 @@ def plot_bootstrap_T_optimal_comparison(
         point_est = result.T_optimal_point
         p5, p25, p50, p75, p95 = stats['p5'], stats['p25'], stats['p50'], stats['p75'], stats['p95']
 
-        # Plot 90% CI as error bar
-        ci_lower = point_est - p5
-        ci_upper = p95 - point_est
+        # Plot 90% CI as error bar (use abs to handle cases where point est is outside CI)
+        ci_lower = abs(point_est - p5)
+        ci_upper = abs(p95 - point_est)
         ax.errorbar(point_est, i, xerr=[[ci_lower], [ci_upper]],
                     fmt='o', color=color, capsize=5, capthick=2, markersize=8,
                     label=f'{result.approach}' if i == 0 else None)
@@ -1521,6 +1568,8 @@ def compute_derivative_uncertainty_bands(
                 np.full_like(T_range, np.nan),
                 np.full_like(T_range, np.nan))
 
+    h_form = getattr(result, 'h_form', 'quadratic')
+
     # Compute dh/dT for each bootstrap sample
     n_samples = len(h1_valid)
     n_T = len(T_range)
@@ -1529,7 +1578,7 @@ def compute_derivative_uncertainty_bands(
     for i in range(n_samples):
         h1 = h1_valid[i]
         h2 = h2_valid[i]
-        dh_samples[i, :] = h1 + 2 * h2 * T_range
+        dh_samples[i, :] = eval_dh_dT(h1, h2, T_range, h_form)
 
     # Compute percentiles at each temperature
     dh_bands = []
@@ -1586,7 +1635,8 @@ def plot_bootstrap_temperature_derivative(
         # Compute point estimate derivative
         h1_point = result.h1_point
         h2_point = result.h2_point
-        dh_point = h1_point + 2 * h2_point * T
+        h_form = getattr(result, 'h_form', 'quadratic')
+        dh_point = eval_dh_dT(h1_point, h2_point, T, h_form)
 
         plot_data[name] = {
             'dh_lower': dh_lower,
@@ -1812,12 +1862,12 @@ def save_all_bootstrap_plots(
     plot_all_bootstrap_distributions(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_distributions.pdf")
 
-    # Temperature response plot - all 9 approaches in one PDF
+    # Temperature response plot - all approaches in one PDF
     plot_bootstrap_temperature_response(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
-                    'approach9', 'approach10'],
+                    'approach9', 'approach10', 'approach11', 'approach12'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
         data=data,
@@ -1825,12 +1875,12 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response.pdf")
 
-    # Temperature derivative plot - all 11 approaches in one PDF
+    # Temperature derivative plot - all approaches in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
-                    'approach9', 'approach10'],
+                    'approach9', 'approach10', 'approach11', 'approach12'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

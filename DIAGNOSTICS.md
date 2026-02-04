@@ -1,198 +1,195 @@
-# Component Contribution Diagnostics
+# Variance Decomposition Diagnostics
 
 ## Overview
 
-This document explains the diagnostic metrics added to quantify the relative contributions of different model components to GDP growth variation.
+This document explains the variance decomposition that quantifies the relative contributions of different model components to GDP growth variation. The decomposition is exact: the sum of all variance and covariance fractions equals 1.0 by construction.
 
 ## The Model
 
 The general model structure is:
 
 ```
-dy = h(T) + j(t) + k(t) + ε
+Δy_i(t) = [climate response] + j_i(t) + k(t) + ε
 ```
 
 where:
-- `dy` = GDP growth rate (the dependent variable)
-- `h(T)` = climate response (function of temperature)
+- `Δy` = GDP growth rate (the dependent variable)
 - `j(t)` = country-specific growth trend (function of time)
 - `k(t)` = year fixed effects (common across countries)
-- `ε` = residuals
+- `ε` = residual (defined as the remainder)
 
-## Current Implementation
+The climate response is decomposed differently depending on whether temperature detrending is used.
 
-### Option A: RMS Magnitudes
+## Mathematical Decomposition
 
-We compute root-mean-square values to measure the typical magnitude of each component:
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| `rms_h` | √(mean(h²)) | Climate response magnitude |
-| `rms_j` | √(mean(j²)) | Country trend magnitude |
-| `rms_k` | √(mean(k²)) | Year effect magnitude |
-| `rms_dy` | std(dy) | Total variation in dy |
-
-### Option C: Variance Decomposition
-
-We decompose the variance of dy into contributions from each component:
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| `var_frac_h` | Var(h) / Var(dy) | Climate variance fraction |
-| `var_frac_j` | Var(j) / Var(dy) | Country trend variance fraction |
-| `var_frac_k` | Var(k) / Var(dy) | Year effect variance fraction |
-| `var_frac_resid` | Var(ε) / Var(dy) | Residual variance fraction |
-| `cov_frac_hj` | 2·Cov(h,j) / Var(dy) | h-j covariance contribution |
-| `cov_frac_hk` | 2·Cov(h,k) / Var(dy) | h-k covariance contribution |
-| `cov_frac_jk` | 2·Cov(j,k) / Var(dy) | j-k covariance contribution |
-
-**Mathematical identity**: If `dy = h + j + k + ε`, then:
+### Approach 0 (no detrending, joint OLS)
 
 ```
-Var(dy) = Var(h) + Var(j) + Var(k) + Var(ε)
-        + 2·Cov(h,j) + 2·Cov(h,k) + 2·Cov(j,k)
-        + 2·Cov(h,ε) + 2·Cov(j,ε) + 2·Cov(k,ε)
+Δy_i(t) = h(T) + j_i(t) + k(t) + ε
 ```
 
-So the fractions should sum to 1 **only if** the covariances with residuals are zero.
+**4 components**: `h_T`, `j`, `k`, `epsilon`
 
----
+where `h(T) = h1·T + h2·T²`.
 
-## How Each Component is Computed
+### Approaches 1-7, 9 (with detrending)
 
-### Climate Response h(T)
+Since T = T\* + T\_trend, and h is quadratic:
 
-For non-GDP approaches (0-7, 9):
-```python
-h_values = h1 * data.temp + h2 * data.temp ** 2
+```
+h(T) = h1·(T* + T_trend) + h2·(T* + T_trend)²
+     = [h1·T* + h2·T*²] + [h1·T_trend + h2·T_trend²] + [2·h2·T*·T_trend]
+     = h_Tstar + h_Ttrend + h_cross
 ```
 
-For GDP-dependent approaches (8, 10):
-```python
-g = (data.pcGDP / Y_ref) ** (-beta)
-h_values = g * (h1 * data.temp + h2 * data.temp ** 2)
+So:
+```
+Δy_i(t) = h_Tstar + h_Ttrend + h_cross + j_i(t) + k(t) + ε
 ```
 
-**Key point**: We use **actual temperature** (`data.temp`), not detrended temperature.
+**6 components**: `h_Tstar`, `h_Ttrend`, `h_cross`, `j`, `k`, `epsilon`
 
-### Country Trends j(t)
+### Approaches 8, 10 (GDP-dependent)
 
-Varies by approach:
-- Approach 1: `j = 0` (no GDP detrending)
-- Approaches 2, 3, 5, 7, 8: `j = y0 + y1*t + y2*t²` (quadratic)
-- Approaches 4, 6: `j = y0_lin + y1_lin*t` (linear)
-- Approaches 9, 10: `j = y_loess` (LOESS smoothed)
+Same 6-component structure but with g = (Y/Y\_ref)^(-β) applied to the h terms:
 
-### Year Effects k(t)
-
-- Approaches 1-5: `k` from regression coefficients (year fixed effects)
-- Approaches 6-10: `k` = precomputed year means
-
-### Residuals ε
-
-```python
-residuals = y_regression - X @ beta_coefficients
+```
+Δy_i(t) = g·h_Tstar + g·h_Ttrend + g·h_cross + j_i(t) + k(t) + ε
 ```
 
-where `y_regression` is the dependent variable used in the OLS fit.
+**6 components**: `g_h_Tstar`, `g_h_Ttrend`, `g_h_cross`, `j`, `k`, `epsilon`
 
----
+### Degenerate Cases
 
-## Why the Sum Doesn't Equal 1
+- **Approach 2** (no T detrending): T\_trend=0, so h\_Ttrend=0, h\_cross=0, h\_Tstar=h(T). Still uses 6-component structure for consistency.
+- **Approach 1** (no GDP detrending): j=0. Still uses 6-component structure.
 
-### Issue 1: Missing Covariances with Residuals
+## Variance Identity
 
-The sum of our fractions equals 1 only if:
+For any set of components C₁, C₂, ..., Cₙ, ε where Δy = C₁ + C₂ + ... + Cₙ + ε:
+
 ```
-Cov(h,ε) = Cov(j,ε) = Cov(k,ε) = 0
-```
-
-This is true for **Approach 0** (Conjoined OLS Fit), where h, j, k are all estimated together in one regression, so residuals are orthogonal to all predictors.
-
-For other approaches, the residuals may be correlated with our computed h, j, k because:
-1. The regression was performed on transformed variables
-2. We compute h using actual T, but the regression used detrended T
-
-### Issue 2: GDP Scaling Creates Massive h Variance
-
-For approaches 8 and 10, the GDP scaling factor `g = (Y/Y_ref)^(-β)` varies enormously:
-- Poor countries: g ≈ 3-8
-- Rich countries: g ≈ 0.3-0.6
-
-This means `Var(h)` is dominated by variation in GDP, not temperature:
-```
-Var(h) = Var(g · f(T)) >> Var(dy)
+Var(Δy) = Σᵢ Var(Cᵢ) + 2·Σᵢ<ⱼ Cov(Cᵢ, Cⱼ)
 ```
 
-Result: `var_frac_h ≈ 8`, which seems nonsensical as a "fraction".
+Dividing by Var(Δy):
 
----
-
-## Questions to Resolve
-
-1. **Should h be computed using actual temperature or detrended temperature?**
-   - Current: actual temperature
-   - Alternative: detrended temperature (T - T_trend)
-
-2. **Should the GDP scaling be included in h for approaches 8 and 10?**
-   - Current: yes, h = g · (h1·T + h2·T²)
-   - Alternative: no, h = h1·T + h2·T² (same as other approaches)
-
-3. **Should we include the missing covariance terms with residuals?**
-   - Current: no
-   - Alternative: add `cov_frac_h_resid`, `cov_frac_j_resid`, `cov_frac_k_resid`
-
-4. **What question are we trying to answer?**
-   - "How much of the variance in dy is explained by each component?"
-   - "How much does each component contribute to the predicted values?"
-   - "What is the relative magnitude of each component?"
-
----
-
-## Example Output (Current Implementation)
-
-### Approach 0 (Conjoined OLS Fit) - Sum = 1.00
 ```
-var_frac_h     =  0.1752
-var_frac_j     =  0.3151
-var_frac_k     =  0.1219
-var_frac_resid =  0.8038
-cov_frac_hj    = -0.3384
-cov_frac_hk    = -0.0046
-cov_frac_jk    = -0.0729
-Sum            =  1.0000  ✓
+1 = Σᵢ [Var(Cᵢ)/Var(Δy)] + 2·Σᵢ<ⱼ [Cov(Cᵢ,Cⱼ)/Var(Δy)]
 ```
 
-### Approach 7 (Precomputed k Quadratic) - Sum = 1.13
+Since ε is defined as Δy minus the sum of all other components, all covariance terms (including those with ε) are included, and **the sum equals 1.0 exactly**.
+
+## Output Keys
+
+The `var_decomp` dictionary contains:
+
+| Key pattern | Description |
+|-------------|-------------|
+| `component_names` | List of component names (including 'epsilon') |
+| `var_{name}` | Var(component) / Var(Δy) |
+| `cov_{name1}_{name2}` | 2·Cov(C1,C2) / Var(Δy) |
+| `rms_{name}` | √(mean(component²)) |
+| `rms_dy` | std(Δy) |
+| `sum_check` | Sum of all var\_ and cov\_ terms (should be 1.0) |
+
+## Component Definitions per Approach
+
+| Approach | T\_trend source | j source | Component names |
+|----------|----------------|----------|-----------------|
+| 0 | N/A (4-comp) | Fitted j₀+j₁t+j₂t² | h\_T, j, k |
+| 1 | T0+T1·t | zeros | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 2 | zeros | y0+y1·t+y2·t² | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 3 | T0+T1·t | y0+y1·t+y2·t² | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 4 | T0+T1·t | y0\_lin+y1\_lin·t | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 5 | T0q+T1q·t+T2q·t² | y0+y1·t+y2·t² | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 6 | T0+T1·t | y0\_lin+y1\_lin·t | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 7 | T0q+T1q·t+T2q·t² | y0+y1·t+y2·t² | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 8 | T0q+T1q·t+T2q·t² | y0+y1·t+y2·t² | g\_h\_Tstar, g\_h\_Ttrend, g\_h\_cross, j, k |
+| 9 | T\_loess | y\_loess | h\_Tstar, h\_Ttrend, h\_cross, j, k |
+| 10 | T\_loess | y\_loess | g\_h\_Tstar, g\_h\_Ttrend, g\_h\_cross, j, k |
+
+## Key Variance Ratios
+
+In addition to the full decomposition, a small set of intuitive "key variance ratios" are reported. Each is simply Var(component) / Var(Δy), giving a quick sense of how much variability each major piece carries.
+
+| Ratio | What it measures | How computed |
+|-------|-----------------|--------------|
+| `var_ratio_h_T` | Climate response to **full** temperature | Var(h(T)) / Var(Δy), or Var(g·h(T)) for GDP-dependent |
+| `var_ratio_h_Tstar` | Climate response to **detrended** temperature | Var(h(T\*)) / Var(Δy), or Var(g·h(T\*)) for GDP-dependent |
+| `var_ratio_j` | Country-specific growth trends | Var(j) / Var(Δy) |
+| `var_ratio_k` | Year fixed effects | Var(k) / Var(Δy) |
+| `var_ratio_cross` | Covariance remainder | Total R² - var\_ratio\_h\_T - var\_ratio\_j - var\_ratio\_k |
+
+### Additive identity
+
+These ratios satisfy:
+
 ```
-var_frac_h     =  0.1304
-var_frac_j     =  0.1039
-var_frac_k     =  0.0902
-var_frac_resid =  0.8042
-cov_frac_hj    = -0.0028
-cov_frac_hk    =  0.0005
-cov_frac_jk    = -0.0014
-Sum            =  1.1250
+Total R² = var_ratio_h_T + var_ratio_j + var_ratio_k + var_ratio_cross
 ```
 
-### Approach 8 (GDP-Response Quadratic) - Sum = 8.95
+where `var_ratio_cross` captures all cross-covariance terms between components (and with epsilon). This follows from the variance identity Var(Δy) = Σ Var(Cᵢ) + 2·Σ Cov(Cᵢ, Cⱼ) and Total R² = 1 - Var(ε)/Var(Δy).
+
+### How `var_ratio_h_T` differs from the detailed decomposition
+
+`var_ratio_h_T` is computed by summing the h-component arrays (h\_Tstar + h\_Ttrend + h\_cross, or their g-scaled equivalents) and then taking the variance of the sum:
+
 ```
-var_frac_h     =  8.3931  ← Very large due to GDP scaling
-var_frac_j     =  0.1039
-var_frac_k     =  0.0902
-var_frac_resid =  0.8026
-cov_frac_hj    = -0.4784
-cov_frac_hk    =  0.0394
-cov_frac_jk    = -0.0014
-Sum            =  8.9494
+var_ratio_h_T = Var(h_Tstar + h_Ttrend + h_cross) / Var(Δy)
 ```
 
----
+This is **not** the same as `var_h_Tstar + var_h_Ttrend + var_h_cross` (which ignores within-h covariances). It captures the total variance attributable to the full climate response h(T).
 
-## Next Steps
+### Special cases
 
-Please review and let me know:
-1. What interpretation of "component contribution" would be most useful?
-2. Should we change how h is computed?
-3. Should we add the missing covariance terms?
-4. Any other concerns about the current approach?
+- **Approach 0** (no detrending): h(T) has no sub-components, so `var_ratio_h_T` = `var_ratio_h_Tstar` = `var_h_T`.
+- **Approach 2** (no T detrending): T\*=T, T\_trend=0, so `var_ratio_h_T` = `var_ratio_h_Tstar`.
+
+### Relationship to the full decomposition
+
+The key ratios provide an intuitive R²-like decomposition at a coarser level (4 components plus cross terms), while the full decomposition breaks down every individual component and cross-covariance to sum to exactly 1.0. Both are reported in the output.
+
+## Using Key Variance Ratios for Approach Selection
+
+The key variance ratios can guide the choice between approaches by revealing how much of the estimated climate impact comes from identifiable variation vs. trend extrapolation, and how cleanly the decomposition separates components.
+
+### Signal Fraction: `var_ratio_h_Tstar / var_ratio_h_T`
+
+This ratio measures what fraction of the total climate response variance comes from identified (detrended) temperature variation rather than trend extrapolation.
+
+- **Approach 0**: Signal fraction = 100% by construction (no detrending, so all temperature variation is used directly).
+- **Approaches with T detrending**: Signal fraction is typically ~3–5%, meaning detrended temperature fluctuations account for only a small share of the total climate response variance.
+- **Interpretation**: A low signal fraction means the estimated climate impact relies heavily on extrapolating the fitted h(T) function along the temperature trend — variation that is not separately identified from other slow-moving processes.
+
+### Confounding Ratio: `|var_ratio_cross| / Total R²`
+
+This ratio measures how much the decomposition components overlap or cancel each other, relative to the model's overall explanatory power.
+
+- **Lower is better** — indicates cleaner separation between the climate response, country trends, and year effects.
+- **High values** mean the decomposition is unstable: small changes in the detrending method could shift variance between components, making the attribution fragile.
+
+### Red Flags
+
+Watch for these patterns when comparing approaches:
+
+- **`var_ratio_h_Tstar ≈ 0`**: No identifiable climate signal from detrended temperature. Approach 2 exhibits this because it does not detrend temperature (T\* = T, T\_trend = 0), so all climate response variance appears in `var_ratio_h_T` rather than being split.
+- **`var_ratio_h_T >> 1`**: GDP scaling amplifies the trend component to unreasonable levels. Approaches 8 and 10 can exhibit this when the g = (Y/Y\_ref)^(−β) scaling magnifies climate response variance beyond the total GDP growth variance.
+- **`var_ratio_cross` very large and negative**: Heavy cancellation between components — the individual pieces are large but offset each other, indicating the decomposition is poorly conditioned.
+
+### What the Metrics Cannot Tell You
+
+- These are **statistical diagnostics**, not causal identification tests. They describe variance shares, not whether the estimated relationship is causal.
+- A "clean" decomposition (high signal fraction, low confounding ratio) does not prove the climate effect is causal — it only means the components are well-separated statistically.
+- The choice between approaches ultimately depends on which **structural assumptions** (form of temperature detrending, GDP detrending, functional form) are most defensible for the research question at hand.
+
+## Interpretation Notes
+
+- **var\_h\_Tstar**: Variance from climate response to detrended temperature fluctuations. This is the "signal" - the part of temperature variation that climate response is identified from.
+- **var\_h\_Ttrend**: Variance from climate response to the temperature trend. This captures the effect of long-term warming.
+- **var\_h\_cross**: Variance from the cross-term between detrended temperature and temperature trend. This arises because h is quadratic and T = T\* + T\_trend.
+- **var\_j**: Variance from country-specific growth trends.
+- **var\_k**: Variance from year fixed effects.
+- **var\_epsilon**: Variance from residuals.
+- **Covariance terms**: Positive covariance means two components tend to move together; negative means they offset each other.
+- **sum\_check**: Should be 1.000000 to machine precision.

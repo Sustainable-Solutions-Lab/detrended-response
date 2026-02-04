@@ -72,33 +72,12 @@ class BootstrapResult:
     beta_point: float = None       # GDP scaling exponent
     beta_samples: np.ndarray = None  # Bootstrap samples for beta
 
-    # Option A - RMS magnitudes (point estimates)
-    rms_j_point: float = None
-    rms_k_point: float = None
-    rms_dy_point: float = None
+    # Functional form
+    h_form: str = 'quadratic'     # 'quadratic' or 'inverse_T'
 
-    # Option A - RMS magnitudes (bootstrap samples)
-    rms_j_samples: np.ndarray = None
-    rms_k_samples: np.ndarray = None
-    rms_dy_samples: np.ndarray = None
-
-    # Option C - Variance fractions (point estimates)
-    var_frac_h_point: float = None
-    var_frac_j_point: float = None
-    var_frac_k_point: float = None
-    var_frac_resid_point: float = None
-    cov_frac_hj_point: float = None
-    cov_frac_hk_point: float = None
-    cov_frac_jk_point: float = None
-
-    # Option C - Variance fractions (bootstrap samples)
-    var_frac_h_samples: np.ndarray = None
-    var_frac_j_samples: np.ndarray = None
-    var_frac_k_samples: np.ndarray = None
-    var_frac_resid_samples: np.ndarray = None
-    cov_frac_hj_samples: np.ndarray = None
-    cov_frac_hk_samples: np.ndarray = None
-    cov_frac_jk_samples: np.ndarray = None
+    # Variance decomposition
+    var_decomp_point: dict = None   # From original fit
+    var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
 
 
 def create_bootstrap_data(
@@ -215,19 +194,15 @@ def run_bootstrap(
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8 and 10
 
-    # Option A - RMS magnitudes
-    rms_j_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    rms_k_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    rms_dy_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-
-    # Option C - Variance fractions
-    var_frac_h_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    var_frac_j_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    var_frac_k_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    var_frac_resid_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    cov_frac_hj_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    cov_frac_hk_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    cov_frac_jk_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    # Variance decomposition samples - initialized from original results' var_decomp keys
+    var_decomp_samples = {}
+    for name in approach_names:
+        orig = original_results[name]
+        if orig.var_decomp is not None:
+            var_decomp_samples[name] = {}
+            for key, val in orig.var_decomp.items():
+                if isinstance(val, (int, float)):
+                    var_decomp_samples[name][key] = np.full(n_bootstrap, np.nan)
 
     n_successful = 0
 
@@ -273,29 +248,11 @@ def run_bootstrap(
                 if hasattr(r, 'beta'):
                     beta_samples[name][b] = r.beta
 
-                # Store Option A - RMS magnitudes
-                if r.rms_j is not None:
-                    rms_j_samples[name][b] = r.rms_j
-                if r.rms_k is not None:
-                    rms_k_samples[name][b] = r.rms_k
-                if r.rms_dy is not None:
-                    rms_dy_samples[name][b] = r.rms_dy
-
-                # Store Option C - Variance fractions
-                if r.var_frac_h is not None:
-                    var_frac_h_samples[name][b] = r.var_frac_h
-                if r.var_frac_j is not None:
-                    var_frac_j_samples[name][b] = r.var_frac_j
-                if r.var_frac_k is not None:
-                    var_frac_k_samples[name][b] = r.var_frac_k
-                if r.var_frac_resid is not None:
-                    var_frac_resid_samples[name][b] = r.var_frac_resid
-                if r.cov_frac_hj is not None:
-                    cov_frac_hj_samples[name][b] = r.cov_frac_hj
-                if r.cov_frac_hk is not None:
-                    cov_frac_hk_samples[name][b] = r.cov_frac_hk
-                if r.cov_frac_jk is not None:
-                    cov_frac_jk_samples[name][b] = r.cov_frac_jk
+                # Store variance decomposition samples
+                if r.var_decomp is not None and name in var_decomp_samples:
+                    for key in var_decomp_samples[name]:
+                        if key in r.var_decomp:
+                            var_decomp_samples[name][key][b] = r.var_decomp[key]
 
             n_successful += 1
 
@@ -325,6 +282,8 @@ def run_bootstrap(
         orig = original_results[name]
         # Get beta point estimate if available (Approach 8 and 10)
         beta_point = getattr(orig, 'beta', None)
+        # Get h_form (functional form)
+        h_form = getattr(orig, 'h_form', 'quadratic')
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
@@ -341,28 +300,9 @@ def run_bootstrap(
             n_successful=n_successful,
             beta_point=beta_point,
             beta_samples=beta_samples[name],
-            # Option A - RMS magnitudes
-            rms_j_point=getattr(orig, 'rms_j', None),
-            rms_k_point=getattr(orig, 'rms_k', None),
-            rms_dy_point=getattr(orig, 'rms_dy', None),
-            rms_j_samples=rms_j_samples[name],
-            rms_k_samples=rms_k_samples[name],
-            rms_dy_samples=rms_dy_samples[name],
-            # Option C - Variance fractions
-            var_frac_h_point=getattr(orig, 'var_frac_h', None),
-            var_frac_j_point=getattr(orig, 'var_frac_j', None),
-            var_frac_k_point=getattr(orig, 'var_frac_k', None),
-            var_frac_resid_point=getattr(orig, 'var_frac_resid', None),
-            cov_frac_hj_point=getattr(orig, 'cov_frac_hj', None),
-            cov_frac_hk_point=getattr(orig, 'cov_frac_hk', None),
-            cov_frac_jk_point=getattr(orig, 'cov_frac_jk', None),
-            var_frac_h_samples=var_frac_h_samples[name],
-            var_frac_j_samples=var_frac_j_samples[name],
-            var_frac_k_samples=var_frac_k_samples[name],
-            var_frac_resid_samples=var_frac_resid_samples[name],
-            cov_frac_hj_samples=cov_frac_hj_samples[name],
-            cov_frac_hk_samples=cov_frac_hk_samples[name],
-            cov_frac_jk_samples=cov_frac_jk_samples[name],
+            h_form=h_form,
+            var_decomp_point=getattr(orig, 'var_decomp', None),
+            var_decomp_samples=var_decomp_samples.get(name, None),
         )
 
     return results
@@ -412,28 +352,12 @@ def compute_bootstrap_statistics(
     if result.beta_point is not None and result.beta_samples is not None:
         stats['beta'] = get_percentile_stats(result.beta_samples, result.beta_point)
 
-    # Option A - RMS magnitudes
-    if result.rms_j_point is not None and result.rms_j_samples is not None:
-        stats['rms_j'] = get_percentile_stats(result.rms_j_samples, result.rms_j_point)
-    if result.rms_k_point is not None and result.rms_k_samples is not None:
-        stats['rms_k'] = get_percentile_stats(result.rms_k_samples, result.rms_k_point)
-    if result.rms_dy_point is not None and result.rms_dy_samples is not None:
-        stats['rms_dy'] = get_percentile_stats(result.rms_dy_samples, result.rms_dy_point)
-
-    # Option C - Variance fractions
-    if result.var_frac_h_point is not None and result.var_frac_h_samples is not None:
-        stats['var_frac_h'] = get_percentile_stats(result.var_frac_h_samples, result.var_frac_h_point)
-    if result.var_frac_j_point is not None and result.var_frac_j_samples is not None:
-        stats['var_frac_j'] = get_percentile_stats(result.var_frac_j_samples, result.var_frac_j_point)
-    if result.var_frac_k_point is not None and result.var_frac_k_samples is not None:
-        stats['var_frac_k'] = get_percentile_stats(result.var_frac_k_samples, result.var_frac_k_point)
-    if result.var_frac_resid_point is not None and result.var_frac_resid_samples is not None:
-        stats['var_frac_resid'] = get_percentile_stats(result.var_frac_resid_samples, result.var_frac_resid_point)
-    if result.cov_frac_hj_point is not None and result.cov_frac_hj_samples is not None:
-        stats['cov_frac_hj'] = get_percentile_stats(result.cov_frac_hj_samples, result.cov_frac_hj_point)
-    if result.cov_frac_hk_point is not None and result.cov_frac_hk_samples is not None:
-        stats['cov_frac_hk'] = get_percentile_stats(result.cov_frac_hk_samples, result.cov_frac_hk_point)
-    if result.cov_frac_jk_point is not None and result.cov_frac_jk_samples is not None:
-        stats['cov_frac_jk'] = get_percentile_stats(result.cov_frac_jk_samples, result.cov_frac_jk_point)
+    # Variance decomposition statistics
+    if result.var_decomp_point is not None and result.var_decomp_samples is not None:
+        for key, samples in result.var_decomp_samples.items():
+            if isinstance(samples, np.ndarray):
+                point_val = result.var_decomp_point.get(key, np.nan)
+                if isinstance(point_val, (int, float)):
+                    stats[f'vd_{key}'] = get_percentile_stats(samples, point_val)
 
     return stats
