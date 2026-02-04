@@ -323,7 +323,7 @@ def _plot_temperature_response_subset(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, dpi=150)
+    plt.savefig(output_dir / filename)
     plt.close()
 
 
@@ -336,7 +336,7 @@ def plot_temperature_response(
     _plot_temperature_response_subset(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4'],
-        filename='temperature_response_all.png',
+        filename='temperature_response_all.pdf',
         title_suffix='Approaches 0-4',
         T_range=T_range,
         input_file=input_file
@@ -345,7 +345,7 @@ def plot_temperature_response(
     _plot_temperature_response_subset(
         results, output_dir,
         approaches=['approach0', 'approach5'],
-        filename='temperature_response_precomputed_k.png',
+        filename='temperature_response_precomputed_k.pdf',
         title_suffix='Approaches 0, 5',
         T_range=T_range,
         input_file=input_file
@@ -354,7 +354,7 @@ def plot_temperature_response(
     _plot_temperature_response_subset(
         results, output_dir,
         approaches=['approach5', 'approach6', 'approach7'],
-        filename='temperature_response_loess.png',
+        filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
         input_file=input_file
@@ -393,7 +393,7 @@ def _plot_temperature_derivative_subset(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, dpi=150)
+    plt.savefig(output_dir / filename)
     plt.close()
 
 
@@ -406,7 +406,7 @@ def plot_temperature_derivative(
     _plot_temperature_derivative_subset(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4'],
-        filename='temperature_derivative_all.png',
+        filename='temperature_derivative_all.pdf',
         title_suffix='Approaches 0-4',
         T_range=T_range,
         input_file=input_file
@@ -415,7 +415,7 @@ def plot_temperature_derivative(
     _plot_temperature_derivative_subset(
         results, output_dir,
         approaches=['approach0', 'approach5'],
-        filename='temperature_derivative_precomputed_k.png',
+        filename='temperature_derivative_precomputed_k.pdf',
         title_suffix='Approaches 0, 5',
         T_range=T_range,
         input_file=input_file
@@ -424,7 +424,7 @@ def plot_temperature_derivative(
     _plot_temperature_derivative_subset(
         results, output_dir,
         approaches=['approach5', 'approach6', 'approach7'],
-        filename='temperature_derivative_loess.png',
+        filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
         input_file=input_file
@@ -469,7 +469,7 @@ def plot_coefficient_comparison(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'coefficient_comparison.png', dpi=150)
+    plt.savefig(output_dir / 'coefficient_comparison.pdf')
     plt.close()
 
 
@@ -500,7 +500,7 @@ def plot_optimal_temperature_comparison(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'optimal_temperature_comparison.png', dpi=150)
+    plt.savefig(output_dir / 'optimal_temperature_comparison.pdf')
     plt.close()
 
 
@@ -563,7 +563,7 @@ def plot_year_effects(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'year_effects.png', dpi=150)
+    plt.savefig(output_dir / 'year_effects.pdf')
     plt.close()
 
 
@@ -610,7 +610,7 @@ def plot_residual_diagnostics(
 
         # Safe filename
         safe_name = name.replace(' ', '_').lower()
-        plt.savefig(output_dir / f'residuals_{safe_name}.png', dpi=150)
+        plt.savefig(output_dir / f'residuals_{safe_name}.pdf')
         plt.close()
 
 
@@ -701,7 +701,7 @@ def plot_gdp_scaling_factor(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'gdp_scaling_factor.png', dpi=150)
+    plt.savefig(output_dir / 'gdp_scaling_factor.pdf')
     plt.close()
 
 
@@ -1139,7 +1139,7 @@ def plot_bootstrap_parameter_distributions(
 
     fig.suptitle(f'Bootstrap Distributions: {result.approach}', fontsize=14)
     plt.tight_layout()
-    plt.savefig(output_dir / f'bootstrap_distributions_{approach_key}.png', dpi=150)
+    plt.savefig(output_dir / f'bootstrap_distributions_{approach_key}.pdf')
     plt.close()
 
 
@@ -1257,7 +1257,7 @@ def plot_all_bootstrap_distributions(
         fig.suptitle('Bootstrap Parameter Distributions by Approach', fontsize=14, y=1.01)
         plt.tight_layout()
         add_input_file_annotation(fig, input_file)
-        pdf.savefig(fig, dpi=150, bbox_inches='tight')
+        pdf.savefig(fig, bbox_inches='tight')
         plt.close()
 
 
@@ -1414,7 +1414,7 @@ def plot_bootstrap_temperature_response(
     fig.suptitle('Temperature Response with Bootstrap 90% CI and IQR', fontsize=14, y=1.02)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
+    plt.savefig(output_dir / filename, bbox_inches='tight')
     plt.close()
 
 
@@ -1473,7 +1473,7 @@ def plot_bootstrap_T_optimal_comparison(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'bootstrap_T_optimal_comparison.png', dpi=150)
+    plt.savefig(output_dir / 'bootstrap_T_optimal_comparison.pdf')
     plt.close()
 
 
@@ -1633,7 +1633,7 @@ def plot_bootstrap_temperature_derivative(
     fig.suptitle('Temperature Derivative with Bootstrap 90% CI', fontsize=14, y=1.02)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, dpi=150, bbox_inches='tight')
+    plt.savefig(output_dir / filename, bbox_inches='tight')
     plt.close()
 
 
@@ -1755,7 +1755,7 @@ def plot_bootstrap_gdp_scaling(
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, dpi=150)
+    plt.savefig(output_dir / filename)
     plt.close()
 
 
@@ -1817,7 +1817,7 @@ def save_all_bootstrap_plots(
 
     # T_optimal comparison across all approaches
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
-    print("      Saved bootstrap_T_optimal_comparison.png")
+    print("      Saved bootstrap_T_optimal_comparison.pdf")
 
     # GDP scaling factor with bootstrap uncertainty (Approach 7)
     if Y_ref is not None and 'approach7' in results:
