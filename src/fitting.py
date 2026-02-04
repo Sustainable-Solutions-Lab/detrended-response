@@ -192,7 +192,7 @@ class FitResult:
 
 @dataclass
 class FitResultApproach8:
-    """Container for Approach 8 results with GDP-dependent response.
+    """Container for Approach 7 results with GDP-dependent response.
 
     Model: h(Y,T) = (Y/Y_ref)^(-beta) * (h1*T + h2*T^2)
     """
@@ -615,10 +615,10 @@ def fit_approach3_combined_detrending(
     )
 
 
-def fit_approach5_combined_quadratic_detrending(
+def fit_approach4_combined_quadratic_detrending(
     data: AnalysisData, trends: CountryTrends
 ) -> FitResult:
-    """Approach 5: Combined detrending with quadratic temperature and GDP growth trends.
+    """Approach 4: Combined detrending with quadratic temperature and GDP growth trends.
 
     Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t + T2*t²)]
                                   + h2*[T² - (T0 + T1*t + T2*t²)²] + k_i
@@ -659,7 +659,7 @@ def fit_approach5_combined_quadratic_detrending(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 5: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
+    # Approach 4: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
     T_trend = np.zeros(data.n_obs)
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
@@ -709,17 +709,17 @@ def fit_approach5_combined_quadratic_detrending(
     )
 
 
-def fit_approach7_precomputed_k_quadratic(
+def fit_approach5_precomputed_k_quadratic(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
-    """Approach 7: Pre-computed k[t] with quadratic country/temperature trends.
+    """Approach 5: Pre-computed k[t] with quadratic country/temperature trends.
 
     1. k[t] = mean(dy_i[t]) is computed first
     2. Country trends j_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² are fit to dy_i[t] - k[t]
     3. Temperature is detrended with quadratic trend: T* = T - (T0 + T1*t + T2*t²)
     4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
 
-    Unlike Approaches 4/5, year effects k[t] are pre-computed as year means
+    Unlike Approaches 3/4, year effects k[t] are pre-computed as year means
     rather than estimated in the regression.
     """
     # Compute detrended temperature terms (quadratic)
@@ -763,7 +763,7 @@ def fit_approach7_precomputed_k_quadratic(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 7: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
+    # Approach 5: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
     T_trend = np.zeros(data.n_obs)
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
@@ -859,12 +859,12 @@ def compute_beta_se_numerical(
     return se
 
 
-def fit_approach9_precomputed_k_loess(
+def fit_approach6_precomputed_k_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
-    """Approach 9: Pre-computed k[t] with LOESS country/temperature trends.
+    """Approach 6: Pre-computed k[t] with LOESS country/temperature trends.
 
-    LOESS version of Approach 7:
+    LOESS version of Approach 5:
     1. k[t] = mean(dy_i[t]) is computed first
     2. Country trends j_i(t) are LOESS-smoothed (dy_i[t] - k[t])
     3. Temperature is detrended with LOESS: T* = T - T_loess
@@ -915,7 +915,7 @@ def fit_approach9_precomputed_k_loess(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 9: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
+    # Approach 6: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
     T_trend = trends_loess.T_loess
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
@@ -958,20 +958,20 @@ def fit_approach9_precomputed_k_loess(
     )
 
 
-def fit_approach10_gdp_response_loess(
+def fit_approach7_gdp_response_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     Y_ref: float,
     beta_bounds: tuple = DEFAULT_BETA_BOUNDS,
 ) -> FitResultApproach8:
-    """Approach 10: GDP-dependent temperature response with LOESS detrending.
+    """Approach 7: GDP-dependent temperature response with LOESS detrending.
 
-    LOESS version of Approach 8:
+    LOESS version of Approach 5 with GDP scaling:
     Model: dy*_i(t) = (Y_i(t)/Y_ref)^(-beta) * [h1*T* + h2*T*^2]
 
     where:
-    - dy* = dy_i(t) - k[t] - j_i(t) (same as Approach 9)
+    - dy* = dy_i(t) - k[t] - j_i(t) (same as Approach 6)
     - T* = T - T_loess (LOESS detrended temperature)
     - (Y_i(t)/Y_ref)^(-beta) scales the response by GDP level
 
@@ -993,7 +993,7 @@ def fit_approach10_gdp_response_loess(
     T_star = compute_detrended_temperature_loess(data, trends_loess)
     T2_star = compute_detrended_temp_squared_loess(data, trends_loess)
 
-    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach 9)
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach 6)
     y = np.zeros(data.n_obs)
     for i in range(data.n_obs):
         yr = data.year[i]
@@ -1056,7 +1056,7 @@ def fit_approach10_gdp_response_loess(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: (Y/Y_ref)^(-beta) * h(T_trend) + j_trend + k
-    # Approach 10: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
+    # Approach 7: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
     T_trend = trends_loess.T_loess
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
@@ -1249,42 +1249,42 @@ def fit_all_approaches(
         'approach1': Temperature detrending (linear T trend)
         'approach2': GDP growth detrending (quadratic GDP trend)
         'approach3': Combined detrending (linear T trend, quadratic GDP trend)
-        'approach5': Combined detrending (quadratic T trend, quadratic GDP trend)
-        'approach7': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
-        'approach9': Pre-computed k with LOESS trends (if trends_loess provided)
-        'approach10': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
+        'approach4': Combined detrending (quadratic T trend, quadratic GDP trend)
+        'approach5': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
+        'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
+        'approach7': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
 
     Args:
         data: AnalysisData object
-        trends: CountryTrends for approaches 0-5
-        trends_with_k: CountryTrends for approach 7 (fit to dy - k)
-        year_means: Pre-computed k[t] for approaches 7, 9, 10
-        Y_ref: Reference GDP for approach 10 (computed once on full dataset)
-        trends_loess: CountryTrendsLoess for approaches 9-10 (LOESS detrending)
+        trends: CountryTrends for approaches 0-4
+        trends_with_k: CountryTrends for approach 5 (fit to dy - k)
+        year_means: Pre-computed k[t] for approaches 5, 6, 7
+        Y_ref: Reference GDP for approach 7 (computed once on full dataset)
+        trends_loess: CountryTrendsLoess for approaches 6-7 (LOESS detrending)
     """
     results = {
         'approach0': fit_approach0_no_detrending(data),
         'approach1': fit_approach1_temperature_detrending(data, trends),
         'approach2': fit_approach2_growth_detrending(data, trends),
         'approach3': fit_approach3_combined_detrending(data, trends),
-        'approach5': fit_approach5_combined_quadratic_detrending(data, trends),
+        'approach4': fit_approach4_combined_quadratic_detrending(data, trends),
     }
 
     # Add approach 7 if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
-        results['approach7'] = fit_approach7_precomputed_k_quadratic(
+        results['approach5'] = fit_approach5_precomputed_k_quadratic(
             data, trends_with_k, year_means
         )
 
     # Add approaches 9 and 10 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
-        results['approach9'] = fit_approach9_precomputed_k_loess(
+        results['approach6'] = fit_approach6_precomputed_k_loess(
             data, trends_loess, year_means
         )
 
         # Add approach 10 if Y_ref is provided
         if Y_ref is not None:
-            results['approach10'] = fit_approach10_gdp_response_loess(
+            results['approach7'] = fit_approach7_gdp_response_loess(
                 data, trends_loess, year_means, Y_ref
             )
 

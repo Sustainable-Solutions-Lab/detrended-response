@@ -32,10 +32,10 @@ from src.fitting import (
     fit_approach1_temperature_detrending,
     fit_approach2_growth_detrending,
     fit_approach3_combined_detrending,
-    fit_approach5_combined_quadratic_detrending,
-    fit_approach7_precomputed_k_quadratic,
-    fit_approach9_precomputed_k_loess,
-    fit_approach10_gdp_response_loess,
+    fit_approach4_combined_quadratic_detrending,
+    fit_approach5_precomputed_k_quadratic,
+    fit_approach6_precomputed_k_loess,
+    fit_approach7_gdp_response_loess,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -126,18 +126,18 @@ def main():
     trends = compute_country_trends(data)
     print("      Done.")
 
-    # Compute year means and country trends with k for Approach 7
+    # Compute year means and country trends with k for Approach 5
     print("\n[3/10] Computing year means k[t] and adjusted country trends...")
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
-    # Compute LOESS trends for Approaches 9 and 10
+    # Compute LOESS trends for Approaches 6 and 7
     print(f"\n[4/10] Computing LOESS trends (window={args.loess_window} years)...")
     trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
     print("      Done.")
 
-    # Compute Y_ref for Approach 10 (based on most recent year)
+    # Compute Y_ref for Approach 7 (based on most recent year)
     max_year = data.year_range[1]
     mask_recent = data.year == max_year
     Y_ref = np.mean(data.pcGDP[mask_recent])
@@ -157,16 +157,16 @@ def main():
     print("\n[7/10] Fitting Approaches 2, 3 & 5: GDP/combined detrending...")
     results['approach2'] = fit_approach2_growth_detrending(data, trends)
     results['approach3'] = fit_approach3_combined_detrending(data, trends)
-    results['approach5'] = fit_approach5_combined_quadratic_detrending(data, trends)
+    results['approach4'] = fit_approach4_combined_quadratic_detrending(data, trends)
     print("      Done.")
 
-    print("\n[8/10] Fitting Approach 7: Precomputed k (quadratic)...")
-    results['approach7'] = fit_approach7_precomputed_k_quadratic(data, trends_with_k, year_means)
+    print("\n[8/10] Fitting Approach 5: Precomputed k (quadratic)...")
+    results['approach5'] = fit_approach5_precomputed_k_quadratic(data, trends_with_k, year_means)
     print("      Done.")
 
-    print("\n[9/10] Fitting Approaches 9 & 10: LOESS detrending...")
-    results['approach9'] = fit_approach9_precomputed_k_loess(data, trends_loess, year_means)
-    results['approach10'] = fit_approach10_gdp_response_loess(data, trends_loess, year_means, Y_ref)
+    print("\n[9/10] Fitting Approaches 6 & 7: LOESS detrending...")
+    results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
+    results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
     print("      Done.")
 
     # Print summary
@@ -179,7 +179,7 @@ def main():
         print("-" * 50)
         print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
         print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
-        # Print beta for Approach 10
+        # Print beta for Approach 7
         if hasattr(r, 'beta'):
             print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
             print(f"  Y_ref = {r.Y_ref:.2f}")

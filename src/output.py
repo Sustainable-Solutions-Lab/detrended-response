@@ -40,10 +40,10 @@ APPROACH_COLORS = {
     'approach1': 'green',
     'approach2': 'blue',
     'approach3': 'red',
+    'approach4': 'blue',
     'approach5': 'blue',
-    'approach7': 'blue',
-    'approach9': 'orange',
-    'approach10': 'brown',
+    'approach6': 'orange',
+    'approach7': 'brown',
 }
 
 # Line style scheme for approaches
@@ -57,10 +57,10 @@ APPROACH_LINESTYLES = {
     'approach1': ':',
     'approach2': '--',
     'approach3': '-',
-    'approach5': '-',
-    'approach7': '-.',
-    'approach9': (0, (5, 1)),   # densely dashed
-    'approach10': (0, (5, 1)),  # densely dashed
+    'approach4': '-',
+    'approach5': '-.',
+    'approach6': (0, (5, 1)),   # densely dashed
+    'approach7': (0, (5, 1)),  # densely dashed
 }
 
 
@@ -131,7 +131,7 @@ def save_summary_table(
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
-        # Add beta for Approach 8
+        # Add beta for Approach 7
         if hasattr(result, 'beta'):
             row['beta'] = result.beta
             row['beta_SE'] = result.beta_se
@@ -176,7 +176,7 @@ def save_summary_table(
             f.write("-" * 50 + "\n")
             f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
             f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
-            # Add beta for Approach 8
+            # Add beta for Approach 7
             if hasattr(result, 'beta'):
                 f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
                 f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
@@ -332,28 +332,28 @@ def plot_temperature_response(
     input_file: str = None
 ) -> None:
     """Plot h(T) - h(T*) for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-5 (basic approaches)
+    # Plot 1: Approaches 0-4 (basic approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach5'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4'],
         filename='temperature_response_all.png',
-        title_suffix='Approaches 0-5',
+        title_suffix='Approaches 0-4',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 7 (precomputed k approaches)
+    # Plot 2: Approaches 0, 5 (precomputed k approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach7'],
+        approaches=['approach0', 'approach5'],
         filename='temperature_response_precomputed_k.png',
-        title_suffix='Approaches 0, 7',
+        title_suffix='Approaches 0, 5',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (7 vs 9, 10)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach7', 'approach9', 'approach10'],
+        approaches=['approach5', 'approach6', 'approach7'],
         filename='temperature_response_loess.png',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -402,28 +402,28 @@ def plot_temperature_derivative(
     input_file: str = None
 ) -> None:
     """Plot dh/dT for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-5 (basic approaches)
+    # Plot 1: Approaches 0-4 (basic approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach5'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4'],
         filename='temperature_derivative_all.png',
-        title_suffix='Approaches 0-5',
+        title_suffix='Approaches 0-4',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 7 (precomputed k approaches)
+    # Plot 2: Approaches 0, 5 (precomputed k approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach7'],
+        approaches=['approach0', 'approach5'],
         filename='temperature_derivative_precomputed_k.png',
-        title_suffix='Approaches 0, 7',
+        title_suffix='Approaches 0, 5',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (7 vs 9, 10)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach7', 'approach9', 'approach10'],
+        approaches=['approach5', 'approach6', 'approach7'],
         filename='temperature_derivative_loess.png',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -525,8 +525,8 @@ def plot_year_effects(
     fig, ax = plt.subplots(figsize=(12, 6))
 
     for name, result in results.items():
-        # Skip approaches that use the same k values as approach7 (precomputed year means)
-        if name in ('approach7', 'approach9', 'approach10'):
+        # Skip approaches that use the same k values as approach5 (precomputed year means)
+        if name in ('approach5', 'approach6', 'approach7'):
             continue
 
         # k is stored with actual year as key
@@ -621,7 +621,7 @@ def plot_gdp_scaling_factor(
     Y_range: tuple = None,
     input_file: str = None,
 ) -> None:
-    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approaches 8 and 10.
+    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 7.
 
     This shows how the temperature response is scaled by per capita GDP level.
     Countries with lower GDP have larger scaling factors (more affected).
@@ -637,7 +637,7 @@ def plot_gdp_scaling_factor(
     # Collect panels to plot
     panels = []
     for key, title, color in [
-        ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
+        ('approach7', 'GDP-Response LOESS (Approach 7)', 'brown'),
     ]:
         if key in results:
             r = results[key]
@@ -741,8 +741,8 @@ def save_all_outputs(
     plot_year_effects(results, data, output_dir, input_file=input_file)
     plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
 
-    # Plot GDP scaling factor for Approaches 8 and 10
-    if 'approach10' in results:
+    # Plot GDP scaling factor for Approach 7
+    if 'approach7' in results:
         plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
     print("All outputs saved.")
@@ -1646,7 +1646,7 @@ def plot_bootstrap_gdp_scaling(
     data: AnalysisData = None,
     input_file: str = None,
 ) -> None:
-    """Plot GDP scaling factor with bootstrap uncertainty bands for Approaches 8 and 10.
+    """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 7.
 
     Shows the spread of (Y/Y_ref)^(-beta) curves across bootstrap samples.
     Creates a two-panel figure when both approaches are present.
@@ -1663,7 +1663,7 @@ def plot_bootstrap_gdp_scaling(
     # Collect panels to plot
     panels = []
     for key, title, color in [
-        ('approach10', 'GDP-Response LOESS (Approach 10)', 'brown'),
+        ('approach7', 'GDP-Response LOESS (Approach 7)', 'brown'),
     ]:
         if key in results:
             result = results[key]
@@ -1775,14 +1775,14 @@ def save_all_bootstrap_plots(
     - plot_bootstrap_temperature_response() for approaches 0-5 and 0,6,7
     - plot_bootstrap_temperature_derivative() for approaches 0-5 and 0,6,7
     - plot_bootstrap_T_optimal_comparison() for all approaches
-    - plot_bootstrap_gdp_scaling() for Approaches 8 and 10 (if Y_ref provided)
+    - plot_bootstrap_gdp_scaling() for Approach 7 (if Y_ref provided)
 
     Args:
         results: Dict of BootstrapResult for each approach
         all_stats: Dict mapping approach key to statistics dict
         output_dir: Directory to save plots
         T_range: Temperature range for response plots
-        Y_ref: Reference GDP for Approach 8 GDP scaling plot
+        Y_ref: Reference GDP for Approach 7 GDP scaling plot
         data: AnalysisData for adding data density histograms (optional)
         input_file: Path to input data file (for annotation)
     """
@@ -1794,8 +1794,8 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_response(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach5', 'approach7',
-                    'approach9', 'approach10'],
+                    'approach4', 'approach5',
+                    'approach6', 'approach7'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
         data=data,
@@ -1807,8 +1807,8 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach5', 'approach7',
-                    'approach9', 'approach10'],
+                    'approach4', 'approach5',
+                    'approach6', 'approach7'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
@@ -1819,8 +1819,8 @@ def save_all_bootstrap_plots(
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_T_optimal_comparison.png")
 
-    # GDP scaling factor with bootstrap uncertainty (Approaches 8 and 10)
-    if Y_ref is not None and 'approach10' in results:
+    # GDP scaling factor with bootstrap uncertainty (Approach 7)
+    if Y_ref is not None and 'approach7' in results:
         plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file,
                                    filename='bootstrap_gdp_scaling.pdf')
         print("      Saved bootstrap_gdp_scaling.pdf")

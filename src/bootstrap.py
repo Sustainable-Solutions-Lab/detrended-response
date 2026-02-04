@@ -68,7 +68,7 @@ class BootstrapResult:
     n_bootstrap: int
     n_successful: int  # Number of successful fits
 
-    # Approach 8 and 10 specific (optional)
+    # Approach 7 specific (optional)
     beta_point: float = None       # GDP scaling exponent
     beta_samples: np.ndarray = None  # Bootstrap samples for beta
 
@@ -156,8 +156,8 @@ def run_bootstrap(
     1. Sample M countries with replacement
     2. Create bootstrap dataset
     3. Recompute country trends for bootstrap sample
-    4. Fit all approaches (including Approach 8, 9, 10 if Y_ref provided)
-    5. Store h1, h2, T_optimal, R², Total R², and beta (for Approaches 8 and 10)
+    4. Fit all approaches (including Approach 7 if Y_ref provided)
+    5. Store h1, h2, T_optimal, R², Total R², and beta (for Approach 7)
 
     Args:
         data: Original AnalysisData
@@ -166,7 +166,7 @@ def run_bootstrap(
         n_bootstrap: Number of bootstrap iterations
         random_seed: Random seed for reproducibility
         verbose: Print progress messages
-        Y_ref: Reference GDP for Approach 8 and 10 (computed once on full dataset)
+        Y_ref: Reference GDP for Approach 7 (computed once on full dataset)
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
 
@@ -189,7 +189,7 @@ def run_bootstrap(
     T_optimal_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
-    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8 and 10
+    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 7
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -218,14 +218,14 @@ def run_bootstrap(
             # Recompute country trends for bootstrap sample
             boot_trends = compute_country_trends(boot_data)
 
-            # Compute year means and adjusted trends for approaches 6, 7, 9, 10
+            # Compute year means and adjusted trends for approaches 5, 6, 7
             boot_year_means = compute_year_means(boot_data)
             boot_trends_with_k = compute_country_trends_with_k(boot_data, boot_year_means)
 
-            # Compute LOESS trends for approaches 9 and 10
+            # Compute LOESS trends for approaches 6 and 7
             boot_trends_loess = compute_country_trends_loess(boot_data, boot_year_means, loess_window)
 
-            # Fit all approaches (pass Y_ref for Approach 8 and 10)
+            # Fit all approaches (pass Y_ref for Approach 7)
             boot_results = fit_all_approaches(
                 boot_data, boot_trends,
                 trends_with_k=boot_trends_with_k,
@@ -241,7 +241,7 @@ def run_bootstrap(
                 T_optimal_samples[name][b] = r.T_optimal
                 r_squared_samples[name][b] = r.r_squared
                 total_r_squared_samples[name][b] = r.total_r_squared
-                # Store beta for Approach 8
+                # Store beta for Approach 7
                 if hasattr(r, 'beta'):
                     beta_samples[name][b] = r.beta
 
@@ -277,7 +277,7 @@ def run_bootstrap(
     results = {}
     for name in approach_names:
         orig = original_results[name]
-        # Get beta point estimate if available (Approach 8 and 10)
+        # Get beta point estimate if available (Approach 7)
         beta_point = getattr(orig, 'beta', None)
         results[name] = BootstrapResult(
             approach=orig.approach,
@@ -342,7 +342,7 @@ def compute_bootstrap_statistics(
     stats['r_squared'] = get_percentile_stats(result.r_squared_samples, result.r_squared_point)
     stats['total_r_squared'] = get_percentile_stats(result.total_r_squared_samples, result.total_r_squared_point)
 
-    # Add beta statistics if present (Approach 8)
+    # Add beta statistics if present (Approach 7)
     if result.beta_point is not None and result.beta_samples is not None:
         stats['beta'] = get_percentile_stats(result.beta_samples, result.beta_point)
 
