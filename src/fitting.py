@@ -71,90 +71,18 @@ def compute_gdp_scaling(pcGDP: np.ndarray, Y_ref: float, beta: float) -> np.ndar
     return (pcGDP / Y_ref) ** (-beta)
 
 
-def compute_T_optimal_inverse_T(h1: float, h2: float) -> float:
-    """Compute optimal temperature for mixed linear/inverse-T response.
-
-    For h(T) = h1*T + h2/(273.15+T), the derivative is:
-    dh/dT = h1 - h2/(273.15+T)²
-
-    Setting dh/dT = 0: (273.15+T)² = h2/h1, so T_opt = sqrt(h2/h1) - 273.15.
-    Requires h2/h1 > 0 for a real solution.
-
-    Second derivative: d²h/dT² = 2*h2/(273.15+T)³. For a maximum, need h2 < 0.
+def compute_rms_h(h1: float, h2: float, temp: np.ndarray) -> float:
+    """Compute RMS of climate response h(T) = h1*T + h2*T².
 
     Args:
-        h1: Coefficient of T
-        h2: Coefficient of 1/(273.15+T)
-
-    Returns:
-        Optimal temperature in °C, or np.nan if no valid maximum
-    """
-    if h1 == 0:
-        return np.nan
-    ratio = h2 / h1
-    if ratio <= 0:
-        return np.nan  # No real solution
-    T_opt = np.sqrt(ratio) - 273.15
-    # Check second derivative is negative (maximum)
-    T_K = 273.15 + T_opt
-    d2h = 2 * h2 / (T_K ** 3)
-    if d2h >= 0:
-        return np.nan
-    return T_opt
-
-
-def eval_h(h1: float, h2: float, temp: np.ndarray, h_form: str = 'quadratic') -> np.ndarray:
-    """Evaluate h(T) for the given functional form.
-
-    Args:
-        h1: First coefficient
-        h2: Second coefficient
-        temp: Temperature array (°C)
-        h_form: 'quadratic' for h1*T + h2*T², 'inverse_T' for h1*T + h2/(273.15+T)
-
-    Returns:
-        Array of h(T) values
-    """
-    if h_form == 'inverse_T':
-        u = 1.0 / (273.15 + temp)
-        return h1 * temp + h2 * u
-    else:
-        return h1 * temp + h2 * temp ** 2
-
-
-def eval_dh_dT(h1: float, h2: float, temp: np.ndarray, h_form: str = 'quadratic') -> np.ndarray:
-    """Evaluate dh/dT for the given functional form.
-
-    Args:
-        h1: First coefficient
-        h2: Second coefficient
-        temp: Temperature array (°C)
-        h_form: 'quadratic' or 'inverse_T'
-
-    Returns:
-        Array of dh/dT values
-    """
-    if h_form == 'inverse_T':
-        u = 1.0 / (273.15 + temp)
-        # dh/dT = h1 - h2/(273.15+T)² = h1 - h2*u²
-        return h1 - h2 * u ** 2
-    else:
-        return h1 + 2 * h2 * temp
-
-
-def compute_rms_h(h1: float, h2: float, temp: np.ndarray, h_form: str = 'quadratic') -> float:
-    """Compute RMS of climate response h(T).
-
-    Args:
-        h1: First coefficient
-        h2: Second coefficient
+        h1: Linear temperature coefficient
+        h2: Quadratic temperature coefficient
         temp: Temperature array
-        h_form: 'quadratic' or 'inverse_T'
 
     Returns:
         RMS of h(T) across all observations
     """
-    h_T = eval_h(h1, h2, temp, h_form)
+    h_T = h1 * temp + h2 * temp ** 2
     return np.sqrt(np.mean(h_T ** 2))
 
 
@@ -258,7 +186,6 @@ class FitResult:
     rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
     rms_h: float = None          # RMS of h(T) - climate response magnitude
     imbalance_ratio: float = None  # rms_imbalance / rms_h
-    h_form: str = 'quadratic'    # Functional form: 'quadratic' for h1*T+h2*T², 'inverse_T' for h1/(273.15+T)+h2/(273.15+T)²
 
     # Variance decomposition (replaces old var_frac/cov_frac fields)
     var_decomp: dict = None
@@ -1537,213 +1464,6 @@ def fit_approach10_gdp_response_loess(
     )
 
 
-def fit_approach11_precomputed_k_quadratic_inverse_T(
-    data: AnalysisData, trends: CountryTrends, year_means: dict
-) -> FitResult:
-    """Approach 11: Pre-computed k[t] with quadratic trends and mixed h(T).
-
-    Like Approach 7, but with mixed linear/inverse-T climate response:
-    h(T) = h1*T + h2/(273.15+T)
-
-    1. k[t] = mean(dy_i[t]) is computed first
-    2. Country trends j_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² are fit to dy_i[t] - k[t]
-    3. Regressors are detrended: T* = T - T_trend, u* = 1/(273.15+T) - 1/(273.15+T_trend)
-    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*u*
-    """
-    # Compute temperature trend for detrending
-    T_trend = np.zeros(data.n_obs)
-    j_trend = np.zeros(data.n_obs)
-    k_values = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
-        c = data.country_idx[i]
-        t = data.time[i]
-        yr = data.year[i]
-        T_trend[i] = trends.T0_quad[c] + trends.T1_quad[c] * t + trends.T2_quad[c] * t * t
-        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
-        k_values[i] = year_means[yr]
-
-    # Detrended regressors
-    T_star = data.temp - T_trend
-    u_full = 1.0 / (273.15 + data.temp)
-    u_trend = 1.0 / (273.15 + T_trend)
-    u_star = u_full - u_trend
-
-    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
-    y = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
-        c = data.country_idx[i]
-        t = data.time[i]
-        yr = data.year[i]
-        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
-        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
-
-    # Design matrix: [T*, u*] - no year fixed effects
-    X = np.column_stack([T_star, u_star])
-
-    # Fit OLS
-    beta_ols, residuals, sigma_sq, cov = fit_ols(y, X)
-
-    # Extract coefficients
-    h1 = beta_ols[0]
-    h2 = beta_ols[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
-
-    # Year effects are pre-computed year means
-    k = dict(year_means)
-
-    # Fit statistics
-    n_params = 2  # h1, h2
-    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
-
-    # Total R² (variance explained in original dy)
-    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
-
-    # Optimal temperature
-    T_optimal = compute_T_optimal_inverse_T(h1, h2)
-
-    # Compute RMS imbalance
-    h_T_trend = eval_h(h1, h2, T_trend, 'inverse_T')
-    imbalance = h_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
-
-    # Compute RMS of h(T)
-    rms_h_val = compute_rms_h(h1, h2, data.temp, 'inverse_T')
-    imb_ratio = rms_imb / rms_h_val if rms_h_val > 0 else np.nan
-
-    # Compute variance decomposition
-    # h_Tstar uses the detrended signal we regress on: h1*T_star + h2*u_star
-    h_full = eval_h(h1, h2, data.temp, 'inverse_T')
-    h_Ttrend = eval_h(h1, h2, T_trend, 'inverse_T')
-    h_Tstar = h1 * T_star + h2 * u_star
-    h_cross = h_full - h_Tstar - h_Ttrend
-    components = {
-        'h_Tstar': h_Tstar, 'h_Ttrend': h_Ttrend, 'h_cross': h_cross,
-        'j': j_trend, 'k': k_values,
-    }
-    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
-
-    return FitResult(
-        approach="Precomputed k Quadratic Inverse-T",
-        h1=h1,
-        h2=h2,
-        h1_se=h1_se,
-        h2_se=h2_se,
-        k=k,
-        r_squared=r_sq,
-        adj_r_squared=adj_r_sq,
-        rmse=rmse,
-        n_obs=data.n_obs,
-        n_params=n_params,
-        residuals=residuals,
-        T_optimal=T_optimal,
-        total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h_val,
-        imbalance_ratio=imb_ratio,
-        h_form='inverse_T',
-        var_decomp=var_decomp,
-    )
-
-
-def fit_approach12_precomputed_k_loess_inverse_T(
-    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
-) -> FitResult:
-    """Approach 12: Pre-computed k[t] with LOESS trends and mixed h(T).
-
-    Like Approach 9, but with mixed linear/inverse-T climate response:
-    h(T) = h1*T + h2/(273.15+T)
-
-    1. k[t] = mean(dy_i[t]) is computed first
-    2. Country trends j_i(t) are LOESS-smoothed (dy_i[t] - k[t])
-    3. Regressors are detrended: T* = T - T_loess, u* = 1/(273.15+T) - 1/(273.15+T_loess)
-    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*u*
-    """
-    # Temperature trend from LOESS
-    T_trend = trends_loess.T_loess
-    j_trend = trends_loess.y_loess
-    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
-
-    # Detrended regressors
-    T_star = data.temp - T_trend
-    u_full = 1.0 / (273.15 + data.temp)
-    u_trend = 1.0 / (273.15 + T_trend)
-    u_star = u_full - u_trend
-
-    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
-    y = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
-        yr = data.year[i]
-        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
-
-    # Design matrix: [T*, u*] - no year fixed effects
-    X = np.column_stack([T_star, u_star])
-
-    # Fit OLS
-    beta_ols, residuals, sigma_sq, cov = fit_ols(y, X)
-
-    # Extract coefficients
-    h1 = beta_ols[0]
-    h2 = beta_ols[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
-
-    # Year effects are pre-computed year means
-    k = dict(year_means)
-
-    # Fit statistics
-    n_params = 2  # h1, h2
-    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
-
-    # Total R² (variance explained in original dy)
-    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
-
-    # Optimal temperature
-    T_optimal = compute_T_optimal_inverse_T(h1, h2)
-
-    # Compute RMS imbalance
-    h_T_trend = eval_h(h1, h2, T_trend, 'inverse_T')
-    imbalance = h_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
-
-    # Compute RMS of h(T)
-    rms_h_val = compute_rms_h(h1, h2, data.temp, 'inverse_T')
-    imb_ratio = rms_imb / rms_h_val if rms_h_val > 0 else np.nan
-
-    # Compute variance decomposition
-    h_full = eval_h(h1, h2, data.temp, 'inverse_T')
-    h_Ttrend = eval_h(h1, h2, T_trend, 'inverse_T')
-    h_Tstar = h1 * T_star + h2 * u_star
-    h_cross = h_full - h_Tstar - h_Ttrend
-    components = {
-        'h_Tstar': h_Tstar, 'h_Ttrend': h_Ttrend, 'h_cross': h_cross,
-        'j': j_trend, 'k': k_values,
-    }
-    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
-
-    return FitResult(
-        approach="Precomputed k LOESS Inverse-T",
-        h1=h1,
-        h2=h2,
-        h1_se=h1_se,
-        h2_se=h2_se,
-        k=k,
-        r_squared=r_sq,
-        adj_r_squared=adj_r_sq,
-        rmse=rmse,
-        n_obs=data.n_obs,
-        n_params=n_params,
-        residuals=residuals,
-        T_optimal=T_optimal,
-        total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h_val,
-        imbalance_ratio=imb_ratio,
-        h_form='inverse_T',
-        var_decomp=var_decomp,
-    )
-
-
 def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
@@ -1893,8 +1613,6 @@ def fit_all_approaches(
         'approach8': GDP-dependent response (if Y_ref provided)
         'approach9': Pre-computed k with LOESS trends (if trends_loess provided)
         'approach10': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
-        'approach11': Pre-computed k with quadratic trends, inverse-T h(T) (if trends_with_k provided)
-        'approach12': Pre-computed k with LOESS trends, inverse-T h(T) (if trends_loess provided)
 
     Args:
         data: AnalysisData object
@@ -1913,15 +1631,12 @@ def fit_all_approaches(
         'approach5': fit_approach5_combined_quadratic_detrending(data, trends),
     }
 
-    # Add approaches 6, 7, and 11 if trends_with_k and year_means are provided
+    # Add approaches 6 and 7 if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
         results['approach6'] = fit_approach6_precomputed_k_linear(
             data, trends_with_k, year_means
         )
         results['approach7'] = fit_approach7_precomputed_k_quadratic(
-            data, trends_with_k, year_means
-        )
-        results['approach11'] = fit_approach11_precomputed_k_quadratic_inverse_T(
             data, trends_with_k, year_means
         )
 
@@ -1931,12 +1646,9 @@ def fit_all_approaches(
                 data, trends_with_k, year_means, Y_ref
             )
 
-    # Add approaches 9, 10, and 12 if trends_loess and year_means are provided
+    # Add approaches 9 and 10 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         results['approach9'] = fit_approach9_precomputed_k_loess(
-            data, trends_loess, year_means
-        )
-        results['approach12'] = fit_approach12_precomputed_k_loess_inverse_T(
             data, trends_loess, year_means
         )
 

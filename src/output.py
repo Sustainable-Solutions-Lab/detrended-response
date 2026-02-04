@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict
 from .data_loader import AnalysisData
 from .detrending import CountryTrends
-from .fitting import FitResult, eval_h, eval_dh_dT, compute_T_optimal_inverse_T
+from .fitting import FitResult
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -47,8 +47,6 @@ APPROACH_COLORS = {
     'approach8': 'purple',
     'approach9': 'orange',
     'approach10': 'brown',
-    'approach11': 'cyan',
-    'approach12': 'magenta',
 }
 
 # Line style scheme for approaches
@@ -69,8 +67,6 @@ APPROACH_LINESTYLES = {
     'approach8': '-.',
     'approach9': (0, (5, 1)),   # densely dashed
     'approach10': (0, (5, 1)),  # densely dashed
-    'approach11': '-.',
-    'approach12': (0, (5, 1)),  # densely dashed
 }
 
 
@@ -130,7 +126,6 @@ def save_summary_table(
             'h1_SE': result.h1_se,
             'h2': result.h2,
             'h2_SE': result.h2_se,
-            'h_form': getattr(result, 'h_form', 'quadratic'),
             'T_optimal': result.T_optimal,
             'R_squared': result.r_squared,
             'Total_R_squared': result.total_r_squared,
@@ -187,9 +182,6 @@ def save_summary_table(
             f.write("-" * 50 + "\n")
             f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
             f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
-            h_form = getattr(result, 'h_form', 'quadratic')
-            if h_form != 'quadratic':
-                f.write(f"  h_form = {h_form}\n")
             # Add beta for Approach 8
             if hasattr(result, 'beta'):
                 f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
@@ -305,13 +297,11 @@ def _plot_temperature_response_subset(
         if name not in results:
             continue
         r = results[name]
-        h_form = getattr(r, 'h_form', 'quadratic')
-        h_T = eval_h(r.h1, r.h2, T, h_form)
+        h_T = r.h1 * T + r.h2 * T ** 2
 
         # h(T_opt) evaluated at optimal temperature
-        if not np.isnan(r.T_optimal):
-            T_opt = r.T_optimal
-            h_T_opt = eval_h(r.h1, r.h2, np.array([T_opt]), h_form)[0]
+        if not np.isnan(r.T_optimal) and r.h2 != 0:
+            h_T_opt = -r.h1 ** 2 / (4 * r.h2)
         else:
             h_T_opt = 0
 
@@ -375,15 +365,6 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 4: Quadratic vs Inverse-T h(T) comparison
-    _plot_temperature_response_subset(
-        results, output_dir,
-        approaches=['approach7', 'approach11', 'approach9', 'approach12'],
-        filename='temperature_response_inverse_T.png',
-        title_suffix='Quadratic vs Inverse-T h(T)',
-        T_range=T_range,
-        input_file=input_file
-    )
 
 
 def _plot_temperature_derivative_subset(
@@ -400,8 +381,7 @@ def _plot_temperature_derivative_subset(
         if name not in results:
             continue
         r = results[name]
-        h_form = getattr(r, 'h_form', 'quadratic')
-        dh_dT = eval_dh_dT(r.h1, r.h2, T, h_form)
+        dh_dT = r.h1 + 2 * r.h2 * T
         label = f"{r.approach}"
         ax.plot(T, dh_dT, color=APPROACH_COLORS.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
@@ -452,15 +432,6 @@ def plot_temperature_derivative(
         approaches=['approach7', 'approach8', 'approach9', 'approach10'],
         filename='temperature_derivative_loess.png',
         title_suffix='Quadratic vs LOESS',
-        T_range=T_range,
-        input_file=input_file
-    )
-    # Plot 4: Quadratic vs Inverse-T h(T) comparison
-    _plot_temperature_derivative_subset(
-        results, output_dir,
-        approaches=['approach7', 'approach11', 'approach9', 'approach12'],
-        filename='temperature_derivative_inverse_T.png',
-        title_suffix='Quadratic vs Inverse-T h(T)',
         T_range=T_range,
         input_file=input_file
     )
@@ -565,7 +536,7 @@ def plot_year_effects(
 
     for name, result in results.items():
         # Skip approaches that use the same k values as approach6 (precomputed year means)
-        if name in ('approach7', 'approach8', 'approach9', 'approach10', 'approach11', 'approach12'):
+        if name in ('approach7', 'approach8', 'approach9', 'approach10'):
             continue
 
         # k is stored with actual year as key
@@ -887,11 +858,6 @@ def save_bootstrap_summary_txt(
             f.write(f"    IQR:             [{stats['h2']['p25']:10.6f}, {stats['h2']['p75']:10.6f}]\n")
             f.write(f"    Std:             {stats['h2']['std']:10.6f}\n")
 
-            # Note functional form for inverse-T approaches
-            if result.h_form != 'quadratic':
-                f.write(f"  h_form: {result.h_form}\n")
-                f.write(f"    (h1 is coefficient of T, h2 is coefficient of 1/(273.15+T))\n")
-
             # beta (for approaches where it's a free parameter)
             if result.beta_point is not None and 'beta' in stats:
                 f.write(f"  beta (GDP scaling exponent):\n")
@@ -995,9 +961,6 @@ def save_bootstrap_summary_table(
             'h2_p75': stats['h2']['p75'],
             'h2_p95': stats['h2']['p95'],
             'h2_std': stats['h2']['std'],
-
-            # Functional form
-            'h_form': result.h_form,
 
             # T_optimal statistics
             'T_optimal_point': result.T_optimal_point,
@@ -1104,8 +1067,6 @@ def compute_h_response_uncertainty_bands(
                 np.full_like(T_range, np.nan),
                 np.full_like(T_range, np.nan))
 
-    h_form = getattr(result, 'h_form', 'quadratic')
-
     # Compute h(T) - h(T*) for each bootstrap sample
     n_samples = len(h1_valid)
     n_T = len(T_range)
@@ -1114,16 +1075,11 @@ def compute_h_response_uncertainty_bands(
     for i in range(n_samples):
         h1 = h1_valid[i]
         h2 = h2_valid[i]
-        h_T = eval_h(h1, h2, T_range, h_form)
+        h_T = h1 * T_range + h2 * T_range ** 2
         # Evaluate h at T_optimal
-        if h_form == 'inverse_T':
-            T_opt = compute_T_optimal_inverse_T(h1, h2)
-        elif h2 != 0:
+        if h2 != 0:
             T_opt = -h1 / (2 * h2)
-        else:
-            T_opt = np.nan
-        if not np.isnan(T_opt):
-            h_T_opt = eval_h(h1, h2, np.array([T_opt]), h_form)[0]
+            h_T_opt = -h1 ** 2 / (4 * h2)
         else:
             h_T_opt = 0
         h_relative_samples[i, :] = h_T - h_T_opt
@@ -1155,17 +1111,9 @@ def plot_bootstrap_parameter_distributions(
         output_dir: Directory to save the plot
         approach_key: Key like 'approach0' for filename
     """
-    h_form = getattr(result, 'h_form', 'quadratic')
-    if h_form == 'inverse_T':
-        h1_label = 'h₁ (1/T Coefficient)'
-        h2_label = 'h₂ (1/T² Coefficient)'
-    else:
-        h1_label = 'h₁ (Linear Coefficient)'
-        h2_label = 'h₂ (Quadratic Coefficient)'
-
     params = [
-        ('h1', result.h1_samples, result.h1_point, stats['h1'], h1_label),
-        ('h2', result.h2_samples, result.h2_point, stats['h2'], h2_label),
+        ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
+        ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (Quadratic Coefficient)'),
         ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
     ]
 
@@ -1377,11 +1325,9 @@ def plot_bootstrap_temperature_response(
         # Compute point estimate response
         h1_point = result.h1_point
         h2_point = result.h2_point
-        h_form = getattr(result, 'h_form', 'quadratic')
-        h_T_point = eval_h(h1_point, h2_point, T, h_form)
-        T_opt_point = result.T_optimal_point
-        if not np.isnan(T_opt_point):
-            h_T_opt_point = eval_h(h1_point, h2_point, np.array([T_opt_point]), h_form)[0]
+        h_T_point = h1_point * T + h2_point * T ** 2
+        if h2_point != 0:
+            h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
         else:
             h_T_opt_point = 0
         h_point = h_T_point - h_T_opt_point
@@ -1568,8 +1514,6 @@ def compute_derivative_uncertainty_bands(
                 np.full_like(T_range, np.nan),
                 np.full_like(T_range, np.nan))
 
-    h_form = getattr(result, 'h_form', 'quadratic')
-
     # Compute dh/dT for each bootstrap sample
     n_samples = len(h1_valid)
     n_T = len(T_range)
@@ -1578,7 +1522,7 @@ def compute_derivative_uncertainty_bands(
     for i in range(n_samples):
         h1 = h1_valid[i]
         h2 = h2_valid[i]
-        dh_samples[i, :] = eval_dh_dT(h1, h2, T_range, h_form)
+        dh_samples[i, :] = h1 + 2 * h2 * T_range
 
     # Compute percentiles at each temperature
     dh_bands = []
@@ -1635,8 +1579,7 @@ def plot_bootstrap_temperature_derivative(
         # Compute point estimate derivative
         h1_point = result.h1_point
         h2_point = result.h2_point
-        h_form = getattr(result, 'h_form', 'quadratic')
-        dh_point = eval_dh_dT(h1_point, h2_point, T, h_form)
+        dh_point = h1_point + 2 * h2_point * T
 
         plot_data[name] = {
             'dh_lower': dh_lower,
@@ -1867,7 +1810,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
-                    'approach9', 'approach10', 'approach11', 'approach12'],
+                    'approach9', 'approach10'],
         filename='bootstrap_temperature_response.pdf',
         T_range=T_range,
         data=data,
@@ -1880,7 +1823,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach6', 'approach7', 'approach8',
-                    'approach9', 'approach10', 'approach11', 'approach12'],
+                    'approach9', 'approach10'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

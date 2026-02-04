@@ -72,9 +72,6 @@ class BootstrapResult:
     beta_point: float = None       # GDP scaling exponent
     beta_samples: np.ndarray = None  # Bootstrap samples for beta
 
-    # Functional form
-    h_form: str = 'quadratic'     # 'quadratic' or 'inverse_T'
-
     # Variance decomposition
     var_decomp_point: dict = None   # From original fit
     var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
@@ -282,8 +279,6 @@ def run_bootstrap(
         orig = original_results[name]
         # Get beta point estimate if available (Approach 8 and 10)
         beta_point = getattr(orig, 'beta', None)
-        # Get h_form (functional form)
-        h_form = getattr(orig, 'h_form', 'quadratic')
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
@@ -300,7 +295,6 @@ def run_bootstrap(
             n_successful=n_successful,
             beta_point=beta_point,
             beta_samples=beta_samples[name],
-            h_form=h_form,
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
         )
