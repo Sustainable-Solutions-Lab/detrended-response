@@ -142,11 +142,6 @@ def save_summary_table(
             row['beta'] = result.beta
             row['beta_SE'] = result.beta_se
             row['Y_ref'] = result.Y_ref
-        # Add variance decomposition fields
-        if result.var_decomp is not None:
-            for key, val in result.var_decomp.items():
-                if isinstance(val, (int, float)):
-                    row[f'vd_{key}'] = val
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -158,6 +153,44 @@ def save_summary_table(
             f.write(f"# Input data: {Path(input_file).name}\n")
         df.to_csv(f, index=False)
 
+    # Build variance decomposition DataFrame
+    # Decomposition: dy = [h(T)-h(Ttr)] + h(Ttr) + j + k + err
+    # All terms divided by Var(dy) so they sum to 1.0
+    vd_rows = []
+    for name, result in results.items():
+        va = result.var_attrib
+        if va is None:
+            continue
+        var_dy = va['var_dy']
+        if var_dy <= 0:
+            continue
+        vd_row = {
+            'Approach': result.approach,
+            'Var(dy)': var_dy,
+            'Var(h(T)-h(Ttr))/Var(dy)': va['Sigma_Delta_u_Delta_u'] / var_dy,
+            'Var(h(Ttr))/Var(dy)': va['Sigma_v_v'] / var_dy,
+            'Var(j)/Var(dy)': va['Sigma_j_j'] / var_dy,
+            'Var(k)/Var(dy)': va['Sigma_k_k'] / var_dy,
+            'Var(err)/Var(dy)': va['Sigma_epsilon_epsilon'] / var_dy,
+            '2Cov(h(T)-h(Ttr),h(Ttr))/Var(dy)': 2 * va['Sigma_Delta_u_v'] / var_dy,
+            '2Cov(h(T)-h(Ttr),j)/Var(dy)': 2 * va['Sigma_Delta_u_j'] / var_dy,
+            '2Cov(h(T)-h(Ttr),k)/Var(dy)': 2 * va['Sigma_Delta_u_k'] / var_dy,
+            '2Cov(h(T)-h(Ttr),err)/Var(dy)': 2 * va['Sigma_Delta_u_epsilon'] / var_dy,
+            '2Cov(h(Ttr),j)/Var(dy)': 2 * va['Sigma_v_j'] / var_dy,
+            '2Cov(h(Ttr),k)/Var(dy)': 2 * va['Sigma_v_k'] / var_dy,
+            '2Cov(h(Ttr),err)/Var(dy)': 2 * va['Sigma_v_epsilon'] / var_dy,
+            '2Cov(j,k)/Var(dy)': 2 * va['Sigma_j_k'] / var_dy,
+            '2Cov(j,err)/Var(dy)': 2 * va['Sigma_j_epsilon'] / var_dy,
+            '2Cov(k,err)/Var(dy)': 2 * va['Sigma_k_epsilon'] / var_dy,
+        }
+        # Sum check: all variance and covariance fractions should sum to 1.0
+        frac_sum = sum(val for key, val in vd_row.items()
+                       if key not in ('Approach', 'Var(dy)'))
+        vd_row['Sum'] = frac_sum
+        vd_rows.append(vd_row)
+
+    vd_df = pd.DataFrame(vd_rows)
+
     # For Excel, add input file info in a header row
     xlsx_path = output_dir / 'comparison_table.xlsx'
     with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
@@ -168,6 +201,9 @@ def save_summary_table(
             df.to_excel(writer, sheet_name='Sheet1', index=False, startrow=2)
         else:
             df.to_excel(writer, sheet_name='Sheet1', index=False)
+        # Write variance decomposition on separate sheet
+        if len(vd_rows) > 0:
+            vd_df.to_excel(writer, sheet_name='Variance Decomposition', index=False)
 
     # Also save as formatted text
     with open(output_dir / 'comparison_summary.txt', 'w') as f:
@@ -239,6 +275,46 @@ def save_summary_table(
                         if cov_key in vd:
                             f.write(f"    Cov frac {comp_names[i]}-{comp_names[j]} = {vd[cov_key]:.4f}\n")
                 f.write(f"    Sum check = {vd.get('sum_check', 0):.6f}\n")
+            # Variance attribution (5-component with covariance allocation)
+            if result.var_attrib is not None:
+                va = result.var_attrib
+                f.write(f"  Variance Attribution (5-component with covariance allocation):\n")
+                f.write(f"    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)\n")
+                f.write(f"    Components:\n")
+                f.write(f"      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]\n")
+                f.write(f"      v  = h(T_trend)         [baseline climate at trended T]\n")
+                f.write(f"      j  = j_i(t)             [country growth trends]\n")
+                f.write(f"      k  = k(t)               [time fixed effects]\n")
+                f.write(f"      ε  = residuals          [unexplained variation]\n")
+                f.write(f"    Var(Δy) = {va.get('var_dy', 0):.6f}\n")
+                f.write(f"    Contributions (C_x = row-sum of covariance matrix Σ):\n")
+                f.write(f"      C_Δu = {va.get('C_Delta_u', 0):+.6f}   (share: {va.get('s_Delta_u', 0):+.4f})\n")
+                f.write(f"      C_v  = {va.get('C_v', 0):+.6f}   (share: {va.get('s_v', 0):+.4f})\n")
+                f.write(f"      C_j  = {va.get('C_j', 0):+.6f}   (share: {va.get('s_j', 0):+.4f})\n")
+                f.write(f"      C_k  = {va.get('C_k', 0):+.6f}   (share: {va.get('s_k', 0):+.4f})\n")
+                f.write(f"      C_ε  = {va.get('C_epsilon', 0):+.6f}   (share: {va.get('s_epsilon', 0):+.4f})\n")
+                f.write(f"      Sum  = {va.get('sum_check', 0):.6f}   (should equal Var(Δy) exactly)\n")
+                f.write(f"    Orthogonality checks (residual vs fitted, should be ~0 for OLS):\n")
+                f.write(f"      Cov(ε, Δu) = {va.get('cov_epsilon_Delta_u', 0):+.6e}\n")
+                f.write(f"      Cov(ε, v)  = {va.get('cov_epsilon_v', 0):+.6e}\n")
+                f.write(f"      Cov(ε, j)  = {va.get('cov_epsilon_j', 0):+.6e}\n")
+                f.write(f"      Cov(ε, k)  = {va.get('cov_epsilon_k', 0):+.6e}\n")
+                f.write(f"    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):\n")
+                f.write(f"      Σ[Δu,Δu] = {va.get('Sigma_Delta_u_Delta_u', 0):+.6f}\n")
+                f.write(f"      Σ[Δu,v]  = {va.get('Sigma_Delta_u_v', 0):+.6f}\n")
+                f.write(f"      Σ[Δu,j]  = {va.get('Sigma_Delta_u_j', 0):+.6f}\n")
+                f.write(f"      Σ[Δu,k]  = {va.get('Sigma_Delta_u_k', 0):+.6f}\n")
+                f.write(f"      Σ[Δu,ε]  = {va.get('Sigma_Delta_u_epsilon', 0):+.6f}\n")
+                f.write(f"      Σ[v,v]   = {va.get('Sigma_v_v', 0):+.6f}\n")
+                f.write(f"      Σ[v,j]   = {va.get('Sigma_v_j', 0):+.6f}\n")
+                f.write(f"      Σ[v,k]   = {va.get('Sigma_v_k', 0):+.6f}\n")
+                f.write(f"      Σ[v,ε]   = {va.get('Sigma_v_epsilon', 0):+.6f}\n")
+                f.write(f"      Σ[j,j]   = {va.get('Sigma_j_j', 0):+.6f}\n")
+                f.write(f"      Σ[j,k]   = {va.get('Sigma_j_k', 0):+.6f}\n")
+                f.write(f"      Σ[j,ε]   = {va.get('Sigma_j_epsilon', 0):+.6f}\n")
+                f.write(f"      Σ[k,k]   = {va.get('Sigma_k_k', 0):+.6f}\n")
+                f.write(f"      Σ[k,ε]   = {va.get('Sigma_k_epsilon', 0):+.6f}\n")
+                f.write(f"      Σ[ε,ε]   = {va.get('Sigma_epsilon_epsilon', 0):+.6f}\n")
             f.write("\n")
 
 

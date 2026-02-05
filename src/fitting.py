@@ -165,6 +165,133 @@ def compute_variance_decomposition(components: Dict[str, np.ndarray], dy: np.nda
     return result
 
 
+def compute_variance_attribution(
+    Delta_u: np.ndarray,
+    v: np.ndarray,
+    j: np.ndarray,
+    k: np.ndarray,
+    epsilon: np.ndarray,
+    dy: np.ndarray
+) -> dict:
+    """Compute variance attribution across five additive components using equal-split covariance allocation.
+
+    Given the fitted identity (must hold exactly in-sample):
+        Δy_i(t) = Δu_i(t) + v_i(t) + j_i(t) + k(t) + ε_i(t)
+
+    where:
+        Δu_i(t) = h(T_i(t)) - h(T_trend(T_i(t)))  # increment from using actual T rather than trended T
+        v_i(t)  = h(T_trend(T_i(t)))              # baseline climate term at trended temperature
+        j_i(t)  = j_i(t)                          # country-specific growth trend component
+        k(t)    = k(t)                            # time fixed effect component
+        ε_i(t)  = regression residual             # Δy - [h(T) + j + k]
+
+    Quantifies "how much of Var(Δy)" is attributable to each component using symmetric covariance allocation:
+
+        C_Δu = Var(Δu) + Cov(Δu, v) + Cov(Δu, j) + Cov(Δu, k) + Cov(Δu, ε)
+        C_v  = Var(v)  + Cov(v, Δu) + Cov(v, j)  + Cov(v, k)  + Cov(v, ε)
+        C_j  = Var(j)  + Cov(j, Δu) + Cov(j, v)  + Cov(j, k)  + Cov(j, ε)
+        C_k  = Var(k)  + Cov(k, Δu) + Cov(k, v)  + Cov(k, j)  + Cov(k, ε)
+        C_ε  = Var(ε)  + Cov(ε, Δu) + Cov(ε, v)  + Cov(ε, j)  + Cov(ε, k)
+
+    These contributions satisfy exactly: C_Δu + C_v + C_j + C_k + C_ε = Var(Δy)
+
+    Args:
+        Delta_u: Increment component Δu = h(T) - h(T_trend) for each observation
+        v: Baseline component v = h(T_trend) for each observation
+        j: Country-specific trend component for each observation
+        k: Time fixed effect component for each observation
+        epsilon: Regression residual ε = Δy - [Δu + v + j + k] for each observation
+        dy: Original dependent variable (GDP growth rate)
+
+    Returns:
+        Dict with:
+            - C_Delta_u, C_v, C_j, C_k, C_epsilon: Variance contributions (absolute)
+            - s_Delta_u, s_v, s_j, s_k, s_epsilon: Variance contribution shares (fractions of Var(Δy))
+            - var_dy: Var(Δy)
+            - Sigma_*: Full covariance matrix entries (15 unique entries for 5x5 symmetric matrix)
+            - sum_check: C_Δu + C_v + C_j + C_k + C_ε (should equal var_dy exactly)
+            - cov_epsilon_*: Covariances between residual and fitted components (should be ~0 for OLS)
+
+    Notes:
+        - Negative C values are allowed and meaningful (variance cancellation)
+        - Uses bias=True (ddof=0) for covariance calculations to ensure exact sum = Var(Δy)
+        - All arrays are demeaned before computing covariances (constants don't affect relative contributions)
+        - If ε is OLS residual, Cov(ε, fitted components) should be ~0 (orthogonality check)
+    """
+    # Demean all arrays to ensure constants don't affect covariance
+    Delta_u_dm = Delta_u - np.mean(Delta_u)
+    v_dm = v - np.mean(v)
+    j_dm = j - np.mean(j)
+    k_dm = k - np.mean(k)
+    epsilon_dm = epsilon - np.mean(epsilon)
+    dy_dm = dy - np.mean(dy)
+
+    # Stack into matrix for covariance computation: shape (5, n_obs)
+    components = np.vstack([Delta_u_dm, v_dm, j_dm, k_dm, epsilon_dm])
+
+    # Compute covariance matrix Σ: shape (5, 5)
+    # Use bias=True (ddof=0) to ensure sum of contributions equals variance exactly
+    Sigma = np.cov(components, bias=True)
+
+    # Variance contributions: row-sums of Σ
+    # C_a = Var(a) + sum_{b≠a} Cov(a, b) = sum_b Σ_ab
+    C = Sigma.sum(axis=1)
+
+    C_Delta_u, C_v, C_j, C_k, C_epsilon = C
+
+    # Variance of Δy (should equal sum of contributions)
+    var_dy = np.var(dy_dm, ddof=0)
+
+    # Shares: normalize by Var(Δy)
+    s_Delta_u = C_Delta_u / var_dy if var_dy > 0 else 0
+    s_v = C_v / var_dy if var_dy > 0 else 0
+    s_j = C_j / var_dy if var_dy > 0 else 0
+    s_k = C_k / var_dy if var_dy > 0 else 0
+    s_epsilon = C_epsilon / var_dy if var_dy > 0 else 0
+
+    # Sum check: should equal Var(Δy) exactly
+    sum_check = C_Delta_u + C_v + C_j + C_k + C_epsilon
+
+    return {
+        # Variance contributions (absolute)
+        'C_Delta_u': C_Delta_u,
+        'C_v': C_v,
+        'C_j': C_j,
+        'C_k': C_k,
+        'C_epsilon': C_epsilon,
+        # Variance contribution shares (fractions)
+        's_Delta_u': s_Delta_u,
+        's_v': s_v,
+        's_j': s_j,
+        's_k': s_k,
+        's_epsilon': s_epsilon,
+        # Reference values
+        'var_dy': var_dy,
+        'sum_check': sum_check,
+        # Full covariance matrix (15 unique entries for 5x5 symmetric matrix)
+        'Sigma_Delta_u_Delta_u': Sigma[0, 0],
+        'Sigma_Delta_u_v': Sigma[0, 1],
+        'Sigma_Delta_u_j': Sigma[0, 2],
+        'Sigma_Delta_u_k': Sigma[0, 3],
+        'Sigma_Delta_u_epsilon': Sigma[0, 4],
+        'Sigma_v_v': Sigma[1, 1],
+        'Sigma_v_j': Sigma[1, 2],
+        'Sigma_v_k': Sigma[1, 3],
+        'Sigma_v_epsilon': Sigma[1, 4],
+        'Sigma_j_j': Sigma[2, 2],
+        'Sigma_j_k': Sigma[2, 3],
+        'Sigma_j_epsilon': Sigma[2, 4],
+        'Sigma_k_k': Sigma[3, 3],
+        'Sigma_k_epsilon': Sigma[3, 4],
+        'Sigma_epsilon_epsilon': Sigma[4, 4],
+        # Orthogonality checks (residual should be orthogonal to fitted components for OLS)
+        'cov_epsilon_Delta_u': Sigma[4, 0],
+        'cov_epsilon_v': Sigma[4, 1],
+        'cov_epsilon_j': Sigma[4, 2],
+        'cov_epsilon_k': Sigma[4, 3],
+    }
+
+
 @dataclass
 class FitResult:
     """Container for regression results."""
@@ -188,6 +315,9 @@ class FitResult:
 
     # Variance decomposition (replaces old var_frac/cov_frac fields)
     var_decomp: dict = None
+
+    # Variance attribution (4-component decomposition with covariance allocation)
+    var_attrib: dict = None
 
 
 @dataclass
@@ -219,6 +349,9 @@ class FitResultApproach8:
 
     # Variance decomposition (replaces old var_frac/cov_frac fields)
     var_decomp: dict = None
+
+    # Variance attribution (4-component decomposition with covariance allocation)
+    var_attrib: dict = None
 
 
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
@@ -413,6 +546,16 @@ def fit_approach2_temperature_detrending(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Linear Temperature Detrending",
         h1=h1,
@@ -432,6 +575,7 @@ def fit_approach2_temperature_detrending(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -502,6 +646,16 @@ def fit_approach3_growth_detrending(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Quadratic GDP Growth Detrending",
         h1=h1,
@@ -521,6 +675,7 @@ def fit_approach3_growth_detrending(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -593,6 +748,16 @@ def fit_approach1_combined_detrending(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Combined Detrending (Mixed)",
         h1=h1,
@@ -612,6 +777,7 @@ def fit_approach1_combined_detrending(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -687,6 +853,16 @@ def fit_approach4_combined_quadratic_detrending(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Combined Quadratic Detrending",
         h1=h1,
@@ -706,6 +882,7 @@ def fit_approach4_combined_quadratic_detrending(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -791,6 +968,16 @@ def fit_approach5_precomputed_k_quadratic(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k Quadratic",
         h1=h1,
@@ -810,6 +997,7 @@ def fit_approach5_precomputed_k_quadratic(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -889,6 +1077,16 @@ def fit_approach5a_precomputed_k_linear_temp(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k Linear Temp",
         h1=h1,
@@ -908,6 +1106,7 @@ def fit_approach5a_precomputed_k_linear_temp(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -993,6 +1192,16 @@ def fit_approach5b_precomputed_k_gdp_only(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k GDP Only",
         h1=h1,
@@ -1012,6 +1221,7 @@ def fit_approach5b_precomputed_k_gdp_only(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -1097,6 +1307,16 @@ def fit_approach5c_precomputed_k_combined(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k Combined",
         h1=h1,
@@ -1116,6 +1336,7 @@ def fit_approach5c_precomputed_k_combined(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -1242,6 +1463,16 @@ def fit_approach6_precomputed_k_loess(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation)
+    # Δu = h(T) - h(T_trend), v = h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_T - h_T_trend
+    v = h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResult(
         approach="Precomputed k LOESS",
         h1=h1,
@@ -1261,6 +1492,7 @@ def fit_approach6_precomputed_k_loess(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -1388,6 +1620,16 @@ def fit_approach7_gdp_response_loess(
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
+    # Compute variance attribution (5-component with covariance allocation and GDP scaling)
+    # Δu = g * [h(T) - h(T_trend)], v = g * h(T_trend), j = j_trend, k = k_values, ε = remainder
+    h_T = h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = g * (h_T - h_T_trend)
+    v = g * h_T_trend
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
     return FitResultApproach8(
         approach="GDP-Response LOESS",
         h1=h1,
@@ -1410,6 +1652,7 @@ def fit_approach7_gdp_response_loess(
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
@@ -1514,12 +1757,23 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     rms_h = compute_rms_h(h1, h2, data.temp)
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
-    # Compute variance decomposition (approach 0: no detrending, 4 components)
+    # Compute variance decomposition (approach 0: no detrending, 3 components)
     h_T = h1 * data.temp + h2 * data.temp ** 2
     components = {
         'h_T': h_T, 'j': j_trend, 'k': k_values,
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    # Approach 0: no temperature detrending, so T_trend = T (raw temp)
+    # Δu = h(T) - h(T), v = h(T), j = j_trend, k = k_values, ε = remainder
+    # This means Δu = 0, v = h(T)
+    h_T_full = h1 * data.temp + h2 * data.temp ** 2
+    Delta_u = np.zeros(n_obs)  # No detrending, so increment is zero
+    v = h_T_full  # Baseline is full climate response
+    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
         approach="Conjoined OLS Fit",
@@ -1540,6 +1794,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
         rms_h=rms_h,
         imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
+        var_attrib=var_attrib,
     )
 
 
