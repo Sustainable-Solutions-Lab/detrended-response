@@ -42,6 +42,9 @@ APPROACH_COLORS = {
     'approach3': 'blue',
     'approach4': 'blue',
     'approach5': 'blue',
+    'approach5a': 'green',
+    'approach5b': 'blue',
+    'approach5c': 'red',
     'approach6': 'orange',
     'approach7': 'brown',
 }
@@ -59,6 +62,9 @@ APPROACH_LINESTYLES = {
     'approach3': '--',
     'approach4': '-',
     'approach5': '-.',
+    'approach5a': '-.',
+    'approach5b': '-.',
+    'approach5c': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
     'approach7': (0, (5, 1)),  # densely dashed
 }
@@ -341,12 +347,12 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 5 (precomputed k approaches)
+    # Plot 2: Approaches 0, 5, 5a, 5b, 5c (precomputed k approaches)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach5'],
+        approaches=['approach0', 'approach5', 'approach5a', 'approach5b', 'approach5c'],
         filename='temperature_response_precomputed_k.pdf',
-        title_suffix='Approaches 0, 5',
+        title_suffix='Precomputed k Variants',
         T_range=T_range,
         input_file=input_file
     )
@@ -411,12 +417,12 @@ def plot_temperature_derivative(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 5 (precomputed k approaches)
+    # Plot 2: Approaches 0, 5, 5a, 5b, 5c (precomputed k approaches)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach5'],
+        approaches=['approach0', 'approach5', 'approach5a', 'approach5b', 'approach5c'],
         filename='temperature_derivative_precomputed_k.pdf',
-        title_suffix='Approaches 0, 5',
+        title_suffix='Precomputed k Variants',
         T_range=T_range,
         input_file=input_file
     )
@@ -534,7 +540,7 @@ def plot_year_effects(
 
     for name, result in results.items():
         # Skip approaches that use the same k values as approach5 (already plotted above)
-        if name in ('approach5', 'approach6', 'approach7'):
+        if name in ('approach5', 'approach5a', 'approach5b', 'approach5c', 'approach6', 'approach7'):
             continue
 
         # k is stored with actual year as key
@@ -1960,10 +1966,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_basic.pdf")
 
-    # Temperature response PDF 2: Precomputed k approaches (1x3: [4,5,6])
+    # Temperature response PDF 2: Precomputed k approaches (including 5a, 5b, 5c)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach4', 'approach5', 'approach6'],
+        approaches=['approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c', 'approach6'],
         filename='bootstrap_temperature_response_precomputed.pdf',
         T_range=T_range,
         data=data,
@@ -1986,7 +1992,7 @@ def save_all_bootstrap_plots(
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5',
+                    'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
                     'approach6', 'approach7'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,

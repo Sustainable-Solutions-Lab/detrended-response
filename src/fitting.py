@@ -813,6 +813,312 @@ def fit_approach5_precomputed_k_quadratic(
     )
 
 
+def fit_approach5a_precomputed_k_linear_temp(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Approach 5a: Pre-computed k[t] with linear temperature detrending only.
+
+    Like Approach 2 but with precomputed k:
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) are fit to (dy_i[t] - k[t]) - NOT used for regression
+    3. Temperature is detrended with linear trend: T* = T - (T0 + T1*t)
+    4. Final regression: (dy_i[t] - k[t]) = h1*T* + h2*T*²
+
+    Note: No GDP detrending (j_i not subtracted from dependent variable).
+    """
+    # Compute detrended temperature terms (linear)
+    T_star = compute_detrended_temperature(data, trends)
+    T2_detrend = compute_detrended_temp_squared(data, trends)
+
+    # Compute dependent variable: dy_i[t] - k[t] (no j_i subtraction)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr]
+
+    # Design matrix: just [T*, T*²] - no year fixed effects
+    X = np.column_stack([T_star, T2_detrend])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = compute_T_optimal(h1, h2)
+
+    # Compute RMS imbalance: h(T_trend) + j_trend + k
+    # Approach 5a: T_trend = T0 + T1*t (linear), j_trend = 0 (no GDP detrending)
+    T_trend = np.zeros(data.n_obs)
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+        k_values[i] = year_means[yr]
+    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
+
+    # Compute RMS of h(T) - climate response to actual temperature
+    rms_h = compute_rms_h(h1, h2, data.temp)
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    T_star_vals = data.temp - T_trend
+    h_Tstar = h1 * T_star_vals + h2 * T_star_vals ** 2
+    h_Ttrend = h1 * T_trend + h2 * T_trend ** 2
+    h_cross = 2 * h2 * T_star_vals * T_trend
+    components = {
+        'h_Tstar': h_Tstar, 'h_Ttrend': h_Ttrend, 'h_cross': h_cross,
+        'j': j_trend, 'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    return FitResult(
+        approach="Precomputed k Linear Temp",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+    )
+
+
+def fit_approach5b_precomputed_k_gdp_only(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Approach 5b: Pre-computed k[t] with GDP detrending only.
+
+    Like Approach 3 but with precomputed k:
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) = y0 + y1*t + y2*t² are fit to (dy_i[t] - k[t])
+    3. No temperature detrending: T* = T (raw temperature)
+    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T + h2*T²
+
+    Note: No temperature detrending, only GDP trend removal.
+    """
+    # No temperature detrending - use raw temperature
+    T = data.temp
+    T2 = data.temp ** 2
+
+    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
+    # where j_i[t] is the quadratic trend fit to (dy - k)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        # j_i[t] = y0 + y1*t + y2*t² (fit to dy - k)
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Design matrix: just [T, T²] - no year fixed effects
+    X = np.column_stack([T, T2])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = compute_T_optimal(h1, h2)
+
+    # Compute RMS imbalance: h(T_trend) + j_trend + k
+    # Approach 5b: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
+    T_trend = np.zeros(data.n_obs)  # No temperature detrending
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
+
+    # Compute RMS of h(T) - climate response to actual temperature
+    rms_h = compute_rms_h(h1, h2, data.temp)
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    # Approach 5b: no T detrending, so T_trend=0, T_star=T
+    T_star_vals = data.temp - T_trend  # T_trend is zeros
+    h_Tstar = h1 * T_star_vals + h2 * T_star_vals ** 2
+    h_Ttrend = h1 * T_trend + h2 * T_trend ** 2
+    h_cross = 2 * h2 * T_star_vals * T_trend
+    components = {
+        'h_Tstar': h_Tstar, 'h_Ttrend': h_Ttrend, 'h_cross': h_cross,
+        'j': j_trend, 'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    return FitResult(
+        approach="Precomputed k GDP Only",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+    )
+
+
+def fit_approach5c_precomputed_k_combined(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Approach 5c: Pre-computed k[t] with linear temp + quadratic GDP detrending.
+
+    Like Approach 1 but with precomputed k:
+    1. k[t] = mean(dy_i[t]) is computed first
+    2. Country trends j_i(t) = y0 + y1*t + y2*t² are fit to (dy_i[t] - k[t])
+    3. Temperature is detrended with linear trend: T* = T - (T0 + T1*t)
+    4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
+
+    Note: Linear temperature detrending + quadratic GDP detrending.
+    """
+    # Compute detrended temperature terms (linear)
+    T_star = compute_detrended_temperature(data, trends)
+    T2_detrend = compute_detrended_temp_squared(data, trends)
+
+    # Compute dependent variable: dy_i[t] - k[t] - j_i[t]
+    # where j_i[t] is the quadratic trend fit to (dy - k)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        # j_i[t] = y0 + y1*t + y2*t² (fit to dy - k)
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Design matrix: just [T*, T*²] - no year fixed effects
+    X = np.column_stack([T_star, T2_detrend])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # Just h1 and h2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_optimal = compute_T_optimal(h1, h2)
+
+    # Compute RMS imbalance: h(T_trend) + j_trend + k
+    # Approach 5c: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t²
+    T_trend = np.zeros(data.n_obs)
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
+
+    # Compute RMS of h(T) - climate response to actual temperature
+    rms_h = compute_rms_h(h1, h2, data.temp)
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    T_star_vals = data.temp - T_trend
+    h_Tstar = h1 * T_star_vals + h2 * T_star_vals ** 2
+    h_Ttrend = h1 * T_trend + h2 * T_trend ** 2
+    h_cross = 2 * h2 * T_star_vals * T_trend
+    components = {
+        'h_Tstar': h_Tstar, 'h_Ttrend': h_Ttrend, 'h_cross': h_cross,
+        'j': j_trend, 'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    return FitResult(
+        approach="Precomputed k Combined",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+    )
+
+
 def compute_beta_se_numerical(
     sse_func: callable,
     beta_opt: float,
@@ -1251,14 +1557,17 @@ def fit_all_approaches(
         'approach3': GDP growth detrending (quadratic GDP trend)
         'approach4': Combined detrending (quadratic T trend, quadratic GDP trend)
         'approach5': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
+        'approach5a': Pre-computed k with linear temp only (if trends_with_k and year_means provided)
+        'approach5b': Pre-computed k with GDP only (if trends_with_k and year_means provided)
+        'approach5c': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
         'approach7': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
 
     Args:
         data: AnalysisData object
         trends: CountryTrends for approaches 0-4
-        trends_with_k: CountryTrends for approach 5 (fit to dy - k)
-        year_means: Pre-computed k[t] for approaches 5, 6, 7
+        trends_with_k: CountryTrends for approach 5, 5a, 5b, 5c (fit to dy - k)
+        year_means: Pre-computed k[t] for approaches 5, 5a, 5b, 5c, 6, 7
         Y_ref: Reference GDP for approach 7 (computed once on full dataset)
         trends_loess: CountryTrendsLoess for approaches 6-7 (LOESS detrending)
     """
@@ -1270,9 +1579,18 @@ def fit_all_approaches(
         'approach4': fit_approach4_combined_quadratic_detrending(data, trends),
     }
 
-    # Add approach 5 if trends_with_k and year_means are provided
+    # Add approach 5 and variants if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
         results['approach5'] = fit_approach5_precomputed_k_quadratic(
+            data, trends_with_k, year_means
+        )
+        results['approach5a'] = fit_approach5a_precomputed_k_linear_temp(
+            data, trends_with_k, year_means
+        )
+        results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(
+            data, trends_with_k, year_means
+        )
+        results['approach5c'] = fit_approach5c_precomputed_k_combined(
             data, trends_with_k, year_means
         )
 
