@@ -37,9 +37,9 @@ CONFIDENCE_Z_SCORE = 1.96
 # - LOESS: orange/brown
 APPROACH_COLORS = {
     'approach0': 'black',
-    'approach1': 'green',
-    'approach2': 'blue',
-    'approach3': 'red',
+    'approach1': 'red',
+    'approach2': 'green',
+    'approach3': 'blue',
     'approach4': 'blue',
     'approach5': 'blue',
     'approach6': 'orange',
@@ -54,9 +54,9 @@ APPROACH_COLORS = {
 # - LOESS approaches: densely dashed
 APPROACH_LINESTYLES = {
     'approach0': '-',
-    'approach1': ':',
-    'approach2': '--',
-    'approach3': '-',
+    'approach1': '-',
+    'approach2': ':',
+    'approach3': '--',
     'approach4': '-',
     'approach5': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
@@ -524,8 +524,16 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
+    # Plot year means k[t] used by approaches 5, 6, 7 as a heavy line
+    for name in ('approach5', 'approach6', 'approach7'):
+        if name in results:
+            k_year_means = np.array([results[name].k[yr] for yr in unique_years])
+            ax.plot(unique_years, k_year_means, color='black', linestyle='-', linewidth=3,
+                    label='Year means k[t] (Approaches 5, 6, 7)')
+            break  # Only plot once since all three share the same k
+
     for name, result in results.items():
-        # Skip approaches that use the same k values as approach5 (precomputed year means)
+        # Skip approaches that use the same k values as approach5 (already plotted above)
         if name in ('approach5', 'approach6', 'approach7'):
             continue
 
@@ -1759,6 +1767,157 @@ def plot_bootstrap_gdp_scaling(
     plt.close()
 
 
+def plot_bootstrap_approach7_combined(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    Y_ref: float,
+    T_range: tuple = (0, 30),
+    Y_range: tuple = None,
+    filename: str = "bootstrap_temperature_response_gdp.pdf",
+    data: AnalysisData = None,
+    input_file: str = None,
+) -> None:
+    """Plot Approach 7 h(T) response and GDP scaling side by side in one row.
+
+    Left panel: temperature response h(T) - h(T*) with bootstrap CI
+    Right panel: GDP scaling factor (Y/Y_ref)^(-beta) with bootstrap CI
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        Y_ref: Reference GDP value
+        T_range: Temperature range for x-axis of left panel
+        Y_range: GDP range for x-axis of right panel (default: 500 to 100000)
+        filename: Output filename
+        data: AnalysisData for adding data density histograms (optional)
+        input_file: Path to input data file (for annotation)
+    """
+    if 'approach7' not in results:
+        return
+
+    result = results['approach7']
+    if result.beta_point is None or result.beta_samples is None:
+        return
+
+    valid_betas = result.beta_samples[~np.isnan(result.beta_samples)]
+    if len(valid_betas) == 0:
+        return
+
+    if Y_range is None:
+        Y_range = (500, 100000)
+
+    color = APPROACH_COLORS.get('approach7', 'brown')
+
+    fig, (ax_temp, ax_gdp) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # --- Left panel: Temperature response h(T) - h(T*) ---
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+        result, T, percentiles=(5, 25, 50, 75, 95)
+    )
+
+    h1_point = result.h1_point
+    h2_point = result.h2_point
+    h_T_point = h1_point * T + h2_point * T ** 2
+    if h2_point != 0:
+        h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+    else:
+        h_T_opt_point = 0
+    h_point = h_T_point - h_T_opt_point
+
+    # Temperature histogram
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+        ax_temp2 = ax_temp.twinx()
+        bins = np.linspace(T_range[0], T_range[1], 30)
+        ax_temp2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax_temp2.set_ylabel('Data density', fontsize=8, color='gray')
+        ax_temp2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+        ax_temp2.set_ylim(bottom=0)
+        ax_temp2.set_zorder(ax_temp.get_zorder() - 1)
+        ax_temp.set_zorder(ax_temp2.get_zorder() + 1)
+        ax_temp.patch.set_visible(False)
+
+    ax_temp.fill_between(T, h_p5, h_p95, alpha=0.2, color=color, label='90% CI')
+    ax_temp.fill_between(T, h_p25, h_p75, alpha=0.3, color=color, label='IQR')
+    ax_temp.plot(T, h_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+    ax_temp.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
+                    label=f'T_opt = {result.T_optimal_point:.1f}°C')
+    ax_temp.axhline(0, color='gray', linewidth=0.5)
+    ax_temp.set_xlabel('Temperature (°C)', fontsize=10)
+    ax_temp.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+    ax_temp.set_title(f'{result.approach}', fontsize=11)
+    ax_temp.set_xlim(T_range)
+    ax_temp.grid(True, alpha=0.3)
+    ax_temp.legend(fontsize=8, loc='lower left')
+
+    # --- Right panel: GDP scaling factor ---
+    Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
+
+    # Plot individual bootstrap samples (thin lines)
+    n_samples_to_plot = min(100, len(valid_betas))
+    sample_indices = np.linspace(0, len(valid_betas) - 1, n_samples_to_plot, dtype=int)
+    for idx in sample_indices:
+        beta_b = valid_betas[idx]
+        g_b = (Y / Y_ref) ** (-beta_b)
+        ax_gdp.plot(Y, g_b, color=color, alpha=0.05, linewidth=0.5)
+
+    # Compute percentile bands
+    g_samples = np.zeros((len(valid_betas), len(Y)))
+    for i, beta_b in enumerate(valid_betas):
+        g_samples[i, :] = (Y / Y_ref) ** (-beta_b)
+    g_p5 = np.percentile(g_samples, 5, axis=0)
+    g_p25 = np.percentile(g_samples, 25, axis=0)
+    g_p75 = np.percentile(g_samples, 75, axis=0)
+    g_p95 = np.percentile(g_samples, 95, axis=0)
+
+    # GDP histogram
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        gdp_recent = data.pcGDP[mask_recent]
+        ax_gdp2 = ax_gdp.twinx()
+        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
+        ax_gdp2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax_gdp2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
+        ax_gdp2.tick_params(axis='y', labelcolor='gray', labelsize=8)
+        ax_gdp2.set_ylim(bottom=0)
+        ax_gdp2.set_zorder(ax_gdp.get_zorder() - 1)
+        ax_gdp.set_zorder(ax_gdp2.get_zorder() + 1)
+        ax_gdp.patch.set_visible(False)
+
+    ax_gdp.fill_between(Y, g_p5, g_p95, color=color, alpha=0.2, label='90% CI')
+    ax_gdp.fill_between(Y, g_p25, g_p75, color=color, alpha=0.3, label='IQR')
+    g_point = (Y / Y_ref) ** (-result.beta_point)
+    ax_gdp.plot(Y, g_point, color=color, linewidth=2.5,
+                label=f'Point estimate (β = {result.beta_point:.3f})')
+    ax_gdp.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
+    ax_gdp.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref ≈ ${Y_ref:,.0f}')
+    ax_gdp.set_xscale('log')
+    ax_gdp.set_xlabel('Per Capita GDP ($)', fontsize=12)
+    ax_gdp.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+    ax_gdp.set_title('GDP Scaling Factor', fontsize=11)
+    ax_gdp.legend(loc='upper right', fontsize=8)
+    ax_gdp.grid(True, alpha=0.3)
+
+    # Beta distribution inset
+    ax_inset = ax_gdp.inset_axes([0.72, 0.42, 0.25, 0.30])
+    ax_inset.hist(valid_betas, bins=30, color=color, alpha=0.7, density=True)
+    ax_inset.axvline(result.beta_point, color='red', linewidth=1.5, label='Point est.')
+    ax_inset.set_xlabel('β', fontsize=9)
+    ax_inset.set_ylabel('Density', fontsize=9)
+    ax_inset.set_title('Bootstrap β distribution', fontsize=9)
+    ax_inset.tick_params(labelsize=8)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename)
+    plt.close()
+
+
 def save_all_bootstrap_plots(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
@@ -1772,10 +1931,10 @@ def save_all_bootstrap_plots(
 
     Calls:
     - plot_all_bootstrap_distributions() for all approaches in single PDF
-    - plot_bootstrap_temperature_response() for approaches 0-5 and 0,6,7
-    - plot_bootstrap_temperature_derivative() for approaches 0-5 and 0,6,7
+    - plot_bootstrap_temperature_response() for basic approaches (0,1,2,3) and precomputed k (4,5,6)
+    - plot_bootstrap_approach7_combined() for Approach 7 h(T) + GDP scaling
+    - plot_bootstrap_temperature_derivative() for all approaches
     - plot_bootstrap_T_optimal_comparison() for all approaches
-    - plot_bootstrap_gdp_scaling() for Approach 7 (if Y_ref provided)
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -1790,18 +1949,38 @@ def save_all_bootstrap_plots(
     plot_all_bootstrap_distributions(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_distributions.pdf")
 
-    # Temperature response plot - all approaches in one PDF
+    # Temperature response PDF 1: Basic approaches (2x2: row1=[0,1], row2=[2,3])
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5',
-                    'approach6', 'approach7'],
-        filename='bootstrap_temperature_response.pdf',
+        approaches=['approach0', 'approach1', 'approach2', 'approach3'],
+        filename='bootstrap_temperature_response_basic.pdf',
         T_range=T_range,
         data=data,
         input_file=input_file
     )
-    print("      Saved bootstrap_temperature_response.pdf")
+    print("      Saved bootstrap_temperature_response_basic.pdf")
+
+    # Temperature response PDF 2: Precomputed k approaches (1x3: [4,5,6])
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach4', 'approach5', 'approach6'],
+        filename='bootstrap_temperature_response_precomputed.pdf',
+        T_range=T_range,
+        data=data,
+        input_file=input_file
+    )
+    print("      Saved bootstrap_temperature_response_precomputed.pdf")
+
+    # Temperature response PDF 3: Approach 7 h(T) + GDP scaling combined
+    if Y_ref is not None and 'approach7' in results:
+        plot_bootstrap_approach7_combined(
+            results, output_dir, Y_ref,
+            T_range=T_range,
+            data=data,
+            input_file=input_file,
+            filename='bootstrap_temperature_response_gdp.pdf',
+        )
+        print("      Saved bootstrap_temperature_response_gdp.pdf")
 
     # Temperature derivative plot - all approaches in one PDF
     plot_bootstrap_temperature_derivative(
@@ -1818,9 +1997,3 @@ def save_all_bootstrap_plots(
     # T_optimal comparison across all approaches
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_T_optimal_comparison.pdf")
-
-    # GDP scaling factor with bootstrap uncertainty (Approach 7)
-    if Y_ref is not None and 'approach7' in results:
-        plot_bootstrap_gdp_scaling(results, output_dir, Y_ref, data=data, input_file=input_file,
-                                   filename='bootstrap_gdp_scaling.pdf')
-        print("      Saved bootstrap_gdp_scaling.pdf")

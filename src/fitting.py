@@ -1,13 +1,13 @@
 """OLS fitting for three detrending approaches.
 
-Approach 1: Linear temperature detrending
+Approach 1: Combined detrending
+    Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
+
+Approach 2: Linear temperature detrending
     Δy_i(t) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
 
-Approach 2: Quadratic GDP growth detrending
+Approach 3: Quadratic GDP growth detrending
     Δy_i(t) - (y0 + y1*t + y2*t²) = h1*T + h2*T² + k_i
-
-Approach 3: Combined detrending
-    Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
 """
 
 import numpy as np
@@ -348,10 +348,10 @@ def compute_rms_imbalance(
     return rms
 
 
-def fit_approach1_temperature_detrending(
+def fit_approach2_temperature_detrending(
     data: AnalysisData, trends: CountryTrends
 ) -> FitResult:
-    """Approach 1: Linear temperature detrending only.
+    """Approach 2: Linear temperature detrending only.
 
     Δy_i(t) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
     """
@@ -386,7 +386,7 @@ def fit_approach1_temperature_detrending(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 1: T_trend = T0 + T1*t (linear), j_trend = 0
+    # Approach 2: T_trend = T0 + T1*t (linear), j_trend = 0
     T_trend = np.zeros(data.n_obs)
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
@@ -435,10 +435,10 @@ def fit_approach1_temperature_detrending(
     )
 
 
-def fit_approach2_growth_detrending(
+def fit_approach3_growth_detrending(
     data: AnalysisData, trends: CountryTrends
 ) -> FitResult:
-    """Approach 2: Quadratic GDP growth detrending only.
+    """Approach 3: Quadratic GDP growth detrending only.
 
     Δy_i(t) - (y0 + y1*t + y2*t²) = h1*T + h2*T² + k_i
     """
@@ -474,7 +474,7 @@ def fit_approach2_growth_detrending(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 2: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
+    # Approach 3: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
     T_trend = np.zeros(data.n_obs)  # No temperature detrending
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
@@ -491,7 +491,7 @@ def fit_approach2_growth_detrending(
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
-    # Approach 2: no T detrending, so T_trend=0, T_star=T
+    # Approach 3: no T detrending, so T_trend=0, T_star=T
     T_star_vals = data.temp - T_trend  # T_trend is zeros
     h_Tstar = h1 * T_star_vals + h2 * T_star_vals ** 2
     h_Ttrend = h1 * T_trend + h2 * T_trend ** 2
@@ -524,10 +524,10 @@ def fit_approach2_growth_detrending(
     )
 
 
-def fit_approach3_combined_detrending(
+def fit_approach1_combined_detrending(
     data: AnalysisData, trends: CountryTrends
 ) -> FitResult:
-    """Approach 3: Combined temperature and GDP growth detrending.
+    """Approach 1: Combined temperature and GDP growth detrending.
 
     Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t)] + h2*[T² - (T0 + T1*t)²] + k_i
     """
@@ -565,7 +565,7 @@ def fit_approach3_combined_detrending(
     T_optimal = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # Approach 3: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t² (quadratic)
+    # Approach 1: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t² (quadratic)
     T_trend = np.zeros(data.n_obs)
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
@@ -623,7 +623,7 @@ def fit_approach4_combined_quadratic_detrending(
     Δy_i(t) - (y0 + y1*t + y2*t²) = h1*[T - (T0 + T1*t + T2*t²)]
                                   + h2*[T² - (T0 + T1*t + T2*t²)²] + k_i
 
-    Like Approach 3, but uses quadratic temperature trend instead of linear.
+    Like Approach 1, but uses quadratic temperature trend instead of linear.
     """
     # Compute detrended dependent variable (quadratic GDP growth trend)
     y_trend = compute_growth_trend_values(data, trends)
@@ -1246,9 +1246,9 @@ def fit_all_approaches(
 
     Returns dict with keys:
         'approach0': Conjoined OLS fit, with j terms and year fixed effects
-        'approach1': Temperature detrending (linear T trend)
-        'approach2': GDP growth detrending (quadratic GDP trend)
-        'approach3': Combined detrending (linear T trend, quadratic GDP trend)
+        'approach1': Combined detrending (linear T trend, quadratic GDP trend)
+        'approach2': Temperature detrending (linear T trend)
+        'approach3': GDP growth detrending (quadratic GDP trend)
         'approach4': Combined detrending (quadratic T trend, quadratic GDP trend)
         'approach5': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
         'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
@@ -1264,25 +1264,25 @@ def fit_all_approaches(
     """
     results = {
         'approach0': fit_approach0_no_detrending(data),
-        'approach1': fit_approach1_temperature_detrending(data, trends),
-        'approach2': fit_approach2_growth_detrending(data, trends),
-        'approach3': fit_approach3_combined_detrending(data, trends),
+        'approach1': fit_approach1_combined_detrending(data, trends),
+        'approach2': fit_approach2_temperature_detrending(data, trends),
+        'approach3': fit_approach3_growth_detrending(data, trends),
         'approach4': fit_approach4_combined_quadratic_detrending(data, trends),
     }
 
-    # Add approach 7 if trends_with_k and year_means are provided
+    # Add approach 5 if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
         results['approach5'] = fit_approach5_precomputed_k_quadratic(
             data, trends_with_k, year_means
         )
 
-    # Add approaches 9 and 10 if trends_loess and year_means are provided
+    # Add approaches 6 and 7 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         results['approach6'] = fit_approach6_precomputed_k_loess(
             data, trends_loess, year_means
         )
 
-        # Add approach 10 if Y_ref is provided
+        # Add approach 7 if Y_ref is provided
         if Y_ref is not None:
             results['approach7'] = fit_approach7_gdp_response_loess(
                 data, trends_loess, year_means, Y_ref
