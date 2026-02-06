@@ -39,6 +39,8 @@ from src.fitting import (
     fit_approach5c_precomputed_k_combined,
     fit_approach6_precomputed_k_loess,
     fit_approach7_gdp_response_loess,
+    fit_nocr0_joint,
+    fit_nocr5_precomputed_k,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -101,7 +103,7 @@ def main():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
         input_file = str(csv_path)
-        print(f"\n[1/10] Loading data from {csv_path}...")
+        print(f"\n[1/11] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -112,7 +114,7 @@ def main():
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
         input_file = f"{args.maddison} + {args.cru}"
-        print(f"\n[1/10] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/11] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -125,18 +127,18 @@ def main():
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\n[2/10] Computing country-level trends...")
+    print("\n[2/11] Computing country-level trends...")
     trends = compute_country_trends(data)
     print("      Done.")
 
     # Compute year means and country trends with k for Approach 5
-    print("\n[3/10] Computing year means k[t] and adjusted country trends...")
+    print("\n[3/11] Computing year means k[t] and adjusted country trends...")
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
     # Compute LOESS trends for Approaches 6 and 7
-    print(f"\n[4/10] Computing LOESS trends (window={args.loess_window} years)...")
+    print(f"\n[4/11] Computing LOESS trends (window={args.loess_window} years)...")
     trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
     print("      Done.")
 
@@ -149,30 +151,35 @@ def main():
     # Fit all approaches
     results = {}
 
-    print("\n[5/10] Fitting Approach 0: Conjoined OLS fit...")
+    print("\n[5/11] Fitting Approach 0: Conjoined OLS fit...")
     results['approach0'] = fit_approach0_no_detrending(data)
     print("      Done.")
 
-    print("\n[6/10] Fitting Approaches 1-4: Detrending approaches...")
+    print("\n[6/11] Fitting Approaches 1-4: Detrending approaches...")
     results['approach1'] = fit_approach1_combined_detrending(data, trends)
     results['approach2'] = fit_approach2_temperature_detrending(data, trends)
     results['approach3'] = fit_approach3_growth_detrending(data, trends)
     results['approach4'] = fit_approach4_combined_quadratic_detrending(data, trends)
     print("      Done.")
 
-    print("\n[7/10] Fitting Approach 5: Precomputed k (quadratic)...")
+    print("\n[7/11] Fitting Approach 5: Precomputed k (quadratic)...")
     results['approach5'] = fit_approach5_precomputed_k_quadratic(data, trends_with_k, year_means)
     print("      Done.")
 
-    print("\n[8/10] Fitting Approaches 5a, 5b, 5c: Precomputed k variants...")
+    print("\n[8/11] Fitting Approaches 5a, 5b, 5c: Precomputed k variants...")
     results['approach5a'] = fit_approach5a_precomputed_k_linear_temp(data, trends_with_k, year_means)
     results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(data, trends_with_k, year_means)
     results['approach5c'] = fit_approach5c_precomputed_k_combined(data, trends_with_k, year_means)
     print("      Done.")
 
-    print("\n[9/10] Fitting Approaches 6 & 7: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6 & 7: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
+    print("      Done.")
+
+    print("\n[10/11] Fitting null models (no climate response)...")
+    results['nocr0'] = fit_nocr0_joint(data)
+    results['nocr5'] = fit_nocr5_precomputed_k(data, trends_with_k, year_means)
     print("      Done.")
 
     # Print summary
@@ -189,7 +196,10 @@ def main():
         if hasattr(r, 'beta'):
             print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
             print(f"  Y_ref = {r.Y_ref:.2f}")
-        print(f"  T_optimal = {r.T_optimal:.2f} C")
+        if np.isnan(r.T_optimal):
+            print(f"  T_optimal = N/A")
+        else:
+            print(f"  T_optimal = {r.T_optimal:.2f} C")
         print(f"  R² = {r.r_squared:.4f}")
         print(f"  Total R² = {r.total_r_squared:.4f}")
         print(f"  Adjusted R² = {r.adj_r_squared:.4f}")
@@ -202,7 +212,7 @@ def main():
             print(f"  Imbalance Ratio = {r.imbalance_ratio:.4f}")
 
     # Save outputs
-    print("\n[10/10] Saving outputs...")
+    print("\n[11/11] Saving outputs...")
     if args.output_dir:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)

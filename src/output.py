@@ -47,6 +47,8 @@ APPROACH_COLORS = {
     'approach5c': 'red',
     'approach6': 'orange',
     'approach7': 'brown',
+    'nocr0': 'gray',
+    'nocr5': 'gray',
 }
 
 # Line style scheme for approaches
@@ -67,6 +69,8 @@ APPROACH_LINESTYLES = {
     'approach5c': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
     'approach7': (0, (5, 1)),  # densely dashed
+    'nocr0': '--',
+    'nocr5': ':',
 }
 
 
@@ -222,7 +226,10 @@ def save_summary_table(
             if hasattr(result, 'beta'):
                 f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
                 f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
-            f.write(f"  T_optimal = {result.T_optimal:.2f} C\n")
+            if np.isnan(result.T_optimal):
+                f.write(f"  T_optimal = N/A\n")
+            else:
+                f.write(f"  T_optimal = {result.T_optimal:.2f} C\n")
             f.write(f"  R² = {result.r_squared:.4f}\n")
             f.write(f"  Total R² = {result.total_r_squared:.4f}\n")
             f.write(f"  Adjusted R² = {result.adj_r_squared:.4f}\n")
@@ -521,14 +528,16 @@ def plot_coefficient_comparison(
 
     approaches = list(results.keys())
     labels = [results[a].approach for a in approaches]
-    x = np.arange(len(approaches))
 
-    # T_optimal values
-    T_opt_vals = [results[a].T_optimal for a in approaches]
+    # T_optimal values — filter out NaN (no climate response approaches)
+    valid_t = [(a, results[a]) for a in approaches if not np.isnan(results[a].T_optimal)]
+    t_labels = [r.approach for _, r in valid_t]
+    T_opt_vals = [r.T_optimal for _, r in valid_t]
+    x_t = np.arange(len(valid_t))
 
-    axes[0].bar(x, T_opt_vals, color='steelblue', alpha=0.7)
-    axes[0].set_xticks(x)
-    axes[0].set_xticklabels(labels, rotation=45, ha='right')
+    axes[0].bar(x_t, T_opt_vals, color='steelblue', alpha=0.7)
+    axes[0].set_xticks(x_t)
+    axes[0].set_xticklabels(t_labels, rotation=45, ha='right')
     axes[0].set_ylabel('Optimal Temperature (°C)')
     axes[0].set_title('Optimal Temperature (T_opt)')
     axes[0].grid(True, alpha=0.3, axis='y')
@@ -538,6 +547,7 @@ def plot_coefficient_comparison(
         axes[0].text(i, val + 0.3, f'{val:.1f}°C', ha='center', va='bottom', fontsize=9)
 
     # h2 coefficients
+    x = np.arange(len(approaches))
     h2_vals = [results[a].h2 for a in approaches]
     h2_errs = [results[a].h2_se * CONFIDENCE_Z_SCORE for a in approaches]  # 95% CI
 
@@ -561,12 +571,14 @@ def plot_optimal_temperature_comparison(
     """Plot optimal temperature comparison across approaches."""
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    approaches = list(results.keys())
-    labels = [results[a].approach for a in approaches]
-    T_opt = [results[a].T_optimal for a in approaches]
+    # Filter out approaches with NaN T_optimal (no climate response)
+    valid = [(a, results[a]) for a in results.keys() if not np.isnan(results[a].T_optimal)]
+    labels = [r.approach for _, r in valid]
+    T_opt = [r.T_optimal for _, r in valid]
+    valid_keys = [a for a, _ in valid]
 
-    colors = [APPROACH_COLORS.get(a, 'gray') for a in approaches]
-    x = np.arange(len(approaches))
+    colors = [APPROACH_COLORS.get(a, 'gray') for a in valid_keys]
+    x = np.arange(len(valid))
 
     bars = ax.bar(x, T_opt, color=colors, alpha=0.7)
     ax.set_xticks(x)

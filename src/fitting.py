@@ -1798,6 +1798,202 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     )
 
 
+def fit_nocr0_joint(data: AnalysisData) -> FitResult:
+    """Null model: No climate response, joint OLS fit with country trends and year effects.
+
+    Δy_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
+
+    Like Approach 0 but without T and T² columns. Tests how much variance
+    is explained by country trends and year effects alone.
+
+    For identifiability, we set j_{0,0} = j_{1,0} = j_{2,0} = 0 (first country is reference).
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+
+    # Get unique years and create year index mapping
+    unique_years = sorted(set(data.year))
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
+    n_years = len(unique_years)
+
+    # Number of parameters (no h1, h2):
+    # - 3 * (n_countries - 1) for j terms (first country is reference, j[0] = 0)
+    # - n_years for k_t terms (all years)
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_years
+    n_params = n_j_params + n_k_params
+
+    X = np.zeros((n_obs, n_params))
+
+    # Country-specific time trends (skip country 0 as reference)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = 3 * (c - 1)
+            X[i, col_base] = 1.0        # j0[c]
+            X[i, col_base + 1] = t      # j1[c]
+            X[i, col_base + 2] = t * t  # j2[c]
+
+    # Year fixed effects (all years)
+    k_col_start = n_j_params
+    for i in range(n_obs):
+        yr_idx = year_to_idx[data.year[i]]
+        X[i, k_col_start + yr_idx] = 1.0
+
+    # Fit OLS
+    y = data.growth_pcGDP
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # No climate response coefficients
+    h1 = 0.0
+    h2 = 0.0
+    h1_se = 0.0
+    h2_se = 0.0
+
+    # Year fixed effects (store by actual year)
+    k = {}
+    for yr_idx in range(n_years):
+        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+
+    # Fit statistics
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature undefined (h1=h2=0)
+    T_optimal = np.nan
+
+    # Build j_trend and k_values arrays
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = 3 * (c - 1)
+            j0 = beta[col_base]
+            j1 = beta[col_base + 1]
+            j2 = beta[col_base + 2]
+            j_trend[i] = j0 + j1 * t + j2 * t * t
+        k_values[i] = k[yr]
+
+    # Variance decomposition (no h components)
+    components = {'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Variance attribution (Δu=0, v=0 since no climate response)
+    Delta_u = np.zeros(n_obs)
+    v = np.zeros(n_obs)
+    epsilon = data.growth_pcGDP - (j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResult(
+        approach="No Climate Response (Joint)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+        rms_imbalance=None,
+        rms_h=None,
+        imbalance_ratio=None,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_nocr5_precomputed_k(
+    data: AnalysisData, trends: CountryTrends, year_means: dict
+) -> FitResult:
+    """Null model: No climate response, precomputed k with quadratic country trends.
+
+    k(t) = mean_i(Δy_i(t)) is precomputed, then country quadratics j_i(t)
+    are fit to Δy_i(t) - k(t). No regression needed — all components are
+    already precomputed from trends_with_k and year_means.
+
+    Δy_i(t) = j_i(t) + k(t) + ε_i(t)
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+    unique_years = sorted(set(data.year))
+    n_years = len(unique_years)
+
+    # Build j_trend and k_values from precomputed trends
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+
+    # Residuals = dy - (j + k)
+    residuals = data.growth_pcGDP - (j_trend + k_values)
+
+    # No climate response coefficients
+    h1 = 0.0
+    h2 = 0.0
+    h1_se = 0.0
+    h2_se = 0.0
+
+    # Year fixed effects
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3 * n_countries + n_years
+    r_sq, adj_r_sq, rmse = compute_fit_stats(data.growth_pcGDP, residuals, n_params)
+
+    # Total R²
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature undefined
+    T_optimal = np.nan
+
+    # Variance decomposition (no h components)
+    components = {'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Variance attribution (Δu=0, v=0 since no climate response)
+    Delta_u = np.zeros(n_obs)
+    v = np.zeros(n_obs)
+    epsilon = data.growth_pcGDP - (j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResult(
+        approach="No Climate Response (Precomputed k)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_optimal=T_optimal,
+        total_r_squared=total_r_sq,
+        rms_imbalance=None,
+        rms_h=None,
+        imbalance_ratio=None,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
@@ -1817,6 +2013,8 @@ def fit_all_approaches(
         'approach5c': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
         'approach7': GDP-dependent response with LOESS (if trends_loess and Y_ref provided)
+        'nocr0': No climate response, joint OLS (country trends + year effects only)
+        'nocr5': No climate response, precomputed k (if trends_with_k and year_means provided)
 
     Args:
         data: AnalysisData object
@@ -1832,6 +2030,7 @@ def fit_all_approaches(
         'approach2': fit_approach2_temperature_detrending(data, trends),
         'approach3': fit_approach3_growth_detrending(data, trends),
         'approach4': fit_approach4_combined_quadratic_detrending(data, trends),
+        'nocr0': fit_nocr0_joint(data),
     }
 
     # Add approach 5 and variants if trends_with_k and year_means are provided
@@ -1846,6 +2045,9 @@ def fit_all_approaches(
             data, trends_with_k, year_means
         )
         results['approach5c'] = fit_approach5c_precomputed_k_combined(
+            data, trends_with_k, year_means
+        )
+        results['nocr5'] = fit_nocr5_precomputed_k(
             data, trends_with_k, year_means
         )
 
