@@ -1613,15 +1613,17 @@ def plot_bootstrap_temperature_response(
         )
 
         # Compute point estimate response
-        # Check if this is Gaussian model (approach8)
-        if name == 'approach8' and result.beta_point is not None:
-            # Gaussian: h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(...) - 1]
-            h2_point = result.h2_point
+        # Check if this is piecewise quadratic model (approach8)
+        if name == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
+            # Piecewise quadratic: h(T) - h(T_opt) uses h2_low for T <= T_opt, h2_high for T > T_opt
             T_opt_point = result.T_optimal_point
-            sigma_point = result.beta_point  # sigma stored as beta for compatibility
-            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_point)
-            gauss_shape = np.exp(-((T - T_opt_point) ** 2) / (2 * sigma_point ** 2))
-            h_point = h2_point * norm_factor * (gauss_shape - 1.0)
+            h2_low = result.h2_low_point
+            h2_high = result.h2_high_point
+            h_point = np.where(
+                T <= T_opt_point,
+                h2_low * (T - T_opt_point) ** 2,
+                h2_high * (T - T_opt_point) ** 2
+            )
         else:
             # Quadratic model
             h1_point = result.h1_point
@@ -1720,13 +1722,12 @@ def plot_bootstrap_temperature_response(
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=8, loc='lower left')
+        ax.legend(fontsize=8, loc='lower right')
 
     # Hide unused subplots
     for idx in range(n_approaches, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle('Temperature Response with Bootstrap 90% CI and IQR', fontsize=14, y=1.02)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, bbox_inches='tight')
@@ -1801,62 +1802,54 @@ def compute_derivative_uncertainty_bands(
     """Compute dh/dT uncertainty bands from bootstrap samples.
 
     For quadratic models: dh/dT = h1 + 2*h2*T
-    For skew-normal (approach8): dh/dT = h2 * df/dT where
-        df/dT = (C/σ) * g(z) * [-z*s(z) + s'(z)]
+    For piecewise quadratic (approach8): dh/dT = 2*h2_low*(T-T_opt) or 2*h2_high*(T-T_opt)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for skew-normal)
+        approach_key: Approach identifier (e.g., 'approach8' for piecewise quadratic)
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    is_skewnorm = (approach_key == 'approach8')
+    is_piecewise = (approach_key == 'approach8')
 
-    if is_skewnorm:
-        # Skew-normal model: need h2, T_optimal, sigma, and alpha samples
-        sigma_samples = getattr(result, 'sigma_samples', None)
-        alpha_samples = getattr(result, 'alpha_samples', None)
+    if is_piecewise:
+        # Piecewise quadratic model: need h2_low, h2_high, T_optimal samples
+        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        h2_high_samples = getattr(result, 'h2_high_samples', None)
 
-        if sigma_samples is None:
+        if h2_low_samples is None or h2_high_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        valid_mask = (~np.isnan(result.h2_samples) &
-                      ~np.isnan(result.T_optimal_samples) &
-                      ~np.isnan(sigma_samples))
-        if alpha_samples is not None:
-            valid_mask = valid_mask & ~np.isnan(alpha_samples)
+        valid_mask = (~np.isnan(h2_low_samples) &
+                      ~np.isnan(h2_high_samples) &
+                      ~np.isnan(result.T_optimal_samples))
 
-        h2_valid = result.h2_samples[valid_mask]
+        h2_low_valid = h2_low_samples[valid_mask]
+        h2_high_valid = h2_high_samples[valid_mask]
         T_opt_valid = result.T_optimal_samples[valid_mask]
-        sigma_valid = sigma_samples[valid_mask]
-        alpha_valid = alpha_samples[valid_mask] if alpha_samples is not None else np.zeros_like(sigma_valid)
 
-        if len(h2_valid) == 0:
+        if len(h2_low_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        n_samples = len(h2_valid)
+        n_samples = len(h2_low_valid)
         n_T = len(T_range)
         dh_samples = np.zeros((n_samples, n_T))
 
         for i in range(n_samples):
-            h2 = h2_valid[i]
+            h2_low = h2_low_valid[i]
+            h2_high = h2_high_valid[i]
             T_opt = T_opt_valid[i]
-            sigma = sigma_valid[i]
-            alpha = alpha_valid[i]
 
-            # Skew-normal derivative
-            z = (T_range - T_opt) / sigma
-            C = 1.0 / (sigma * np.sqrt(2 * np.pi))
-            g_z = np.exp(-0.5 * z ** 2)
-            s_z = 1.0 + erf(alpha * z / np.sqrt(2))
-            # Derivative of erf term: s'(z) = α√(2/π) * exp(-α²z²/2)
-            s_prime_z = alpha * np.sqrt(2 / np.pi) * np.exp(-0.5 * (alpha * z) ** 2)
-            # df/dT = (C/σ) * g(z) * [-z*s(z) + s'(z)]
-            df_dT = (C / sigma) * g_z * (-z * s_z + s_prime_z)
-            dh_samples[i, :] = h2 * df_dT
+            # Piecewise quadratic derivative: dh/dT = 2*h2*(T-T_opt)
+            T_diff = T_range - T_opt
+            dh_samples[i, :] = np.where(
+                T_range <= T_opt,
+                2 * h2_low * T_diff,
+                2 * h2_high * T_diff
+            )
     else:
         # Quadratic model
         h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
@@ -1922,23 +1915,25 @@ def plot_bootstrap_temperature_derivative(
     for name in approaches:
         result = results[name]
 
-        # Compute uncertainty bands
+        # Compute uncertainty bands (90% CI and IQR)
         # Pass approach_key for power-law handling
-        dh_lower, dh_median, dh_upper = compute_derivative_uncertainty_bands(
-            result, T, approach_key=name
+        dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
+            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
         )
 
         # Compute point estimate derivative
-        # Check if this is Gaussian model (approach8)
-        if name == 'approach8' and result.beta_point is not None:
-            # Gaussian: dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(...) * (-(T-T_opt)/sigma^2)
-            h2_point = result.h2_point
+        # Check if this is piecewise quadratic model (approach8)
+        if name == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
+            # Piecewise quadratic: dh/dT = 2*h2_low*(T-T_opt) for T <= T_opt, 2*h2_high*(T-T_opt) for T > T_opt
             T_opt_point = result.T_optimal_point
-            sigma_point = result.beta_point  # sigma stored as beta for compatibility
+            h2_low = result.h2_low_point
+            h2_high = result.h2_high_point
             T_diff = T - T_opt_point
-            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_point)
-            gauss_shape = np.exp(-(T_diff ** 2) / (2 * sigma_point ** 2))
-            dh_point = h2_point * norm_factor * gauss_shape * (-T_diff / (sigma_point ** 2))
+            dh_point = np.where(
+                T <= T_opt_point,
+                2 * h2_low * T_diff,
+                2 * h2_high * T_diff
+            )
         else:
             # Quadratic model
             h1_point = result.h1_point
@@ -1946,14 +1941,16 @@ def plot_bootstrap_temperature_derivative(
             dh_point = h1_point + 2 * h2_point * T
 
         plot_data[name] = {
-            'dh_lower': dh_lower,
-            'dh_upper': dh_upper,
+            'dh_p5': dh_p5,
+            'dh_p25': dh_p25,
+            'dh_p75': dh_p75,
+            'dh_p95': dh_p95,
             'dh_point': dh_point,
         }
 
         # Update global y range
-        y_min = min(y_min, np.nanmin(dh_lower), np.nanmin(dh_point))
-        y_max = max(y_max, np.nanmax(dh_upper), np.nanmax(dh_point))
+        y_min = min(y_min, np.nanmin(dh_p5), np.nanmin(dh_point))
+        y_max = max(y_max, np.nanmax(dh_p95), np.nanmax(dh_point))
 
     # Add some padding to y range
     y_padding = (y_max - y_min) * 0.05
@@ -1987,28 +1984,30 @@ def plot_bootstrap_temperature_derivative(
         ax = axes[idx]
         result = results[name]
         color = APPROACH_COLORS.get(name, 'steelblue')
-        data = plot_data[name]
+        pdata = plot_data[name]
 
-        # Plot CI band
-        ax.fill_between(T, data['dh_lower'], data['dh_upper'], alpha=0.3, color=color, label='90% CI')
+        # Plot 90% CI band
+        ax.fill_between(T, pdata['dh_p5'], pdata['dh_p95'], alpha=0.2, color=color, label='90% CI')
+
+        # Plot IQR band
+        ax.fill_between(T, pdata['dh_p25'], pdata['dh_p75'], alpha=0.3, color=color, label='IQR')
 
         # Plot point estimate
-        ax.plot(T, data['dh_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
+        ax.plot(T, pdata['dh_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
 
         ax.axhline(0, color='gray', linewidth=0.5)
         ax.set_xlabel('Temperature (°C)', fontsize=10)
-        ax.set_ylabel('dh/dT = h₁ + 2h₂T', fontsize=10)
+        ax.set_ylabel('dh/dT', fontsize=10)
         ax.set_title(f'{result.approach}', fontsize=11)
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=8, loc='upper right')
+        ax.legend(fontsize=8, loc='lower right')
 
     # Hide unused subplots
     for idx in range(n_approaches, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle('Temperature Derivative with Bootstrap 90% CI', fontsize=14, y=1.02)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, bbox_inches='tight')
@@ -2062,23 +2061,10 @@ def plot_T_optimal_histograms(
     else:
         axes = axes.flatten()
 
-    # First pass: find global x-axis range for consistent scaling
-    all_samples = []
-    all_points = []
-    for name in approaches:
-        result = results[name]
-        valid_samples = result.T_optimal_samples[~np.isnan(result.T_optimal_samples)]
-        if len(valid_samples) > 0:
-            all_samples.extend(valid_samples)
-            all_points.append(result.T_optimal_point)
-
-    if len(all_samples) == 0:
-        plt.close()
-        return
-
-    # Compute common x-axis range with some padding
-    x_min = min(np.percentile(all_samples, 1), min(all_points)) - 2
-    x_max = max(np.percentile(all_samples, 99), max(all_points)) + 2
+    # Fixed x-axis range (same as temperature response/derivative plots)
+    x_min, x_max = 0, 30
+    # Bins with 0.5°C width
+    bins = np.arange(x_min, x_max + 0.5, 0.5)
 
     # Second pass: create the plots
     for idx, name in enumerate(approaches):
@@ -2092,7 +2078,6 @@ def plot_T_optimal_histograms(
         if len(valid_samples) == 0:
             ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center',
                     transform=ax.transAxes, fontsize=12)
-            ax.set_title(f'{result.approach}', fontsize=11)
             continue
 
         # Compute statistics
@@ -2102,8 +2087,8 @@ def plot_T_optimal_histograms(
         p95 = np.percentile(valid_samples, 95)
 
         # Plot histogram
-        ax.hist(valid_samples, bins=40, density=True, alpha=0.7, color=color,
-                edgecolor='white', linewidth=0.5)
+        ax.hist(valid_samples, bins=bins, density=True, alpha=0.7, color=color,
+                edgecolor=color, linewidth=0.5)
 
         # Point estimate (solid line)
         ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
@@ -2120,16 +2105,14 @@ def plot_T_optimal_histograms(
 
         ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
         ax.set_ylabel('Density', fontsize=10)
-        ax.set_title(f'{result.approach}', fontsize=11)
         ax.set_xlim(x_min, x_max)
-        ax.legend(fontsize=8, loc='upper right')
+        ax.legend(fontsize=8, loc='upper left')
         ax.grid(True, alpha=0.3)
 
     # Hide unused subplots
     for idx in range(n_approaches, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle('Bootstrap Distribution of Optimal Temperature', fontsize=14, y=1.02)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, bbox_inches='tight')
