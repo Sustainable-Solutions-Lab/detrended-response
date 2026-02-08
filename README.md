@@ -46,7 +46,7 @@ The time trend function `jᵢ(t)` can be interpreted as:
 
 If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
 
-## Eleven Approaches (0-10)
+## Approaches
 
 ### Approach 0: Conjoined OLS Fit
 
@@ -60,7 +60,17 @@ Note: One could add any arbitrary quadratic in time to `k(t)` and subtract the s
 
 **Degrees of freedom:** 2 for h(T) + 3×(n_countries - 1) for jᵢ(t) + n_years for k(t)
 
-### Approach 1: Linear Temperature Detrending
+### Approach 1: Combined Detrending (Mixed)
+
+Combines linear temperature detrending with quadratic GDP growth detrending. If the purpose of `jᵢ(t)` is to effect both a linear detrending of the temperature record and a quadratic detrending of the per-capita GDP growth record:
+
+```
+Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
+```
+
+**Degrees of freedom:** 2 for h(T) + n_years for kₜ
+
+### Approach 2: Linear Temperature Detrending
 
 We know that at least `j₀,ᵢ` and `j₁,ᵢ` relate to the temperature scale, because their values would differ if temperature was measured in Celsius versus Kelvin. A natural assumption is that at least part of `jᵢ(t)` is meant to represent a linear detrending of temperature.
 
@@ -72,7 +82,7 @@ Pre-compute `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares on the 
 
 **Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
-### Approach 2: Quadratic GDP Growth Detrending
+### Approach 3: Quadratic GDP Growth Detrending
 
 Another interpretation of `jᵢ(t)` is that it represents a quadratic detrending of the `Δyᵢ(t)` values.
 
@@ -84,27 +94,7 @@ Pre-compute `y₀,ᵢ`, `y₁,ᵢ`, and `y₂,ᵢ` for each country via least sq
 
 **Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
-### Approach 3: Combined Detrending (Mixed)
-
-Combines linear temperature detrending with quadratic GDP growth detrending. If the purpose of `jᵢ(t)` is to effect both a linear detrending of the temperature record and a quadratic detrending of the per-capita GDP growth record:
-
-```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
-```
-
-**Degrees of freedom:** 2 for h(T) + n_years for kₜ
-
-### Approach 4: Combined Linear Detrending
-
-There is something unsatisfying about correlating departures from a quadratic detrending of per capita GDP growth with departures from a linear detrending of temperature. This approach applies linear detrending to both variables.
-
-```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
-```
-
-**Degrees of freedom:** 2 for h(T) + n_years for kₜ
-
-### Approach 5: Combined Quadratic Detrending
+### Approach 4: Combined Quadratic Detrending
 
 Applies quadratic detrending to both per capita GDP growth and temperature. When combined with the 2nd order term in h(T), this results in `jᵢ(t)` becoming a 4th-order equation.
 
@@ -115,24 +105,9 @@ Applies quadratic detrending to both per capita GDP growth and temperature. When
 
 **Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
-### Approach 6: Pre-computed k(t) with Linear Trends
+### Approach 5: Pre-computed k(t) with Quadratic Trends
 
-In Approaches 1-5, year fixed effects kₜ are estimated simultaneously with the temperature coefficients. An alternative is to pre-compute kₜ as year means before fitting.
-
-1. Pre-compute year effects: `k(t) = mean_i(Δyᵢ(t))`
-2. Fit country trends jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t to `Δyᵢ(t) - k(t)`
-3. Fit temperature trends T₀,ᵢ + T₁,ᵢ·t (linear)
-4. Final regression on residuals:
-
-```
-[Δyᵢ(t) - k(t)] - jᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²]
-```
-
-**Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
-
-### Approach 7: Pre-computed k(t) with Quadratic Trends
-
-Same as Approach 6, but with quadratic trends for both GDP growth and temperature.
+In Approaches 0-4, year fixed effects kₜ are estimated simultaneously with the temperature coefficients. An alternative is to pre-compute kₜ as year means before fitting.
 
 1. Pre-compute year effects: `k(t) = mean_i(Δyᵢ(t))`
 2. Fit country trends jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² to `Δyᵢ(t) - k(t)`
@@ -146,61 +121,98 @@ Same as Approach 6, but with quadratic trends for both GDP growth and temperatur
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
 
-### Approach 8: GDP-Dependent Temperature Response
+#### Approach 5 Variants
 
-Approaches 0-7 assume that the temperature response function h(T) is the same for all countries regardless of income level. However, wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and other infrastructure.
+Several variants explore different detrending combinations:
 
-Approach 8 extends Approach 7 by introducing a GDP-dependent scaling of the climate response. Like Approach 7, it uses:
-- Pre-computed year effects: `k(t) = mean_i(Δyᵢ(t))`
-- Quadratic country trends for GDP growth: `jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t²` fit to `Δyᵢ(t) - k(t)`
-- Quadratic temperature trends: `T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²`
+| Variant | GDP Trend | Temp Trend | Description |
+|---------|-----------|------------|-------------|
+| **5** | Quadratic | Quadratic | Full quadratic detrending |
+| **5a** | Quadratic | Linear | Linear temperature only |
+| **5b** | Quadratic | None | GDP detrending only |
+| **5c** | Quadratic | Linear+Quadratic | Combined approach |
+| **5d** | Quadratic | Quadratic + GDP-scaling | GDP-dependent response |
 
-The climate response function becomes:
-
+**Approach 5d** introduces GDP-dependent scaling:
 ```
 h(Y,T) = (Y/Y_ref)^(-β) · (h₁·T* + h₂·T*²)
+```
+where β is the GDP scaling exponent (larger β = stronger income-based adaptation).
+
+### Approach 6: LOESS Detrending
+
+Replaces polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
+
+```
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h₁·[T - LOESS(T)] + h₂·[T - LOESS(T)]²
+```
+
+Uses a 25-year LOESS window (configurable via `--loess-window`).
+
+**Key difference from polynomial approaches:** Uses `h(T) - h(T_trend)` formulation where the response function is applied to both actual and trend temperatures, then differenced.
+
+**Degrees of freedom:** 2 for h(T) (year effects pre-computed)
+
+### Approach 7: GDP-Dependent Response with LOESS
+
+Extends Approach 6 by introducing GDP-dependent scaling of the climate response. Wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and infrastructure.
+
+```
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = (Yᵢ/Y_ref)^(-β) · [h(T) - h(T_trend)]
 ```
 
 where:
 - `Y` is per capita GDP
-- `Y_ref` is a reference GDP level (mean pcGDP in the most recent year of the dataset)
+- `Y_ref` is mean pcGDP in the most recent year (held fixed during bootstrap)
 - `β` is the GDP scaling exponent
-- `T* = T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)` is quadratic-detrended temperature (same as Approach 7)
-
-Note: `Y_ref` is computed once on the full dataset and held fixed during bootstrap resampling to ensure all samples are compared to the same reference.
-
-The full model becomes:
-
-```
-[Δyᵢ(t) - k(t)] - jᵢ(t) = (Yᵢ(t)/Y_ref)^(-β) · [h₁·T* + h₂·T*²]
-```
+- `h(T) = h₁·T + h₂·T²` is the quadratic response function
 
 **Interpretation of β:**
-- `β > 0`: Poorer countries are more affected by temperature (the GDP scaling factor is larger when Y < Y_ref)
-- `β = 0`: No GDP-dependence (reduces to Approach 7)
-- Larger β means stronger income-based adaptation
+- `β > 0`: Poorer countries more affected by temperature
+- `β = 0`: No GDP-dependence (reduces to Approach 6)
+- Larger β = stronger income-based adaptation
 
-**Solution approach:** Since β enters nonlinearly, we use nested optimization:
-1. Outer loop: Optimize β using Brent's method over [0.01, 0.99]
-2. Inner loop: For each candidate β, solve linear OLS for h₁ and h₂
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, β)
 
-**Degrees of freedom:** 3 for h(T) (h₁, h₂, β); year effects pre-computed
+### Approach 8: Piecewise Quadratic Response with LOESS
 
-### Approaches 9 & 10: LOESS Detrending
+Uses a piecewise quadratic temperature response that allows different curvatures for temperatures above vs below the optimum. This captures the asymmetry where warming may have different effects on hot vs cold countries.
 
-Approaches 9 and 10 replace polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
-
-**Approach 9:** LOESS version of Approach 7 (pre-computed k with LOESS trends)
+**Model:**
 ```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h₁·[T - LOESS(T)] + h₂·[T² - LOESS(T)²]
+h(T) = h₂_high · (T - T_opt)²   if T > T_opt
+h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
 ```
 
-**Approach 10:** LOESS version of Approach 8 (GDP-dependent response with LOESS trends)
+**Parameters:**
+- `T_opt`: Optimal temperature (breakpoint where h(T) = 0)
+- `h₂_low`: Curvature for cold countries (T ≤ T_opt)
+- `h₂_high`: Curvature for hot countries (T > T_opt)
+
+**Fitting uses the detrended formulation:**
 ```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = (Yᵢ/Y_ref)^(-β) · [h₁·[T - LOESS(T)] + h₂·[T² - LOESS(T)²]]
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h(T) - h(T_trend)
 ```
 
-Both use a 25-year LOESS window (configurable via `--loess-window`).
+**Optimization strategy:**
+1. Outer optimization: Search for T_opt using L-BFGS-B
+2. Inner OLS: For each T_opt, solve for h₂_low and h₂_high via 2-column OLS
+
+**Interpretation:**
+- Both h₂_low and h₂_high should be negative (growth decreases away from optimum)
+- If h₂_low ≈ h₂_high, model reduces to symmetric quadratic
+- If |h₂_high| > |h₂_low|, warming hurts hot countries more than cooling hurts cold countries
+
+**Degrees of freedom:** 3 (T_opt, h₂_low, h₂_high)
+
+### Null Models (No Climate Response)
+
+Two null models for comparison:
+
+| Model | Description |
+|-------|-------------|
+| **nocr0** | Joint OLS with country trends and year effects, but h₁=h₂=0 |
+| **nocr5** | Precomputed k with country trends, but h₁=h₂=0 |
 
 ## Imbalance Metrics
 
@@ -241,42 +253,7 @@ For each approach, we compute:
 - If `T_trend = 0` (no temperature detrending), then `h(T_trend) = 0` regardless of h₁ and h₂
 - A degenerate case with no trends and a near-zero climate response would minimize the imbalance while explaining nothing meaningful
 
-The **Imbalance Ratio** addresses this limitation by normalizing by the magnitude of the climate response. A ratio close to 1.0 or below indicates reasonable consistency, while very high ratios (e.g., >10) may indicate that the climate signal is too weak to meaningfully evaluate consistency.
-
-**Example:** Approach 2 (Quadratic GDP Growth Detrending) often shows a very high imbalance ratio because it has no temperature detrending (T_trend = 0) and estimates near-zero climate coefficients, making RMS h(T) extremely small.
-
-## Plot Color Scheme
-
-In the output plots:
-
-| Approach | Color | Line Style | Description |
-|----------|-------|------------|-------------|
-| 0 | Black | Solid | Conjoined OLS fit |
-| 1 | Green | Dotted | Linear (temperature only) |
-| 2 | Blue | Dashed | Quadratic (GDP growth only) |
-| 3 | Red | Solid | Mixed (linear T + quadratic GDP) |
-| 4 | Green | Solid | Linear (both) |
-| 5 | Blue | Solid | Quadratic (both) |
-| 6 | Green | Dash-dot | Pre-computed k, linear trends |
-| 7 | Blue | Dash-dot | Pre-computed k, quadratic trends |
-| 8 | Purple | Dash-dot | GDP-dependent response |
-| 9 | Orange | Densely dashed | Pre-computed k, LOESS trends |
-| 10 | Brown | Densely dashed | GDP-dependent response, LOESS |
-
-**Color** indicates the detrending method:
-- Green = linear polynomial
-- Blue = quadratic polynomial
-- Red = mixed (linear T + quadratic GDP)
-- Black = conjoined OLS (no pre-detrending)
-- Purple = GDP-dependent response with quadratic
-- Orange/Brown = LOESS detrending
-
-**Line style** indicates what is being detrended:
-- Dotted = temperature only
-- Dashed = GDP growth only
-- Solid = both or none
-- Dash-dot = pre-computed k with polynomial trends
-- Densely dashed = pre-computed k with LOESS trends
+The **Imbalance Ratio** addresses this limitation by normalizing by the magnitude of the climate response.
 
 ## Data Sources
 
@@ -287,7 +264,7 @@ Two data input options are available:
 - **Temperature**: CRU CY v4.09 country-level means (Harris et al., 2020)
 
 ### Option 2: Pre-processed CSV
-- **df_base_withPop.csv**: Pre-merged dataset with GDP growth and temperature already computed. Contains columns: `iso_id`, `year`, `pcGDP`, `growth_pcGDP`, `temp`, `precp`, `time`, `Pop`.
+- **Maddison_CRU_dataset.csv**: Pre-merged dataset with GDP growth and temperature already computed.
 
 ## Data Preparation
 
@@ -340,7 +317,7 @@ python scripts/create_Maddison_CRU_dataset.py
 
 ## Usage
 
-Run the analysis with default settings (1960-2022):
+Run the analysis with default settings:
 ```bash
 python scripts/run_analysis.py
 ```
@@ -348,19 +325,20 @@ python scripts/run_analysis.py
 ### Command Line Options
 
 ```
---use-csv PATH     Use pre-processed CSV file instead of Maddison/CRU
---maddison PATH    Path to Maddison GDP Excel file (default: data/input/mpd2023_web.xlsx)
---cru PATH         Path to CRU temperature CSV file (default: data/input/cru_climate_data.csv)
---year-min YEAR    Minimum year to include (default: 1960 for Maddison/CRU, all years for CSV)
---year-max YEAR    Maximum year to include (default: 2022 for Maddison/CRU, all years for CSV)
+--use-csv PATH     Use pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
+--maddison PATH    Path to Maddison GDP Excel file
+--cru PATH         Path to CRU temperature CSV file
+--year-min YEAR    Minimum year to include
+--year-max YEAR    Maximum year to include
 --output-dir DIR   Output directory (default: timestamped directory in data/output/)
+--loess-window N   Window size in years for LOESS smoothing (default: 25)
 ```
 
 ### Examples
 
 Using pre-processed CSV:
 ```bash
-python scripts/run_analysis.py --use-csv data/input/df_base_withPop.csv
+python scripts/run_analysis.py --use-csv data/input/Maddison_CRU_dataset.csv
 ```
 
 Custom year range:
@@ -370,7 +348,7 @@ python scripts/run_analysis.py --year-min 1970 --year-max 2010
 
 ### Bootstrap Uncertainty Analysis
 
-The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for h₁, h₂, and T_optimal across all approaches.
+The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for all parameters across all approaches.
 
 ```bash
 python scripts/run_bootstrap.py
@@ -386,43 +364,50 @@ python scripts/run_bootstrap.py
 ```
 --n-bootstrap N     Number of bootstrap iterations (default: 1000)
 --random-seed SEED  Random seed for reproducibility (default: 42)
---use-csv PATH      Pre-processed CSV file (default: data/input/df_base_withPop.csv)
+--use-csv PATH      Pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
 --year-min YEAR     Minimum year to include
 --year-max YEAR     Maximum year to include
 --output-dir DIR    Output directory (default: timestamped)
+--loess-window N    LOESS window size (default: 25)
 --quiet             Suppress progress messages
 ```
 
 **Example:**
 ```bash
-python scripts/run_bootstrap.py --n-bootstrap 1000 --use-csv data/input/Maddison_CRU_dataset.csv
+python scripts/run_bootstrap.py --n-bootstrap 1000 --output-dir results/bootstrap
 ```
-
-**Bootstrap output files:**
-| File | Description |
-|------|-------------|
-| `bootstrap_coefficients.csv` | All bootstrap samples for h₁, h₂, T_optimal |
-| `bootstrap_summary.txt` | Summary statistics and confidence intervals |
-| `bootstrap_distributions.pdf` | Histograms of coefficient distributions |
-| `bootstrap_temperature_response.pdf` | Temperature response curves with uncertainty bands |
-| `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
-| `bootstrap_T_optimal_comparison.png` | Optimal temperature comparison with error bars |
 
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
 
+### Main Analysis Outputs
+
 | File | Description |
 |------|-------------|
 | `comparison_summary.txt` | Text summary of all approaches |
 | `comparison_table.csv` | Tabular comparison of coefficients and fit statistics |
-| `comparison_table.xlsx` | Same as above in Excel format |
+| `comparison_table.xlsx` | Same as above in Excel format (includes variance decomposition) |
 | `country_trends.csv` | Country-level trend coefficients |
-| `temperature_response.png` | Plot of h(T) - h(T_opt) for each approach |
-| `temperature_derivative.png` | Plot of dh/dT = h₁ + 2h₂T |
-| `coefficient_comparison.png` | Bar chart comparing h₁ and h₂ across approaches |
-| `optimal_temperature_comparison.png` | Bar chart of optimal temperatures |
-| `residuals_*.png` | Residual diagnostic plots for each approach |
+| `temperature_response_*.pdf` | Plot of h(T) - h(T_opt) for each approach group |
+| `temperature_derivative_*.pdf` | Plot of dh/dT for each approach group |
+| `coefficient_comparison.pdf` | Bar chart comparing h₁ and h₂ across approaches |
+| `optimal_temperature_comparison.pdf` | Bar chart of optimal temperatures |
+| `year_effects.pdf` | Year fixed effects plot |
+| `residuals_*.pdf` | Residual diagnostic plots for each approach |
+
+### Bootstrap Outputs
+
+| File | Description |
+|------|-------------|
+| `bootstrap_coefficients.csv` | All bootstrap samples (h₁, h₂, T_optimal, β, h₂_low, h₂_high) |
+| `bootstrap_summary.txt` | Summary statistics and confidence intervals |
+| `bootstrap_summary_table.csv` | Tabular summary with percentiles |
+| `bootstrap_summary_table.xlsx` | Same as above in Excel format |
+| `bootstrap_distributions.pdf` | Histograms of coefficient distributions |
+| `bootstrap_temperature_response_*.pdf` | Temperature response curves with 90% uncertainty bands |
+| `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
+| `bootstrap_T_optimal_comparison.pdf` | Optimal temperature comparison with error bars |
 
 ## Project Structure
 
@@ -432,12 +417,12 @@ detrended-response/
 │   ├── input/                   # Input data files
 │   │   ├── mpd2023_web.xlsx     # Maddison GDP data
 │   │   ├── cru_climate_data.csv # CRU temperature data
-│   │   └── df_base_withPop.csv  # Pre-processed alternative dataset
+│   │   └── Maddison_CRU_dataset.csv  # Pre-processed merged dataset
 │   └── output/                  # Analysis results (timestamped)
 ├── src/
 │   ├── __init__.py
 │   ├── data_loader.py           # Load and merge GDP + temperature data
-│   ├── detrending.py            # Country-level trend fitting
+│   ├── detrending.py            # Country-level trend fitting (polynomial + LOESS)
 │   ├── fitting.py               # OLS regression for each approach
 │   ├── bootstrap.py             # Cluster bootstrap resampling
 │   └── output.py                # Results tables and plots
@@ -447,6 +432,7 @@ detrended-response/
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
+├── DIAGNOSTICS.md               # Detailed diagnostics documentation
 └── README.md
 ```
 
