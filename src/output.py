@@ -2015,6 +2015,127 @@ def plot_bootstrap_temperature_derivative(
     plt.close()
 
 
+def plot_T_optimal_histograms(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    approaches: list = None,
+    filename: str = "T_optimal_histograms.pdf",
+    input_file: str = None,
+) -> None:
+    """Plot T_optimal bootstrap distributions as histograms in multi-panel layout.
+
+    Each approach gets its own panel showing the histogram of T_optimal samples
+    with point estimate, median, and 90% CI bounds marked.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        approaches: List of approach keys to include (default: all)
+        filename: Output filename (should end in .pdf)
+        input_file: Path to input data file (for annotation)
+    """
+    if approaches is None:
+        approaches = list(results.keys())
+
+    # Filter to only approaches that exist in results
+    approaches = [name for name in approaches if name in results]
+    n_approaches = len(approaches)
+
+    if n_approaches == 0:
+        return
+
+    # Determine grid layout
+    if n_approaches == 1:
+        n_rows, n_cols = 1, 1
+    elif n_approaches == 2:
+        n_rows, n_cols = 1, 2
+    elif n_approaches <= 4:
+        n_rows, n_cols = 2, 2
+    elif n_approaches <= 6:
+        n_rows, n_cols = 2, 3
+    else:
+        n_rows, n_cols = 3, 3
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    if n_approaches == 1:
+        axes = [axes]
+    else:
+        axes = axes.flatten()
+
+    # First pass: find global x-axis range for consistent scaling
+    all_samples = []
+    all_points = []
+    for name in approaches:
+        result = results[name]
+        valid_samples = result.T_optimal_samples[~np.isnan(result.T_optimal_samples)]
+        if len(valid_samples) > 0:
+            all_samples.extend(valid_samples)
+            all_points.append(result.T_optimal_point)
+
+    if len(all_samples) == 0:
+        plt.close()
+        return
+
+    # Compute common x-axis range with some padding
+    x_min = min(np.percentile(all_samples, 1), min(all_points)) - 2
+    x_max = max(np.percentile(all_samples, 99), max(all_points)) + 2
+
+    # Second pass: create the plots
+    for idx, name in enumerate(approaches):
+        ax = axes[idx]
+        result = results[name]
+        color = APPROACH_COLORS.get(name, 'steelblue')
+
+        # Get valid samples
+        valid_samples = result.T_optimal_samples[~np.isnan(result.T_optimal_samples)]
+
+        if len(valid_samples) == 0:
+            ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+            ax.set_title(f'{result.approach}', fontsize=11)
+            continue
+
+        # Compute statistics
+        point_est = result.T_optimal_point
+        median = np.median(valid_samples)
+        p5 = np.percentile(valid_samples, 5)
+        p95 = np.percentile(valid_samples, 95)
+
+        # Plot histogram
+        ax.hist(valid_samples, bins=40, density=True, alpha=0.7, color=color,
+                edgecolor='white', linewidth=0.5)
+
+        # Point estimate (solid line)
+        ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
+                   label=f'Point: {point_est:.1f}°C')
+
+        # Bootstrap median (dashed line)
+        ax.axvline(x=median, color=color, linestyle='--', linewidth=2,
+                   label=f'Median: {median:.1f}°C')
+
+        # 90% CI bounds (dotted lines)
+        ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5,
+                   label=f'90% CI: [{p5:.1f}, {p95:.1f}]')
+        ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5)
+
+        ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
+        ax.set_ylabel('Density', fontsize=10)
+        ax.set_title(f'{result.approach}', fontsize=11)
+        ax.set_xlim(x_min, x_max)
+        ax.legend(fontsize=8, loc='upper right')
+        ax.grid(True, alpha=0.3)
+
+    # Hide unused subplots
+    for idx in range(n_approaches, len(axes)):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Bootstrap Distribution of Optimal Temperature', fontsize=14, y=1.02)
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+
+
 def plot_bootstrap_gdp_scaling(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
