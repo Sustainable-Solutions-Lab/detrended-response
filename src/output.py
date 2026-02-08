@@ -2082,26 +2082,31 @@ def plot_T_optimal_histograms(
 
         # Compute statistics
         point_est = result.T_optimal_point
-        median = np.median(valid_samples)
         p5 = np.percentile(valid_samples, 5)
+        p25 = np.percentile(valid_samples, 25)
+        p75 = np.percentile(valid_samples, 75)
         p95 = np.percentile(valid_samples, 95)
 
-        # Plot histogram
-        ax.hist(valid_samples, bins=bins, density=True, alpha=0.7, color=color,
-                edgecolor=color, linewidth=0.5)
+        # Plot bands and lines first (bottom layer)
+        # 90% CI vertical band
+        ax.axvspan(p5, p95, alpha=0.2, color=color,
+                   label=f'90% CI: [{p5:.1f}, {p95:.1f}]°C')
 
-        # Point estimate (solid line)
+        # IQR vertical band
+        ax.axvspan(p25, p75, alpha=0.3, color=color,
+                   label=f'IQR: [{p25:.1f}, {p75:.1f}]°C')
+
+        # Point estimate (solid line, behind histogram)
         ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
                    label=f'Point: {point_est:.1f}°C')
 
-        # Bootstrap median (dashed line)
-        ax.axvline(x=median, color=color, linestyle='--', linewidth=2,
-                   label=f'Median: {median:.1f}°C')
+        # Plot histogram on top (fully saturated)
+        n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
+                          edgecolor=color, linewidth=0.5)
 
-        # 90% CI bounds (dotted lines)
-        ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5,
-                   label=f'90% CI: [{p5:.1f}, {p95:.1f}]')
-        ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5)
+        # Extend y-axis upper bound with ~10% padding
+        y_max = np.max(n) * 1.1
+        ax.set_ylim(0, y_max)
 
         ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
         ax.set_ylabel('Density', fontsize=10)
