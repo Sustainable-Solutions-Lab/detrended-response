@@ -99,71 +99,57 @@ def get_valid_bootstrap_samples(
     return result.h1_samples[valid_mask], result.h2_samples[valid_mask], valid_mask
 
 
-def is_skewnorm_result(result) -> bool:
-    """Check if result is from skew-normal model (approach 8).
+def is_piecewise_result(result) -> bool:
+    """Check if result is from piecewise quadratic model (approach 8).
 
-    Skew-normal results have T_opt, sigma, and alpha as primary parameters and h1=0.
+    Piecewise results have T_opt, h2_low, and h2_high as primary parameters and h1=0.
     """
-    return hasattr(result, 'T_opt') and hasattr(result, 'sigma') and result.h1 == 0.0
+    return hasattr(result, 'T_opt') and hasattr(result, 'h2_low') and hasattr(result, 'h2_high')
 
 
-# Keep backward compatibility alias
-is_gaussian_result = is_skewnorm_result
+# Keep backward compatibility aliases
+is_skewnorm_result = is_piecewise_result
+is_gaussian_result = is_piecewise_result
 
 
-def skewnorm_shape(T: np.ndarray, T_opt: float, sigma: float, alpha: float = 0.0) -> np.ndarray:
-    """Compute skew-normal shape.
+def piecewise_quad_shape(T: np.ndarray, T_opt: float) -> tuple:
+    """Compute piecewise quadratic shape.
 
-    Formula: (1/(sigma*sqrt(2*pi))) * exp(-(T-T_opt)^2/(2*sigma^2)) * [1 + erf(alpha*(T-T_opt)/(sigma*sqrt(2)))]
-
-    When alpha=0, this reduces to the standard Gaussian.
+    Returns two arrays: one for T <= T_opt contribution, one for T > T_opt.
 
     Args:
         T: Temperature array
-        T_opt: Location parameter
-        sigma: Scale parameter
-        alpha: Skewness parameter (default 0 for symmetric)
+        T_opt: Optimal temperature (breakpoint)
 
     Returns:
-        Skew-normal shape values
+        Tuple of (low_component, high_component)
     """
-    z = (T - T_opt) / sigma
-    norm_factor = 1.0 / (sigma * np.sqrt(2 * np.pi))
-    gaussian_part = np.exp(-0.5 * z ** 2)
-    skew_part = 1.0 + erf(alpha * z / np.sqrt(2))
-    return norm_factor * gaussian_part * skew_part
-
-
-# Keep backward compatibility alias
-def gaussian_shape(T: np.ndarray, T_opt: float, sigma: float) -> np.ndarray:
-    """Compute Gaussian shape (skew-normal with alpha=0)."""
-    return skewnorm_shape(T, T_opt, sigma, alpha=0.0)
+    low_component = np.where(T <= T_opt, (T - T_opt) ** 2, 0.0)
+    high_component = np.where(T > T_opt, (T - T_opt) ** 2, 0.0)
+    return low_component, high_component
 
 
 def compute_h_response(T: np.ndarray, result) -> np.ndarray:
     """Compute h(T) - h(T_opt) for any approach type.
 
     For quadratic model: h(T) = h1*T + h2*T², so h(T) - h(T_opt) = ...
-    For skew-normal model: h(T) - h(T_opt) = h2 * [f(T) - f(T_opt)]
-        where f(T) is the skew-normal shape
+    For piecewise model: h(T) - h(T_opt) = h2_low*(T-T_opt)² for T≤T_opt, h2_high*(T-T_opt)² for T>T_opt
+        Since h(T_opt) = 0, h(T) - h(T_opt) = h(T)
 
     Args:
         T: Temperature array
-        result: FitResult or similar with h1, h2, T_optimal (and sigma, T_opt, alpha for skew-normal)
+        result: FitResult or similar with h1, h2, T_optimal (and h2_low, h2_high, T_opt for piecewise)
 
     Returns:
         Array of h(T) - h(T_opt) values
     """
-    if is_skewnorm_result(result):
-        # Skew-normal: h(T) = h2 * f(T)
-        # h(T) - h(T_opt) = h2 * [f(T) - f(T_opt)]
+    if is_piecewise_result(result):
+        # Piecewise quadratic: h(T_opt) = 0, so h(T) - h(T_opt) = h(T)
         T_opt = result.T_opt
-        sigma = result.sigma
-        alpha = getattr(result, 'alpha', 0.0) or 0.0  # Default to symmetric if not present
-        h2 = result.h2
-        shape_at_T = skewnorm_shape(T, T_opt, sigma, alpha)
-        shape_at_T_opt = skewnorm_shape(np.array([T_opt]), T_opt, sigma, alpha)[0]
-        return h2 * (shape_at_T - shape_at_T_opt)
+        h2_low = result.h2_low
+        h2_high = result.h2_high
+        low_comp, high_comp = piecewise_quad_shape(T, T_opt)
+        return h2_low * low_comp + h2_high * high_comp
     else:
         # Quadratic: h(T) = h1*T + h2*T²
         h1, h2 = result.h1, result.h2
@@ -180,37 +166,27 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
     """Compute dh/dT for any approach type.
 
     For quadratic model: dh/dT = h1 + 2*h2*T
-    For skew-normal model: dh/dT = h2 * df/dT where f(T) is skew-normal shape
-        df/dT = C/σ * g(z) * [-z*s(z) + α√(2/π) * exp(-α²z²/2)]
-        where z = (T-T_opt)/σ, C = 1/(σ√(2π)), g(z) = exp(-z²/2),
-        s(z) = 1 + erf(αz/√2)
+    For piecewise model: dh/dT = 2*h2_low*(T-T_opt) for T≤T_opt, 2*h2_high*(T-T_opt) for T>T_opt
 
     Args:
         T: Temperature array
-        result: FitResult or similar with h1, h2 (and sigma, T_opt, alpha for skew-normal)
+        result: FitResult or similar with h1, h2 (and h2_low, h2_high, T_opt for piecewise)
 
     Returns:
         Array of dh/dT values
     """
-    if is_skewnorm_result(result):
-        # Skew-normal derivative
+    if is_piecewise_result(result):
+        # Piecewise quadratic derivative
         T_opt = result.T_opt
-        sigma = result.sigma
-        alpha = getattr(result, 'alpha', 0.0) or 0.0  # Default to symmetric if not present
-        h2 = result.h2
+        h2_low = result.h2_low
+        h2_high = result.h2_high
 
-        z = (T - T_opt) / sigma
-        C = 1.0 / (sigma * np.sqrt(2 * np.pi))
-        g_z = np.exp(-0.5 * z ** 2)
-        s_z = 1.0 + erf(alpha * z / np.sqrt(2))
-
-        # Derivative of erf term: d/dz[erf(αz/√2)] = α√(2/π) * exp(-α²z²/2)
-        s_prime_z = alpha * np.sqrt(2 / np.pi) * np.exp(-0.5 * (alpha * z) ** 2)
-
-        # df/dT = C/σ * g(z) * [-z*s(z) + s'(z)]
-        df_dT = (C / sigma) * g_z * (-z * s_z + s_prime_z)
-
-        return h2 * df_dT
+        # dh/dT = 2*h2*(T - T_opt) with appropriate h2 based on which side of T_opt
+        return np.where(
+            T <= T_opt,
+            2 * h2_low * (T - T_opt),
+            2 * h2_high * (T - T_opt)
+        )
     else:
         # Quadratic derivative: h1 + 2*h2*T
         return result.h1 + 2 * result.h2 * T
@@ -270,16 +246,14 @@ def save_summary_table(
         # Add Y_ref for Approach 7
         if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
-        # Add T_opt, sigma, alpha for Approach 8 (skew-normal)
-        if hasattr(result, 'T_opt'):
+        # Add T_opt, h2_low, h2_high for Approach 8 (piecewise quadratic)
+        if hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
             row['T_opt'] = result.T_opt
             row['T_opt_SE'] = result.T_opt_se
-        if hasattr(result, 'sigma') and result.sigma is not None:
-            row['sigma'] = result.sigma
-            row['sigma_SE'] = result.sigma_se
-        if hasattr(result, 'alpha') and result.alpha is not None:
-            row['alpha'] = result.alpha
-            row['alpha_SE'] = result.alpha_se
+            row['h2_low'] = result.h2_low
+            row['h2_low_SE'] = result.h2_low_se
+            row['h2_high'] = result.h2_high
+            row['h2_high_SE'] = result.h2_high_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -354,16 +328,12 @@ def save_summary_table(
         for name, result in results.items():
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            # Special handling for Approach 8 (skew-normal)
-            if hasattr(result, 'T_opt') and hasattr(result, 'sigma'):
-                f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
+            # Special handling for Approach 8 (piecewise quadratic)
+            if hasattr(result, 'h2_low') and hasattr(result, 'h2_high'):
+                f.write(f"  h2_low = {result.h2_low:.6f}  (SE: {result.h2_low_se:.6f})\n")
+                f.write(f"  h2_high = {result.h2_high:.6f}  (SE: {result.h2_high_se:.6f})\n")
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
-                sigma_se = result.sigma_se if not np.isnan(result.sigma_se) else 0.0
-                f.write(f"  T_opt = {result.T_opt:10.4f}  (SE: {T_opt_se:.4f})\n")
-                f.write(f"  sigma = {result.sigma:10.4f}  (SE: {sigma_se:.4f})\n")
-                if hasattr(result, 'alpha') and result.alpha is not None:
-                    alpha_se = result.alpha_se if not np.isnan(result.alpha_se) else 0.0
-                    f.write(f"  alpha = {result.alpha:10.4f}  (SE: {alpha_se:.4f})\n")
+                f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
             else:
                 f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
                 f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
@@ -1281,54 +1251,49 @@ def compute_h_response_uncertainty_bands(
     Returns percentile bands across all bootstrap samples.
 
     For quadratic models: h(T) = h1*T + h2*T²
-    For skew-normal (approach8): h(T) - h(T_opt) = h2 * [f(T) - f(T_opt)]
+    For piecewise (approach8): h(T) - h(T_opt) = h2_low*(T-T_opt)² or h2_high*(T-T_opt)²
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for skew-normal)
+        approach_key: Approach identifier (e.g., 'approach8' for piecewise)
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    is_skewnorm = (approach_key == 'approach8')
+    is_piecewise = (approach_key == 'approach8')
 
-    if is_skewnorm:
-        # Skew-normal model: need h2, T_optimal, sigma, and alpha samples
-        sigma_samples = getattr(result, 'sigma_samples', None)
-        alpha_samples = getattr(result, 'alpha_samples', None)
+    if is_piecewise:
+        # Piecewise quadratic model: need h2_low, h2_high, T_optimal samples
+        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        h2_high_samples = getattr(result, 'h2_high_samples', None)
 
-        if sigma_samples is None:
+        if h2_low_samples is None or h2_high_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        valid_mask = (~np.isnan(result.h2_samples) &
-                      ~np.isnan(result.T_optimal_samples) &
-                      ~np.isnan(sigma_samples))
-        if alpha_samples is not None:
-            valid_mask = valid_mask & ~np.isnan(alpha_samples)
+        valid_mask = (~np.isnan(h2_low_samples) &
+                      ~np.isnan(h2_high_samples) &
+                      ~np.isnan(result.T_optimal_samples))
 
-        h2_valid = result.h2_samples[valid_mask]
+        h2_low_valid = h2_low_samples[valid_mask]
+        h2_high_valid = h2_high_samples[valid_mask]
         T_opt_valid = result.T_optimal_samples[valid_mask]
-        sigma_valid = sigma_samples[valid_mask]
-        alpha_valid = alpha_samples[valid_mask] if alpha_samples is not None else np.zeros_like(sigma_valid)
 
-        if len(h2_valid) == 0:
+        if len(h2_low_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        n_samples = len(h2_valid)
+        n_samples = len(h2_low_valid)
         n_T = len(T_range)
         h_relative_samples = np.zeros((n_samples, n_T))
 
         for i in range(n_samples):
-            h2 = h2_valid[i]
+            h2_low = h2_low_valid[i]
+            h2_high = h2_high_valid[i]
             T_opt = T_opt_valid[i]
-            sigma = sigma_valid[i]
-            alpha = alpha_valid[i]
-            # h(T) - h(T_opt) = h2 * [f(T) - f(T_opt)]
-            shape_at_T = skewnorm_shape(T_range, T_opt, sigma, alpha)
-            shape_at_T_opt = skewnorm_shape(np.array([T_opt]), T_opt, sigma, alpha)[0]
-            h_relative_samples[i, :] = h2 * (shape_at_T - shape_at_T_opt)
+            # h(T) - h(T_opt) = h(T) since h(T_opt) = 0
+            low_comp, high_comp = piecewise_quad_shape(T_range, T_opt)
+            h_relative_samples[i, :] = h2_low * low_comp + h2_high * high_comp
     else:
         # Quadratic model
         h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
