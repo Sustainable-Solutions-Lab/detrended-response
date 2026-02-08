@@ -40,7 +40,7 @@ from src.fitting import (
     fit_approach5d_precomputed_k_gdp_response,
     fit_approach6_precomputed_k_loess,
     fit_approach7_gdp_response_loess,
-    fit_approach8_power_law_loess,
+    fit_approach8_gaussian_loess,
     fit_nocr0_joint,
     fit_nocr5_precomputed_k,
 )
@@ -178,7 +178,7 @@ def main():
     print("\n[9/11] Fitting Approaches 6, 7 & 8: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
-    results['approach8'] = fit_approach8_power_law_loess(data, trends_loess, year_means)
+    results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
@@ -194,11 +194,11 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        # Special handling for Approach 8 (power-law)
-        if hasattr(r, 'T_opt'):
+        # Special handling for Approach 8 (Gaussian)
+        if hasattr(r, 'T_opt') and hasattr(r, 'sigma'):
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             print(f"  T_opt = {r.T_opt:10.4f}  (SE: {r.T_opt_se:.4f})")
-            print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
+            print(f"  sigma = {r.sigma:10.4f}  (SE: {r.sigma_se:.4f})")
         else:
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")

@@ -356,24 +356,26 @@ class FitResultApproach8:
 
 
 @dataclass
-class FitResultApproach8PowerLaw:
-    """Container for power-law temperature response results.
+class FitResultApproach8Gaussian:
+    """Container for Gaussian temperature response results.
 
-    Model: h(T) = h2 * |T - T_opt|^beta
+    Model: h(T) = h2 * (2*pi*sigma^2)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))
+
+    This is a Gaussian/normal distribution centered at T_opt with width sigma.
     """
     approach: str
-    h2: float              # Power-law coefficient
+    h2: float              # Gaussian amplitude coefficient
     h2_se: float           # SE from inner OLS
-    T_opt: float           # Optimal temperature
+    T_opt: float           # Optimal temperature (peak of Gaussian)
     T_opt_se: float        # SE from numerical Hessian
-    beta: float            # Power-law exponent
-    beta_se: float         # SE from numerical Hessian
+    sigma: float           # Gaussian width parameter
+    sigma_se: float        # SE from numerical Hessian
     k: Dict[int, float]    # Year fixed effects
     r_squared: float
     adj_r_squared: float
     rmse: float
     n_obs: int
-    n_params: int          # = 3 (h2, T_opt, beta)
+    n_params: int          # = 3 (h2, T_opt, sigma)
     residuals: np.ndarray
     T_optimal: float       # = T_opt (for compatibility)
     total_r_squared: float
@@ -383,8 +385,11 @@ class FitResultApproach8PowerLaw:
     var_decomp: dict = None
     var_attrib: dict = None
     # Include h1 and h1_se for compatibility with plotting functions that expect them
-    h1: float = 0.0        # Not used in power-law model
-    h1_se: float = 0.0     # Not used in power-law model
+    h1: float = 0.0        # Not used in Gaussian model
+    h1_se: float = 0.0     # Not used in Gaussian model
+    # For bootstrap compatibility (maps to sigma)
+    beta: float = None     # Alias for sigma for bootstrap compatibility
+    beta_se: float = None  # Alias for sigma_se
 
 
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
@@ -1917,33 +1922,33 @@ def fit_approach7_gdp_response_loess(
     )
 
 
-def fit_approach8_power_law_loess(
+def fit_approach8_gaussian_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
-    beta_bounds: tuple = (0.0, 4.0),
-) -> FitResultApproach8PowerLaw:
-    """Approach 8: Power-law temperature response with LOESS detrending.
+    sigma_bounds: tuple = (1.0, 50.0),
+) -> FitResultApproach8Gaussian:
+    """Approach 8: Gaussian temperature response with LOESS detrending.
 
-    Model: dy - k[t] - j_i[t] = h2 * (|T - T_opt|^beta - |T_trend - T_opt|^beta)
+    Model: h(T) = h2 * (2*pi*sigma)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))
 
-    This is the power-law analog of approach 6's quadratic formulation:
-    h(T) - h(T_trend) where h(T) = h2 * |T - T_opt|^beta
+    For fitting we use the h(T) - h(T_trend) formulation:
+    dy - k[t] - j_i[t] = h2 * (2*pi*sigma)^(-0.5) * [exp(-(T - T_opt)^2 / (2*sigma^2))
+                                                    - exp(-(T_trend - T_opt)^2 / (2*sigma^2))]
 
-    Uses 2D optimization over (T_opt, beta) with inner OLS for h2.
+    Uses 2D optimization over (T_opt, sigma) with inner OLS for h2.
     Uses raw temperature T (not detrended) so T_opt is the actual optimal temperature.
-    With beta=2 fixed, this should match approach 6 (quadratic) exactly.
 
     Args:
         data: AnalysisData object
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
-        beta_bounds: Bounds for power-law exponent (default [0, 4])
+        sigma_bounds: Bounds for Gaussian width parameter (default [1, 50])
 
     Returns:
-        FitResultApproach8PowerLaw with T_opt, beta, h2, and standard errors
+        FitResultApproach8Gaussian with T_opt, sigma, h2, and standard errors
     """
     # Compute dependent variable: dy - k[t] - j_i[t] (same as approach 6)
     y = np.zeros(data.n_obs)
@@ -1955,18 +1960,22 @@ def fit_approach8_power_law_loess(
     T = data.temp
     T_trend = trends_loess.T_loess  # Temperature trend for h(T) - h(T_trend) formulation
 
-    def compute_sse_for_params(params):
-        """Compute SSE for given (T_opt, beta) by solving inner OLS for h2."""
-        T_opt, beta_val = params
+    def gaussian_shape(T_vals, T_opt, sigma_val):
+        """Compute Gaussian shape: (2*pi*sigma)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))"""
+        norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_val)
+        return norm_factor * np.exp(-((T_vals - T_opt) ** 2) / (2 * sigma_val ** 2))
 
-        # Compute h(T) - h(T_trend) = |T - T_opt|^beta - |T_trend - T_opt|^beta
-        # Add small epsilon to avoid 0^beta issues
-        h_T = np.power(np.abs(T - T_opt) + 1e-10, beta_val)
-        h_T_trend = np.power(np.abs(T_trend - T_opt) + 1e-10, beta_val)
-        h_diff = h_T - h_T_trend
+    def compute_sse_for_params(params):
+        """Compute SSE for given (T_opt, sigma) by solving inner OLS for h2."""
+        T_opt, sigma_val = params
+
+        # Compute h(T) - h(T_trend) using Gaussian shape
+        g_T = gaussian_shape(T, T_opt, sigma_val)
+        g_T_trend = gaussian_shape(T_trend, T_opt, sigma_val)
+        g_diff = g_T - g_T_trend
 
         # Design matrix: single column for h2
-        X = h_diff.reshape(-1, 1)
+        X = g_diff.reshape(-1, 1)
 
         # Solve OLS: min ||y - h2 * X||^2
         try:
@@ -1977,35 +1986,34 @@ def fit_approach8_power_law_loess(
         except Exception:
             return np.inf
 
-    # Initial guess
-    x0 = [15.0, 2.0]
+    # Initial guess: T_opt = 15°C, sigma = 5°C
+    x0 = [15.0, 5.0]
 
     # 2D optimization using L-BFGS-B
     result = minimize(
         compute_sse_for_params,
         x0=x0,
-        bounds=[T_opt_bounds, beta_bounds],
+        bounds=[T_opt_bounds, sigma_bounds],
         method='L-BFGS-B',
         options={'ftol': 1e-8}
     )
-    T_opt_opt, beta_opt = result.x
+    T_opt_opt, sigma_opt = result.x
 
-    # Re-fit at optimal (T_opt, beta) to get h2, residuals, covariance
-    # Using h(T) - h(T_trend) formulation
-    h_T = np.power(np.abs(T - T_opt_opt) + 1e-10, beta_opt)
-    h_T_trend = np.power(np.abs(T_trend - T_opt_opt) + 1e-10, beta_opt)
-    h_diff = h_T - h_T_trend
-    X_opt = h_diff.reshape(-1, 1)
+    # Re-fit at optimal (T_opt, sigma) to get h2, residuals, covariance
+    g_T = gaussian_shape(T, T_opt_opt, sigma_opt)
+    g_T_trend = gaussian_shape(T_trend, T_opt_opt, sigma_opt)
+    g_diff = g_T - g_T_trend
+    X_opt = g_diff.reshape(-1, 1)
 
-    h2_ols, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+    h2_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
     h2 = h2_ols[0]
     h2_se = np.sqrt(cov[0, 0])
 
-    # Compute SE for T_opt and beta using numerical Hessian
-    T_opt_se, beta_se = compute_2d_se_numerical(
+    # Compute SE for T_opt and sigma using numerical Hessian
+    T_opt_se, sigma_se = compute_2d_se_numerical(
         compute_sse_for_params,
-        np.array([T_opt_opt, beta_opt]),
-        [T_opt_bounds, beta_bounds],
+        np.array([T_opt_opt, sigma_opt]),
+        [T_opt_bounds, sigma_bounds],
         data.n_obs,
         n_params=3
     )
@@ -2014,24 +2022,21 @@ def fit_approach8_power_law_loess(
     k = dict(year_means)
 
     # Fit statistics
-    n_params = 3  # h2, T_opt, beta
+    n_params = 3  # h2, T_opt, sigma
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Total R² (variance explained in original dy)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
-    # For power-law: h(T) = h2 * |T - T_opt|^beta
-    # Note: T_trend already defined above for h(T) - h(T_trend) formulation
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
     # Climate response values using h(T) - h(T_trend) formulation
-    # h_T and h_T_trend already computed above for X_opt
-    h_values = h2 * h_diff  # This is h2 * (|T - T_opt|^beta - |T_trend - T_opt|^beta)
+    h_values = h2 * g_diff
 
-    # For imbalance, we use h(T_trend) term: h2 * |T_trend - T_opt|^beta
-    h_of_T_trend = h2 * h_T_trend
+    # For imbalance, we use h(T_trend) term
+    h_of_T_trend = h2 * g_T_trend
     imbalance = h_of_T_trend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
@@ -2040,7 +2045,6 @@ def fit_approach8_power_law_loess(
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
-    # Components: h (climate response = h(T) - h(T_trend)), j (LOESS trends), k (year effects)
     components = {
         'h_T': h_values,
         'j': j_trend,
@@ -2049,21 +2053,19 @@ def fit_approach8_power_law_loess(
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    # For power-law model:
-    # Δu = h(T) - h(T_trend) = h_values, v = h(T_trend), j = j_trend, k = k_values, ε = remainder
-    Delta_u = h_values  # This is already h(T) - h(T_trend)
+    Delta_u = h_values  # h(T) - h(T_trend)
     v = h_of_T_trend    # h(T_trend)
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
-    return FitResultApproach8PowerLaw(
-        approach="8: Power-Law LOESS",
+    return FitResultApproach8Gaussian(
+        approach="8: Gaussian LOESS",
         h2=h2,
         h2_se=h2_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
-        beta=beta_opt,
-        beta_se=beta_se,
+        sigma=sigma_opt,
+        sigma_se=sigma_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2072,6 +2074,8 @@ def fit_approach8_power_law_loess(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_opt_opt,  # For compatibility
+        beta=sigma_opt,       # Alias for bootstrap compatibility
+        beta_se=sigma_se,     # Alias for bootstrap compatibility
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2495,8 +2499,8 @@ def fit_all_approaches(
                 data, trends_loess, year_means, Y_ref
             )
 
-        # Add approach 8 (power-law response, no Y_ref dependency)
-        results['approach8'] = fit_approach8_power_law_loess(
+        # Add approach 8 (Gaussian response, no Y_ref dependency)
+        results['approach8'] = fit_approach8_gaussian_loess(
             data, trends_loess, year_means
         )
 

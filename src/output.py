@@ -98,34 +98,43 @@ def get_valid_bootstrap_samples(
     return result.h1_samples[valid_mask], result.h2_samples[valid_mask], valid_mask
 
 
-def is_power_law_result(result) -> bool:
-    """Check if result is from power-law model (approach 8).
+def is_gaussian_result(result) -> bool:
+    """Check if result is from Gaussian model (approach 8).
 
-    Power-law results have T_opt as a primary parameter and h1=0.
+    Gaussian results have T_opt and sigma as primary parameters and h1=0.
     """
-    return hasattr(result, 'T_opt') and hasattr(result, 'beta') and result.h1 == 0.0
+    return hasattr(result, 'T_opt') and hasattr(result, 'sigma') and result.h1 == 0.0
+
+
+def gaussian_shape(T: np.ndarray, T_opt: float, sigma: float) -> np.ndarray:
+    """Compute Gaussian shape: (2*pi*sigma)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))"""
+    norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma)
+    return norm_factor * np.exp(-((T - T_opt) ** 2) / (2 * sigma ** 2))
 
 
 def compute_h_response(T: np.ndarray, result) -> np.ndarray:
     """Compute h(T) - h(T_opt) for any approach type.
 
     For quadratic model: h(T) = h1*T + h2*T², so h(T) - h(T_opt) = ...
-    For power-law model: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+    For Gaussian model: h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(-(T-T_opt)^2/(2*sigma^2)) - 1]
 
     Args:
         T: Temperature array
-        result: FitResult or similar with h1, h2, T_optimal (and beta, T_opt for power-law)
+        result: FitResult or similar with h1, h2, T_optimal (and sigma, T_opt for Gaussian)
 
     Returns:
         Array of h(T) - h(T_opt) values
     """
-    if is_power_law_result(result):
-        # Power-law: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
-        # Since |T_opt - T_opt|^beta = 0
+    if is_gaussian_result(result):
+        # Gaussian: h(T) = h2 * (2*pi*sigma)^(-0.5) * exp(-(T-T_opt)^2/(2*sigma^2))
+        # h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * 1 (at peak)
+        # h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(...) - 1]
         T_opt = result.T_opt
-        beta = result.beta
+        sigma = result.sigma
         h2 = result.h2
-        return h2 * np.power(np.abs(T - T_opt) + 1e-10, beta)
+        norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma)
+        gauss_shape = np.exp(-((T - T_opt) ** 2) / (2 * sigma ** 2))
+        return h2 * norm_factor * (gauss_shape - 1.0)
     else:
         # Quadratic: h(T) = h1*T + h2*T²
         h1, h2 = result.h1, result.h2
@@ -142,28 +151,25 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
     """Compute dh/dT for any approach type.
 
     For quadratic model: dh/dT = h1 + 2*h2*T
-    For power-law model: dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+    For Gaussian model: dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(...) * (-(T-T_opt)/sigma^2)
 
     Args:
         T: Temperature array
-        result: FitResult or similar with h1, h2 (and beta, T_opt for power-law)
+        result: FitResult or similar with h1, h2 (and sigma, T_opt for Gaussian)
 
     Returns:
         Array of dh/dT values
     """
-    if is_power_law_result(result):
-        # Power-law derivative: h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+    if is_gaussian_result(result):
+        # Gaussian derivative:
+        # dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(-(T-T_opt)^2/(2*sigma^2)) * (-(T-T_opt)/sigma^2)
         T_opt = result.T_opt
-        beta = result.beta
+        sigma = result.sigma
         h2 = result.h2
+        norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma)
         T_diff = T - T_opt
-        # Handle the derivative carefully at T = T_opt
-        dh = np.zeros_like(T)
-        nonzero = np.abs(T_diff) > 1e-10
-        dh[nonzero] = (h2 * beta *
-                       np.power(np.abs(T_diff[nonzero]), beta - 1) *
-                       np.sign(T_diff[nonzero]))
-        return dh
+        gauss_shape = np.exp(-(T_diff ** 2) / (2 * sigma ** 2))
+        return h2 * norm_factor * gauss_shape * (-T_diff / (sigma ** 2))
     else:
         # Quadratic derivative: h1 + 2*h2*T
         return result.h1 + 2 * result.h2 * T
@@ -1223,27 +1229,27 @@ def compute_h_response_uncertainty_bands(
     Returns percentile bands across all bootstrap samples.
 
     For quadratic models: h(T) = h1*T + h2*T²
-    For power-law (approach8): h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+    For Gaussian (approach8): h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(...) - 1]
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for power-law)
+        approach_key: Approach identifier (e.g., 'approach8' for Gaussian)
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    is_power_law = (approach_key == 'approach8')
+    is_gaussian = (approach_key == 'approach8')
 
-    if is_power_law:
-        # Power-law model: need h2, T_optimal, and beta samples
+    if is_gaussian:
+        # Gaussian model: need h2, T_optimal, and sigma (stored as beta) samples
         valid_mask = (~np.isnan(result.h2_samples) &
                       ~np.isnan(result.T_optimal_samples) &
-                      ~np.isnan(result.beta_samples))
+                      ~np.isnan(result.beta_samples))  # beta_samples contains sigma
         h2_valid = result.h2_samples[valid_mask]
         T_opt_valid = result.T_optimal_samples[valid_mask]
-        beta_valid = result.beta_samples[valid_mask]
+        sigma_valid = result.beta_samples[valid_mask]  # sigma stored as beta for compatibility
 
         if len(h2_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
@@ -1255,9 +1261,11 @@ def compute_h_response_uncertainty_bands(
         for i in range(n_samples):
             h2 = h2_valid[i]
             T_opt = T_opt_valid[i]
-            beta = beta_valid[i]
-            # h(T) - h(T_opt) = h2 * |T - T_opt|^beta
-            h_relative_samples[i, :] = h2 * np.power(np.abs(T_range - T_opt) + 1e-10, beta)
+            sigma = sigma_valid[i]
+            # h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(-(T-T_opt)^2/(2*sigma^2)) - 1]
+            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma)
+            gauss_shape = np.exp(-((T_range - T_opt) ** 2) / (2 * sigma ** 2))
+            h_relative_samples[i, :] = h2 * norm_factor * (gauss_shape - 1.0)
     else:
         # Quadratic model
         h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
@@ -1521,13 +1529,15 @@ def plot_bootstrap_temperature_response(
         )
 
         # Compute point estimate response
-        # Check if this is power-law model (approach8)
+        # Check if this is Gaussian model (approach8)
         if name == 'approach8' and result.beta_point is not None:
-            # Power-law: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+            # Gaussian: h(T) - h(T_opt) = h2 * (2*pi*sigma)^(-0.5) * [exp(...) - 1]
             h2_point = result.h2_point
             T_opt_point = result.T_optimal_point
-            beta_point = result.beta_point
-            h_point = h2_point * np.power(np.abs(T - T_opt_point) + 1e-10, beta_point)
+            sigma_point = result.beta_point  # sigma stored as beta for compatibility
+            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_point)
+            gauss_shape = np.exp(-((T - T_opt_point) ** 2) / (2 * sigma_point ** 2))
+            h_point = h2_point * norm_factor * (gauss_shape - 1.0)
         else:
             # Quadratic model
             h1_point = result.h1_point
@@ -1707,27 +1717,27 @@ def compute_derivative_uncertainty_bands(
     """Compute dh/dT uncertainty bands from bootstrap samples.
 
     For quadratic models: dh/dT = h1 + 2*h2*T
-    For power-law (approach8): dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+    For Gaussian (approach8): dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(...) * (-(T-T_opt)/sigma^2)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for power-law)
+        approach_key: Approach identifier (e.g., 'approach8' for Gaussian)
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    is_power_law = (approach_key == 'approach8')
+    is_gaussian = (approach_key == 'approach8')
 
-    if is_power_law:
-        # Power-law model: need h2, T_optimal, and beta samples
+    if is_gaussian:
+        # Gaussian model: need h2, T_optimal, and sigma (stored as beta) samples
         valid_mask = (~np.isnan(result.h2_samples) &
                       ~np.isnan(result.T_optimal_samples) &
-                      ~np.isnan(result.beta_samples))
+                      ~np.isnan(result.beta_samples))  # beta_samples contains sigma
         h2_valid = result.h2_samples[valid_mask]
         T_opt_valid = result.T_optimal_samples[valid_mask]
-        beta_valid = result.beta_samples[valid_mask]
+        sigma_valid = result.beta_samples[valid_mask]  # sigma stored as beta
 
         if len(h2_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
@@ -1739,15 +1749,12 @@ def compute_derivative_uncertainty_bands(
         for i in range(n_samples):
             h2 = h2_valid[i]
             T_opt = T_opt_valid[i]
-            beta = beta_valid[i]
-            # dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+            sigma = sigma_valid[i]
+            # dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(-(T-T_opt)^2/(2*sigma^2)) * (-(T-T_opt)/sigma^2)
             T_diff = T_range - T_opt
-            dh = np.zeros_like(T_range)
-            nonzero = np.abs(T_diff) > 1e-10
-            dh[nonzero] = (h2 * beta *
-                           np.power(np.abs(T_diff[nonzero]), beta - 1) *
-                           np.sign(T_diff[nonzero]))
-            dh_samples[i, :] = dh
+            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma)
+            gauss_shape = np.exp(-(T_diff ** 2) / (2 * sigma ** 2))
+            dh_samples[i, :] = h2 * norm_factor * gauss_shape * (-T_diff / (sigma ** 2))
     else:
         # Quadratic model
         h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
@@ -1820,18 +1827,16 @@ def plot_bootstrap_temperature_derivative(
         )
 
         # Compute point estimate derivative
-        # Check if this is power-law model (approach8)
+        # Check if this is Gaussian model (approach8)
         if name == 'approach8' and result.beta_point is not None:
-            # Power-law: dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+            # Gaussian: dh/dT = h2 * (2*pi*sigma)^(-0.5) * exp(...) * (-(T-T_opt)/sigma^2)
             h2_point = result.h2_point
             T_opt_point = result.T_optimal_point
-            beta_point = result.beta_point
+            sigma_point = result.beta_point  # sigma stored as beta for compatibility
             T_diff = T - T_opt_point
-            dh_point = np.zeros_like(T)
-            nonzero = np.abs(T_diff) > 1e-10
-            dh_point[nonzero] = (h2_point * beta_point *
-                                 np.power(np.abs(T_diff[nonzero]), beta_point - 1) *
-                                 np.sign(T_diff[nonzero]))
+            norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_point)
+            gauss_shape = np.exp(-(T_diff ** 2) / (2 * sigma_point ** 2))
+            dh_point = h2_point * norm_factor * gauss_shape * (-T_diff / (sigma_point ** 2))
         else:
             # Quadratic model
             h1_point = result.h1_point
