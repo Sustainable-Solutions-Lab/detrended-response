@@ -194,11 +194,13 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        # Special handling for Approach 8 (Gaussian)
+        # Special handling for Approach 8 (Skew-Normal)
         if hasattr(r, 'T_opt') and hasattr(r, 'sigma'):
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             print(f"  T_opt = {r.T_opt:10.4f}  (SE: {r.T_opt_se:.4f})")
             print(f"  sigma = {r.sigma:10.4f}  (SE: {r.sigma_se:.4f})")
+            if hasattr(r, 'alpha') and r.alpha is not None:
+                print(f"  alpha = {r.alpha:10.4f}  (SE: {r.alpha_se:.4f})")
         else:
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")

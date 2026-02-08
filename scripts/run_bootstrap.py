@@ -216,6 +216,13 @@ def main():
         if result.beta_point is not None and 'beta' in stats:
             print(f"  beta: {result.beta_point:.4f}")
             print(f"    90% CI: [{stats['beta']['p5']:.4f}, {stats['beta']['p95']:.4f}]")
+        # Print sigma and alpha for Approach 8 (skew-normal)
+        if result.sigma_point is not None and 'sigma' in stats:
+            print(f"  sigma: {result.sigma_point:.4f}")
+            print(f"    90% CI: [{stats['sigma']['p5']:.4f}, {stats['sigma']['p95']:.4f}]")
+        if result.alpha_point is not None and 'alpha' in stats:
+            print(f"  alpha: {result.alpha_point:.4f}")
+            print(f"    90% CI: [{stats['alpha']['p5']:.4f}, {stats['alpha']['p95']:.4f}]")
         print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
 
     print("\n" + "=" * 70)

@@ -13,6 +13,7 @@ Approach 3: Quadratic GDP growth detrending
 import numpy as np
 from scipy import linalg
 from scipy.optimize import minimize, minimize_scalar
+from scipy.special import erf
 from dataclasses import dataclass
 from typing import Dict
 from .data_loader import AnalysisData
@@ -357,25 +358,30 @@ class FitResultApproach8:
 
 @dataclass
 class FitResultApproach8Gaussian:
-    """Container for Gaussian temperature response results.
+    """Container for skew-normal temperature response results.
 
-    Model: h(T) = h2 * (2*pi*sigma^2)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))
+    Model: h(T) = h2 * (1/(omega*sqrt(2*pi))) * exp(-(T-xi)^2/(2*omega^2)) * [1 + erf(alpha*(T-xi)/(omega*sqrt(2)))]
 
-    This is a Gaussian/normal distribution centered at T_opt with width sigma.
+    This is a skew-normal distribution where:
+    - xi (T_opt): location parameter (mode when alpha=0)
+    - omega (sigma): scale parameter (width)
+    - alpha: skewness parameter (0 = symmetric, >0 skewed right, <0 skewed left)
     """
     approach: str
-    h2: float              # Gaussian amplitude coefficient
+    h2: float              # Amplitude coefficient
     h2_se: float           # SE from inner OLS
-    T_opt: float           # Optimal temperature (peak of Gaussian)
+    T_opt: float           # Location parameter (optimal temperature)
     T_opt_se: float        # SE from numerical Hessian
-    sigma: float           # Gaussian width parameter
+    sigma: float           # Scale parameter (width)
     sigma_se: float        # SE from numerical Hessian
+    alpha: float           # Skewness parameter
+    alpha_se: float        # SE from numerical Hessian
     k: Dict[int, float]    # Year fixed effects
     r_squared: float
     adj_r_squared: float
     rmse: float
     n_obs: int
-    n_params: int          # = 3 (h2, T_opt, sigma)
+    n_params: int          # = 4 (h2, T_opt, sigma, alpha)
     residuals: np.ndarray
     T_optimal: float       # = T_opt (for compatibility)
     total_r_squared: float
@@ -385,11 +391,11 @@ class FitResultApproach8Gaussian:
     var_decomp: dict = None
     var_attrib: dict = None
     # Include h1 and h1_se for compatibility with plotting functions that expect them
-    h1: float = 0.0        # Not used in Gaussian model
-    h1_se: float = 0.0     # Not used in Gaussian model
-    # For bootstrap compatibility (maps to sigma)
-    beta: float = None     # Alias for sigma for bootstrap compatibility
-    beta_se: float = None  # Alias for sigma_se
+    h1: float = 0.0        # Not used in skew-normal model
+    h1_se: float = 0.0     # Not used in skew-normal model
+    # For bootstrap compatibility
+    beta: float = None     # Not used, kept for compatibility
+    beta_se: float = None  # Not used, kept for compatibility
 
 
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
@@ -1652,6 +1658,114 @@ def compute_2d_se_numerical(
     return T_opt_se, beta_se
 
 
+def compute_3d_se_numerical(
+    sse_func: callable,
+    params_opt: np.ndarray,
+    bounds: list,
+    n_obs: int,
+    n_params: int = 4,
+) -> tuple:
+    """Compute SE for 3D parameters from Hessian curvature.
+
+    Uses numerical second derivatives to estimate the Hessian matrix at the optimum.
+    SE is derived from the diagonal of the inverse Hessian scaled by sigma^2.
+
+    Args:
+        sse_func: Function that computes SSE for given (T_opt, sigma, alpha)
+        params_opt: Optimal [T_opt, sigma, alpha] values
+        bounds: List of (min, max) tuples for each parameter
+        n_obs: Number of observations
+        n_params: Number of parameters (default 4: h2, T_opt, sigma, alpha)
+
+    Returns:
+        Tuple of (T_opt_se, sigma_se, alpha_se) standard errors
+    """
+    T_opt, sigma, alpha = params_opt
+    T_opt_bounds, sigma_bounds, alpha_bounds = bounds
+
+    # Step sizes for finite differences
+    h_T = 0.1   # Step for T_opt
+    h_s = 0.1   # Step for sigma
+    h_a = 0.1   # Step for alpha
+
+    # Ensure we stay within bounds
+    h_T = min(h_T, (T_opt_bounds[1] - T_opt) / 2, (T_opt - T_opt_bounds[0]) / 2, 0.5)
+    h_s = min(h_s, (sigma_bounds[1] - sigma) / 2, (sigma - sigma_bounds[0]) / 2, 0.5)
+    h_a = min(h_a, (alpha_bounds[1] - alpha) / 2, (alpha - alpha_bounds[0]) / 2, 0.5)
+
+    # Ensure minimum step sizes
+    h_T = max(h_T, 1e-6)
+    h_s = max(h_s, 1e-6)
+    h_a = max(h_a, 1e-6)
+
+    # Compute SSE at center
+    sse_center = sse_func([T_opt, sigma, alpha])
+
+    # Second derivatives (diagonal of Hessian)
+    # d2SSE/dT_opt^2
+    sse_T_plus = sse_func([T_opt + h_T, sigma, alpha])
+    sse_T_minus = sse_func([T_opt - h_T, sigma, alpha])
+    d2_T = (sse_T_plus - 2 * sse_center + sse_T_minus) / (h_T ** 2)
+
+    # d2SSE/dsigma^2
+    sse_s_plus = sse_func([T_opt, sigma + h_s, alpha])
+    sse_s_minus = sse_func([T_opt, sigma - h_s, alpha])
+    d2_s = (sse_s_plus - 2 * sse_center + sse_s_minus) / (h_s ** 2)
+
+    # d2SSE/dalpha^2
+    sse_a_plus = sse_func([T_opt, sigma, alpha + h_a])
+    sse_a_minus = sse_func([T_opt, sigma, alpha - h_a])
+    d2_a = (sse_a_plus - 2 * sse_center + sse_a_minus) / (h_a ** 2)
+
+    # Mixed partial derivatives
+    # d2SSE/dT_opt*dsigma
+    sse_Ts_pp = sse_func([T_opt + h_T, sigma + h_s, alpha])
+    sse_Ts_pm = sse_func([T_opt + h_T, sigma - h_s, alpha])
+    sse_Ts_mp = sse_func([T_opt - h_T, sigma + h_s, alpha])
+    sse_Ts_mm = sse_func([T_opt - h_T, sigma - h_s, alpha])
+    d2_Ts = (sse_Ts_pp - sse_Ts_pm - sse_Ts_mp + sse_Ts_mm) / (4 * h_T * h_s)
+
+    # d2SSE/dT_opt*dalpha
+    sse_Ta_pp = sse_func([T_opt + h_T, sigma, alpha + h_a])
+    sse_Ta_pm = sse_func([T_opt + h_T, sigma, alpha - h_a])
+    sse_Ta_mp = sse_func([T_opt - h_T, sigma, alpha + h_a])
+    sse_Ta_mm = sse_func([T_opt - h_T, sigma, alpha - h_a])
+    d2_Ta = (sse_Ta_pp - sse_Ta_pm - sse_Ta_mp + sse_Ta_mm) / (4 * h_T * h_a)
+
+    # d2SSE/dsigma*dalpha
+    sse_sa_pp = sse_func([T_opt, sigma + h_s, alpha + h_a])
+    sse_sa_pm = sse_func([T_opt, sigma + h_s, alpha - h_a])
+    sse_sa_mp = sse_func([T_opt, sigma - h_s, alpha + h_a])
+    sse_sa_mm = sse_func([T_opt, sigma - h_s, alpha - h_a])
+    d2_sa = (sse_sa_pp - sse_sa_pm - sse_sa_mp + sse_sa_mm) / (4 * h_s * h_a)
+
+    # Build Hessian matrix
+    H = np.array([
+        [d2_T, d2_Ts, d2_Ta],
+        [d2_Ts, d2_s, d2_sa],
+        [d2_Ta, d2_sa, d2_a]
+    ])
+
+    # Compute sigma^2
+    sigma_sq = sse_center / (n_obs - n_params)
+
+    try:
+        # Invert Hessian
+        H_inv = np.linalg.inv(H)
+        # Covariance matrix is 2 * sigma^2 * H^(-1) for profile likelihood
+        cov = 2 * sigma_sq * H_inv
+        # Standard errors from diagonal
+        T_opt_se = np.sqrt(cov[0, 0]) if cov[0, 0] > 0 else np.nan
+        sigma_se = np.sqrt(cov[1, 1]) if cov[1, 1] > 0 else np.nan
+        alpha_se = np.sqrt(cov[2, 2]) if cov[2, 2] > 0 else np.nan
+    except np.linalg.LinAlgError:
+        T_opt_se = np.nan
+        sigma_se = np.nan
+        alpha_se = np.nan
+
+    return T_opt_se, sigma_se, alpha_se
+
+
 def fit_approach6_precomputed_k_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
@@ -1928,27 +2042,33 @@ def fit_approach8_gaussian_loess(
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
     sigma_bounds: tuple = (1.0, 50.0),
+    alpha_bounds: tuple = (-10.0, 10.0),
 ) -> FitResultApproach8Gaussian:
-    """Approach 8: Gaussian temperature response with LOESS detrending.
+    """Approach 8: Skew-normal temperature response with LOESS detrending.
 
-    Model: h(T) = h2 * (2*pi*sigma)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))
+    Model: h(T) = h2 * f(T) where f(T) is the skew-normal distribution:
+    f(T) = (1/(omega*sqrt(2*pi))) * exp(-(T-xi)^2/(2*omega^2)) * [1 + erf(alpha*(T-xi)/(omega*sqrt(2)))]
 
-    For fitting we use the h(T) - h(T_trend) formulation:
-    dy - k[t] - j_i[t] = h2 * (2*pi*sigma)^(-0.5) * [exp(-(T - T_opt)^2 / (2*sigma^2))
-                                                    - exp(-(T_trend - T_opt)^2 / (2*sigma^2))]
+    Where:
+    - xi (T_opt): location parameter
+    - omega (sigma): scale parameter (width)
+    - alpha: skewness parameter (0 = symmetric, >0 skewed right, <0 skewed left)
 
-    Uses 2D optimization over (T_opt, sigma) with inner OLS for h2.
+    For fitting we use the h(T) - h(T_trend) formulation.
+
+    Uses 3D optimization over (T_opt, sigma, alpha) with inner OLS for h2.
     Uses raw temperature T (not detrended) so T_opt is the actual optimal temperature.
 
     Args:
         data: AnalysisData object
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
-        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
-        sigma_bounds: Bounds for Gaussian width parameter (default [1, 50])
+        T_opt_bounds: Bounds for location parameter (default [0, 30])
+        sigma_bounds: Bounds for scale parameter (default [1, 50])
+        alpha_bounds: Bounds for skewness parameter (default [-10, 10])
 
     Returns:
-        FitResultApproach8Gaussian with T_opt, sigma, h2, and standard errors
+        FitResultApproach8Gaussian with T_opt, sigma, alpha, h2, and standard errors
     """
     # Compute dependent variable: dy - k[t] - j_i[t] (same as approach 6)
     y = np.zeros(data.n_obs)
@@ -1960,18 +2080,23 @@ def fit_approach8_gaussian_loess(
     T = data.temp
     T_trend = trends_loess.T_loess  # Temperature trend for h(T) - h(T_trend) formulation
 
-    def gaussian_shape(T_vals, T_opt, sigma_val):
-        """Compute Gaussian shape: (2*pi*sigma)^(-0.5) * exp(-(T - T_opt)^2 / (2*sigma^2))"""
-        norm_factor = 1.0 / np.sqrt(2 * np.pi * sigma_val)
-        return norm_factor * np.exp(-((T_vals - T_opt) ** 2) / (2 * sigma_val ** 2))
+    def skewnorm_shape(T_vals, T_opt, sigma_val, alpha_val):
+        """Compute skew-normal shape:
+        (1/(omega*sqrt(2*pi))) * exp(-(T-xi)^2/(2*omega^2)) * [1 + erf(alpha*(T-xi)/(omega*sqrt(2)))]
+        """
+        z = (T_vals - T_opt) / sigma_val
+        norm_factor = 1.0 / (sigma_val * np.sqrt(2 * np.pi))
+        gaussian_part = np.exp(-0.5 * z ** 2)
+        skew_part = 1.0 + erf(alpha_val * z / np.sqrt(2))
+        return norm_factor * gaussian_part * skew_part
 
     def compute_sse_for_params(params):
-        """Compute SSE for given (T_opt, sigma) by solving inner OLS for h2."""
-        T_opt, sigma_val = params
+        """Compute SSE for given (T_opt, sigma, alpha) by solving inner OLS for h2."""
+        T_opt, sigma_val, alpha_val = params
 
-        # Compute h(T) - h(T_trend) using Gaussian shape
-        g_T = gaussian_shape(T, T_opt, sigma_val)
-        g_T_trend = gaussian_shape(T_trend, T_opt, sigma_val)
+        # Compute h(T) - h(T_trend) using skew-normal shape
+        g_T = skewnorm_shape(T, T_opt, sigma_val, alpha_val)
+        g_T_trend = skewnorm_shape(T_trend, T_opt, sigma_val, alpha_val)
         g_diff = g_T - g_T_trend
 
         # Design matrix: single column for h2
@@ -1986,22 +2111,22 @@ def fit_approach8_gaussian_loess(
         except Exception:
             return np.inf
 
-    # Initial guess: T_opt = 15°C, sigma = 5°C
-    x0 = [15.0, 5.0]
+    # Initial guess: T_opt = 15°C, sigma = 5°C, alpha = 0 (symmetric)
+    x0 = [15.0, 5.0, 0.0]
 
-    # 2D optimization using L-BFGS-B
+    # 3D optimization using L-BFGS-B
     result = minimize(
         compute_sse_for_params,
         x0=x0,
-        bounds=[T_opt_bounds, sigma_bounds],
+        bounds=[T_opt_bounds, sigma_bounds, alpha_bounds],
         method='L-BFGS-B',
         options={'ftol': 1e-8}
     )
-    T_opt_opt, sigma_opt = result.x
+    T_opt_opt, sigma_opt, alpha_opt = result.x
 
-    # Re-fit at optimal (T_opt, sigma) to get h2, residuals, covariance
-    g_T = gaussian_shape(T, T_opt_opt, sigma_opt)
-    g_T_trend = gaussian_shape(T_trend, T_opt_opt, sigma_opt)
+    # Re-fit at optimal (T_opt, sigma, alpha) to get h2, residuals, covariance
+    g_T = skewnorm_shape(T, T_opt_opt, sigma_opt, alpha_opt)
+    g_T_trend = skewnorm_shape(T_trend, T_opt_opt, sigma_opt, alpha_opt)
     g_diff = g_T - g_T_trend
     X_opt = g_diff.reshape(-1, 1)
 
@@ -2009,20 +2134,20 @@ def fit_approach8_gaussian_loess(
     h2 = h2_ols[0]
     h2_se = np.sqrt(cov[0, 0])
 
-    # Compute SE for T_opt and sigma using numerical Hessian
-    T_opt_se, sigma_se = compute_2d_se_numerical(
+    # Compute SE for T_opt, sigma, and alpha using numerical Hessian
+    T_opt_se, sigma_se, alpha_se = compute_3d_se_numerical(
         compute_sse_for_params,
-        np.array([T_opt_opt, sigma_opt]),
-        [T_opt_bounds, sigma_bounds],
+        np.array([T_opt_opt, sigma_opt, alpha_opt]),
+        [T_opt_bounds, sigma_bounds, alpha_bounds],
         data.n_obs,
-        n_params=3
+        n_params=4
     )
 
     # Year effects are pre-computed year means
     k = dict(year_means)
 
     # Fit statistics
-    n_params = 3  # h2, T_opt, sigma
+    n_params = 4  # h2, T_opt, sigma, alpha
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Total R² (variance explained in original dy)
@@ -2059,13 +2184,15 @@ def fit_approach8_gaussian_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8Gaussian(
-        approach="8: Gaussian LOESS",
+        approach="8: Skew-Normal LOESS",
         h2=h2,
         h2_se=h2_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
         sigma=sigma_opt,
         sigma_se=sigma_se,
+        alpha=alpha_opt,
+        alpha_se=alpha_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2074,8 +2201,6 @@ def fit_approach8_gaussian_loess(
         n_params=n_params,
         residuals=residuals,
         T_optimal=T_opt_opt,  # For compatibility
-        beta=sigma_opt,       # Alias for bootstrap compatibility
-        beta_se=sigma_se,     # Alias for bootstrap compatibility
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,

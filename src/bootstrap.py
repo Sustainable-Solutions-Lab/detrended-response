@@ -72,6 +72,12 @@ class BootstrapResult:
     beta_point: float = None       # GDP scaling exponent
     beta_samples: np.ndarray = None  # Bootstrap samples for beta
 
+    # Approach 8 (skew-normal) specific (optional)
+    sigma_point: float = None      # Scale parameter
+    sigma_samples: np.ndarray = None  # Bootstrap samples for sigma
+    alpha_point: float = None      # Skewness parameter
+    alpha_samples: np.ndarray = None  # Bootstrap samples for alpha
+
     # Variance decomposition
     var_decomp_point: dict = None   # From original fit
     var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
@@ -190,6 +196,8 @@ def run_bootstrap(
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 7
+    sigma_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8
+    alpha_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -242,8 +250,13 @@ def run_bootstrap(
                 r_squared_samples[name][b] = r.r_squared
                 total_r_squared_samples[name][b] = r.total_r_squared
                 # Store beta for Approach 7
-                if hasattr(r, 'beta'):
+                if hasattr(r, 'beta') and r.beta is not None:
                     beta_samples[name][b] = r.beta
+                # Store sigma and alpha for Approach 8 (skew-normal)
+                if hasattr(r, 'sigma') and r.sigma is not None:
+                    sigma_samples[name][b] = r.sigma
+                if hasattr(r, 'alpha') and r.alpha is not None:
+                    alpha_samples[name][b] = r.alpha
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -264,6 +277,8 @@ def run_bootstrap(
                 r_squared_samples[name][b] = np.nan
                 total_r_squared_samples[name][b] = np.nan
                 beta_samples[name][b] = np.nan
+                sigma_samples[name][b] = np.nan
+                alpha_samples[name][b] = np.nan
 
         # Progress reporting
         if verbose and (b + 1) % 10 == 0:
@@ -279,6 +294,9 @@ def run_bootstrap(
         orig = original_results[name]
         # Get beta point estimate if available (Approach 7)
         beta_point = getattr(orig, 'beta', None)
+        # Get sigma and alpha point estimates if available (Approach 8 skew-normal)
+        sigma_point = getattr(orig, 'sigma', None)
+        alpha_point = getattr(orig, 'alpha', None)
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
@@ -295,6 +313,10 @@ def run_bootstrap(
             n_successful=n_successful,
             beta_point=beta_point,
             beta_samples=beta_samples[name],
+            sigma_point=sigma_point,
+            sigma_samples=sigma_samples[name],
+            alpha_point=alpha_point,
+            alpha_samples=alpha_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
         )
@@ -349,6 +371,12 @@ def compute_bootstrap_statistics(
     # Add beta statistics if present (Approach 7)
     if result.beta_point is not None and result.beta_samples is not None:
         stats['beta'] = get_percentile_stats(result.beta_samples, result.beta_point)
+
+    # Add sigma and alpha statistics if present (Approach 8 skew-normal)
+    if result.sigma_point is not None and result.sigma_samples is not None:
+        stats['sigma'] = get_percentile_stats(result.sigma_samples, result.sigma_point)
+    if result.alpha_point is not None and result.alpha_samples is not None:
+        stats['alpha'] = get_percentile_stats(result.alpha_samples, result.alpha_point)
 
     # Variance decomposition statistics
     if result.var_decomp_point is not None and result.var_decomp_samples is not None:
