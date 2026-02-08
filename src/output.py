@@ -2124,6 +2124,177 @@ def plot_T_optimal_histograms(
     plt.close()
 
 
+def plot_h2_histograms(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = "h2_histograms.pdf",
+    approaches: list = None,
+    x_range: tuple = None,
+    bin_width: float = 0.0001,
+    x_range_h2_high: tuple = None,
+    bin_width_h2_high: float = None,
+    input_file: str = None,
+) -> None:
+    """Plot h2 coefficient bootstrap distributions as histograms in multi-panel layout.
+
+    Creates a figure with panels for h2 coefficients:
+    - For standard approaches: h2 (quadratic coefficient)
+    - For approach8: h2_low (T <= T_opt) and h2_high (T > T_opt)
+
+    Uses shaded bands for uncertainty visualization:
+    - 90% CI band (light shading)
+    - IQR band (darker shading)
+    - Point estimate line (black)
+    - Histogram bars (fully saturated)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename (should end in .pdf)
+        approaches: List of approaches to include (default: ['approach6', 'approach8'])
+        x_range: Fixed x-axis range as (x_min, x_max) for h2/h2_low panels
+        bin_width: Width of histogram bins for h2/h2_low panels (default: 0.0001)
+        x_range_h2_high: Fixed x-axis range for h2_high panel (default: same as x_range)
+        bin_width_h2_high: Width of histogram bins for h2_high panel (default: same as bin_width)
+        input_file: Path to input data file (for annotation)
+    """
+    if approaches is None:
+        approaches = ['approach6', 'approach8']
+
+    # Default h2_high settings to main settings if not specified
+    if x_range_h2_high is None:
+        x_range_h2_high = x_range
+    if bin_width_h2_high is None:
+        bin_width_h2_high = bin_width
+
+    # Build list of panels to plot: (samples, point_est, color, title, is_h2_high)
+    panels = []
+
+    for approach in approaches:
+        if approach not in results:
+            continue
+
+        result = results[approach]
+
+        if approach == 'approach8':
+            # Piecewise quadratic: h2_low and h2_high
+            if result.h2_low_samples is not None:
+                valid_low = result.h2_low_samples[~np.isnan(result.h2_low_samples)]
+                if len(valid_low) > 0:
+                    panels.append((
+                        valid_low,
+                        result.h2_low_point,
+                        APPROACH_COLORS.get('approach8', 'magenta'),
+                        'Approach 8: h₂_low (T ≤ T_opt)',
+                        False  # not h2_high
+                    ))
+            if result.h2_high_samples is not None:
+                valid_high = result.h2_high_samples[~np.isnan(result.h2_high_samples)]
+                if len(valid_high) > 0:
+                    panels.append((
+                        valid_high,
+                        result.h2_high_point,
+                        APPROACH_COLORS.get('approach8', 'magenta'),
+                        'Approach 8: h₂_high (T > T_opt)',
+                        True  # is h2_high
+                    ))
+        else:
+            # Standard approaches: single h2
+            if result.h2_samples is not None:
+                valid_samples = result.h2_samples[~np.isnan(result.h2_samples)]
+                if len(valid_samples) > 0:
+                    # Format approach name for title
+                    approach_num = approach.replace('approach', 'Approach ')
+                    panels.append((
+                        valid_samples,
+                        result.h2_point,
+                        APPROACH_COLORS.get(approach, 'gray'),
+                        f'{approach_num}: h₂',
+                        False  # not h2_high
+                    ))
+
+    n_panels = len(panels)
+    if n_panels == 0:
+        return
+
+    # Determine grid layout
+    if n_panels <= 3:
+        n_rows, n_cols = 1, n_panels
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4))
+    else:
+        n_rows, n_cols = 2, 2
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(10, 8))
+
+    if n_panels == 1:
+        axes = [axes]
+    else:
+        axes = np.array(axes).flatten()
+
+    for idx, (samples, point_est, color, title, is_h2_high) in enumerate(panels):
+        ax = axes[idx]
+
+        # Determine x-axis range and bin width for this panel
+        if is_h2_high:
+            panel_x_range = x_range_h2_high
+            panel_bin_width = bin_width_h2_high
+        else:
+            panel_x_range = x_range
+            panel_bin_width = bin_width
+
+        # Compute x limits
+        if panel_x_range is not None:
+            x_min, x_max = panel_x_range
+        else:
+            x_min = np.floor(np.min(samples) * 1000) / 1000 - 0.001
+            x_max = np.ceil(np.max(samples) * 1000) / 1000 + 0.001
+
+        # Bins for histogram with fixed width
+        bins = np.arange(x_min, x_max + panel_bin_width, panel_bin_width)
+
+        # Compute statistics
+        p5 = np.percentile(samples, 5)
+        p25 = np.percentile(samples, 25)
+        p75 = np.percentile(samples, 75)
+        p95 = np.percentile(samples, 95)
+
+        # Plot bands and lines first (bottom layer)
+        # 90% CI vertical band
+        ax.axvspan(p5, p95, alpha=0.2, color=color,
+                   label=f'90% CI: [{p5:.4f}, {p95:.4f}]')
+
+        # IQR vertical band
+        ax.axvspan(p25, p75, alpha=0.3, color=color,
+                   label=f'IQR: [{p25:.4f}, {p75:.4f}]')
+
+        # Point estimate (solid line, behind histogram)
+        ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
+                   label=f'Point: {point_est:.4f}')
+
+        # Plot histogram on top (fully saturated)
+        n, _, _ = ax.hist(samples, bins=bins, density=True, alpha=1.0, color=color,
+                          edgecolor=color, linewidth=0.5)
+
+        # Extend y-axis upper bound with ~10% padding
+        y_max = np.max(n) * 1.1
+        ax.set_ylim(0, y_max)
+
+        ax.set_xlabel('h₂ Coefficient', fontsize=10)
+        ax.set_ylabel('Density', fontsize=10)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlim(x_min, x_max)
+        ax.legend(fontsize=7, loc='upper left')
+        ax.grid(True, alpha=0.3)
+
+    # Hide unused subplots
+    for idx in range(n_panels, len(axes)):
+        axes[idx].set_visible(False)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+
+
 def plot_bootstrap_gdp_scaling(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,

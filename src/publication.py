@@ -16,6 +16,7 @@ from src.output import (
     plot_bootstrap_temperature_response,
     plot_bootstrap_temperature_derivative,
     plot_T_optimal_histograms,
+    plot_h2_histograms,
 )
 
 
@@ -258,3 +259,31 @@ def generate_figures(
         input_file=None,
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
+
+    # Figure 7: h2 coefficient histograms - 4 panels [[approach0, approach5c], [approach5a, approach5b]]
+    print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
+    plot_h2_histograms(
+        results,
+        output_dir,
+        approaches=['approach0', 'approach5c', 'approach5a', 'approach5b'],
+        x_range=(-0.001, 0.0001),
+        bin_width=0.00002,
+        filename='fig_h2_histogram_4panel.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
+
+    # Figure 8: h2 coefficient histograms - 3 panels (approach6 h2, approach8 h2_low, approach8 h2_high)
+    print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
+    plot_h2_histograms(
+        results,
+        output_dir,
+        approaches=['approach6', 'approach8'],
+        x_range=(-0.001, 0.0001),
+        bin_width=0.00002,
+        x_range_h2_high=(-0.01, 0.001),
+        bin_width_h2_high=0.0002,
+        filename='fig_h2_histogram_3panel.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
