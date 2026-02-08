@@ -987,9 +987,14 @@ def save_bootstrap_coefficients_csv(
                 'r_squared': result.r_squared_samples[i],
                 'total_r_squared': result.total_r_squared_samples[i],
             }
-            # Add beta for approaches where it's a free parameter (8 and 10)
+            # Add beta for approaches where it's a free parameter (7)
             if result.beta_samples is not None:
                 row['beta'] = result.beta_samples[i]
+            # Add h2_low and h2_high for Approach 8 (piecewise quadratic)
+            if result.h2_low_samples is not None:
+                row['h2_low'] = result.h2_low_samples[i]
+            if result.h2_high_samples is not None:
+                row['h2_high'] = result.h2_high_samples[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1064,6 +1069,22 @@ def save_bootstrap_summary_txt(
                 f.write(f"    90% CI:          [{stats['beta']['p5']:10.4f}, {stats['beta']['p95']:10.4f}]\n")
                 f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
+
+            # h2_low and h2_high (for Approach 8 piecewise quadratic)
+            if result.h2_low_point is not None and 'h2_low' in stats:
+                f.write(f"  h2_low (Curvature for T <= T_opt):\n")
+                f.write(f"    Point estimate:  {result.h2_low_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_low']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_low']['p5']:10.6f}, {stats['h2_low']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{stats['h2_low']['p25']:10.6f}, {stats['h2_low']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_low']['std']:10.6f}\n")
+            if result.h2_high_point is not None and 'h2_high' in stats:
+                f.write(f"  h2_high (Curvature for T > T_opt):\n")
+                f.write(f"    Point estimate:  {result.h2_high_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_high']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_high']['p5']:10.6f}, {stats['h2_high']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{stats['h2_high']['p25']:10.6f}, {stats['h2_high']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_high']['std']:10.6f}\n")
 
             # Key variance ratios with bootstrap CIs
             if result.var_decomp_point is not None:
@@ -1206,6 +1227,41 @@ def save_bootstrap_summary_table(
             row['beta_p75'] = np.nan
             row['beta_p95'] = np.nan
             row['beta_std'] = np.nan
+
+        # Add h2_low and h2_high statistics for Approach 8 (piecewise quadratic)
+        if result.h2_low_point is not None and 'h2_low' in stats:
+            row['h2_low_point'] = result.h2_low_point
+            row['h2_low_median'] = stats['h2_low']['p50']
+            row['h2_low_p5'] = stats['h2_low']['p5']
+            row['h2_low_p25'] = stats['h2_low']['p25']
+            row['h2_low_p75'] = stats['h2_low']['p75']
+            row['h2_low_p95'] = stats['h2_low']['p95']
+            row['h2_low_std'] = stats['h2_low']['std']
+        else:
+            row['h2_low_point'] = np.nan
+            row['h2_low_median'] = np.nan
+            row['h2_low_p5'] = np.nan
+            row['h2_low_p25'] = np.nan
+            row['h2_low_p75'] = np.nan
+            row['h2_low_p95'] = np.nan
+            row['h2_low_std'] = np.nan
+
+        if result.h2_high_point is not None and 'h2_high' in stats:
+            row['h2_high_point'] = result.h2_high_point
+            row['h2_high_median'] = stats['h2_high']['p50']
+            row['h2_high_p5'] = stats['h2_high']['p5']
+            row['h2_high_p25'] = stats['h2_high']['p25']
+            row['h2_high_p75'] = stats['h2_high']['p75']
+            row['h2_high_p95'] = stats['h2_high']['p95']
+            row['h2_high_std'] = stats['h2_high']['std']
+        else:
+            row['h2_high_point'] = np.nan
+            row['h2_high_median'] = np.nan
+            row['h2_high_p5'] = np.nan
+            row['h2_high_p25'] = np.nan
+            row['h2_high_p75'] = np.nan
+            row['h2_high_p95'] = np.nan
+            row['h2_high_std'] = np.nan
 
         # Variance decomposition
         if result.var_decomp_point is not None:
