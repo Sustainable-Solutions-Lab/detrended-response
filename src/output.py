@@ -45,8 +45,10 @@ APPROACH_COLORS = {
     'approach5a': 'green',
     'approach5b': 'blue',
     'approach5c': 'red',
+    'approach5d': 'purple',
     'approach6': 'orange',
     'approach7': 'brown',
+    'approach8': 'magenta',
     'nocr0': 'gray',
     'nocr5': 'gray',
 }
@@ -67,8 +69,10 @@ APPROACH_LINESTYLES = {
     'approach5a': '-.',
     'approach5b': '-.',
     'approach5c': '-.',
+    'approach5d': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
-    'approach7': (0, (5, 1)),  # densely dashed
+    'approach7': (0, (5, 1)),   # densely dashed
+    'approach8': (0, (5, 1)),   # densely dashed
     'nocr0': '--',
     'nocr5': ':',
 }
@@ -92,6 +96,77 @@ def get_valid_bootstrap_samples(
     """
     valid_mask = ~np.isnan(result.h1_samples) & ~np.isnan(result.h2_samples)
     return result.h1_samples[valid_mask], result.h2_samples[valid_mask], valid_mask
+
+
+def is_power_law_result(result) -> bool:
+    """Check if result is from power-law model (approach 8).
+
+    Power-law results have T_opt as a primary parameter and h1=0.
+    """
+    return hasattr(result, 'T_opt') and hasattr(result, 'beta') and result.h1 == 0.0
+
+
+def compute_h_response(T: np.ndarray, result) -> np.ndarray:
+    """Compute h(T) - h(T_opt) for any approach type.
+
+    For quadratic model: h(T) = h1*T + h2*T², so h(T) - h(T_opt) = ...
+    For power-law model: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+
+    Args:
+        T: Temperature array
+        result: FitResult or similar with h1, h2, T_optimal (and beta, T_opt for power-law)
+
+    Returns:
+        Array of h(T) - h(T_opt) values
+    """
+    if is_power_law_result(result):
+        # Power-law: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+        # Since |T_opt - T_opt|^beta = 0
+        T_opt = result.T_opt
+        beta = result.beta
+        h2 = result.h2
+        return h2 * np.power(np.abs(T - T_opt) + 1e-10, beta)
+    else:
+        # Quadratic: h(T) = h1*T + h2*T²
+        h1, h2 = result.h1, result.h2
+        h_T = h1 * T + h2 * T ** 2
+        # h(T_opt) at optimal temperature
+        if not np.isnan(result.T_optimal) and h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+        else:
+            h_T_opt = 0
+        return h_T - h_T_opt
+
+
+def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
+    """Compute dh/dT for any approach type.
+
+    For quadratic model: dh/dT = h1 + 2*h2*T
+    For power-law model: dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+
+    Args:
+        T: Temperature array
+        result: FitResult or similar with h1, h2 (and beta, T_opt for power-law)
+
+    Returns:
+        Array of dh/dT values
+    """
+    if is_power_law_result(result):
+        # Power-law derivative: h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+        T_opt = result.T_opt
+        beta = result.beta
+        h2 = result.h2
+        T_diff = T - T_opt
+        # Handle the derivative carefully at T = T_opt
+        dh = np.zeros_like(T)
+        nonzero = np.abs(T_diff) > 1e-10
+        dh[nonzero] = (h2 * beta *
+                       np.power(np.abs(T_diff[nonzero]), beta - 1) *
+                       np.sign(T_diff[nonzero]))
+        return dh
+    else:
+        # Quadratic derivative: h1 + 2*h2*T
+        return result.h1 + 2 * result.h2 * T
 
 
 def create_output_dir(base_dir: str = "data/output") -> Path:
@@ -141,11 +216,17 @@ def save_summary_table(
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
-        # Add beta for Approach 7
+        # Add beta for Approaches 7 and 8
         if hasattr(result, 'beta'):
             row['beta'] = result.beta
             row['beta_SE'] = result.beta_se
+        # Add Y_ref for Approach 7
+        if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
+        # Add T_opt for Approach 8 (power-law)
+        if hasattr(result, 'T_opt'):
+            row['T_opt'] = result.T_opt
+            row['T_opt_SE'] = result.T_opt_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -220,12 +301,19 @@ def save_summary_table(
         for name, result in results.items():
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
-            f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
-            # Add beta for Approach 7
-            if hasattr(result, 'beta'):
+            # Special handling for Approach 8 (power-law)
+            if hasattr(result, 'T_opt'):
+                f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
+                f.write(f"  T_opt = {result.T_opt:10.4f}  (SE: {result.T_opt_se:.4f})\n")
                 f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
-                f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
+            else:
+                f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
+                f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
+                # Add beta for Approach 7
+                if hasattr(result, 'beta'):
+                    f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
+                    if hasattr(result, 'Y_ref'):
+                        f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
             if np.isnan(result.T_optimal):
                 f.write(f"  T_optimal = N/A\n")
             else:
@@ -380,16 +468,9 @@ def _plot_temperature_response_subset(
         if name not in results:
             continue
         r = results[name]
-        h_T = r.h1 * T + r.h2 * T ** 2
 
-        # h(T_opt) evaluated at optimal temperature
-        if not np.isnan(r.T_optimal) and r.h2 != 0:
-            h_T_opt = -r.h1 ** 2 / (4 * r.h2)
-        else:
-            h_T_opt = 0
-
-        # Plot h(T) - h(T*)
-        h_relative = h_T - h_T_opt
+        # Use helper function that handles both quadratic and power-law models
+        h_relative = compute_h_response(T, r)
 
         label = f"{r.approach} (T_opt = {r.T_optimal:.1f}°C)"
         ax.plot(T, h_relative, color=APPROACH_COLORS.get(name, 'gray'),
@@ -439,10 +520,10 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7, 8)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach7'],
+        approaches=['approach5', 'approach6', 'approach7', 'approach8'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -455,7 +536,7 @@ def _plot_temperature_derivative_subset(
     approaches: list, filename: str, title_suffix: str = "",
     T_range: tuple = (0, 30), input_file: str = None
 ) -> None:
-    """Plot dh/dT = h1 + 2*h2*T for a subset of approaches."""
+    """Plot dh/dT for a subset of approaches."""
     fig, ax = plt.subplots(figsize=(10, 6))
 
     T = np.linspace(T_range[0], T_range[1], TEMPERATURE_PLOT_POINTS)
@@ -464,14 +545,15 @@ def _plot_temperature_derivative_subset(
         if name not in results:
             continue
         r = results[name]
-        dh_dT = r.h1 + 2 * r.h2 * T
+        # Use helper function that handles both quadratic and power-law models
+        dh_dT = compute_dh_dT(T, r)
         label = f"{r.approach}"
         ax.plot(T, dh_dT, color=APPROACH_COLORS.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
 
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
-    ax.set_ylabel('dh/dT = h₁ + 2h₂T', fontsize=12)
+    ax.set_ylabel('dh/dT', fontsize=12)
     title = 'Temperature Derivative by Approach'
     if title_suffix:
         title += f' ({title_suffix})'
@@ -509,10 +591,10 @@ def plot_temperature_derivative(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7, 8)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach7'],
+        approaches=['approach5', 'approach6', 'approach7', 'approach8'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -618,17 +700,17 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Plot year means k[t] used by approaches 5, 6, 7 as a heavy line
-    for name in ('approach5', 'approach6', 'approach7'):
+    # Plot year means k[t] used by approaches 5, 6, 7, 8 as a heavy line
+    for name in ('approach5', 'approach6', 'approach7', 'approach8'):
         if name in results:
             k_year_means = np.array([results[name].k[yr] for yr in unique_years])
             ax.plot(unique_years, k_year_means, color='black', linestyle='-', linewidth=3,
-                    label='Year means k[t] (Approaches 5, 6, 7)')
+                    label='Year means k[t] (Approaches 5, 6, 7, 8)')
             break  # Only plot once since all three share the same k
 
     for name, result in results.items():
         # Skip approaches that use the same k values as approach5 (already plotted above)
-        if name in ('approach5', 'approach5a', 'approach5b', 'approach5c', 'approach6', 'approach7'):
+        if name in ('approach5', 'approach5a', 'approach5b', 'approach5c', 'approach5d', 'approach6', 'approach7', 'approach8'):
             continue
 
         # k is stored with actual year as key
@@ -1132,45 +1214,72 @@ def save_bootstrap_summary_table(
 def compute_h_response_uncertainty_bands(
     result: "BootstrapResult",
     T_range: np.ndarray,
-    percentiles: tuple = (5, 50, 95)
+    percentiles: tuple = (5, 50, 95),
+    approach_key: str = None
 ) -> tuple:
     """Compute h(T) - h(T*) uncertainty bands from bootstrap samples.
 
     For each bootstrap sample, computes h(T) - h(T*) over the temperature range.
     Returns percentile bands across all bootstrap samples.
 
+    For quadratic models: h(T) = h1*T + h2*T²
+    For power-law (approach8): h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
+        approach_key: Approach identifier (e.g., 'approach8' for power-law)
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    # Get valid bootstrap samples (exclude NaN)
-    h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
+    is_power_law = (approach_key == 'approach8')
 
-    if len(h1_valid) == 0:
-        return (np.full_like(T_range, np.nan),
-                np.full_like(T_range, np.nan),
-                np.full_like(T_range, np.nan))
+    if is_power_law:
+        # Power-law model: need h2, T_optimal, and beta samples
+        valid_mask = (~np.isnan(result.h2_samples) &
+                      ~np.isnan(result.T_optimal_samples) &
+                      ~np.isnan(result.beta_samples))
+        h2_valid = result.h2_samples[valid_mask]
+        T_opt_valid = result.T_optimal_samples[valid_mask]
+        beta_valid = result.beta_samples[valid_mask]
 
-    # Compute h(T) - h(T*) for each bootstrap sample
-    n_samples = len(h1_valid)
-    n_T = len(T_range)
-    h_relative_samples = np.zeros((n_samples, n_T))
+        if len(h2_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-    for i in range(n_samples):
-        h1 = h1_valid[i]
-        h2 = h2_valid[i]
-        h_T = h1 * T_range + h2 * T_range ** 2
-        # Evaluate h at T_optimal
-        if h2 != 0:
-            T_opt = -h1 / (2 * h2)
-            h_T_opt = -h1 ** 2 / (4 * h2)
-        else:
-            h_T_opt = 0
-        h_relative_samples[i, :] = h_T - h_T_opt
+        n_samples = len(h2_valid)
+        n_T = len(T_range)
+        h_relative_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h2 = h2_valid[i]
+            T_opt = T_opt_valid[i]
+            beta = beta_valid[i]
+            # h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+            h_relative_samples[i, :] = h2 * np.power(np.abs(T_range - T_opt) + 1e-10, beta)
+    else:
+        # Quadratic model
+        h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
+
+        if len(h1_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        n_samples = len(h1_valid)
+        n_T = len(T_range)
+        h_relative_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h1 = h1_valid[i]
+            h2 = h2_valid[i]
+            h_T = h1 * T_range + h2 * T_range ** 2
+            # Evaluate h at T_optimal
+            if h2 != 0:
+                T_opt = -h1 / (2 * h2)
+                h_T_opt = -h1 ** 2 / (4 * h2)
+            else:
+                h_T_opt = 0
+            h_relative_samples[i, :] = h_T - h_T_opt
 
     # Compute percentiles at each temperature
     h_bands = []
@@ -1406,19 +1515,29 @@ def plot_bootstrap_temperature_response(
         result = results[name]
 
         # Compute uncertainty bands (90% CI and IQR)
+        # Pass approach_key for power-law handling
         h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-            result, T, percentiles=(5, 25, 50, 75, 95)
+            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
         )
 
         # Compute point estimate response
-        h1_point = result.h1_point
-        h2_point = result.h2_point
-        h_T_point = h1_point * T + h2_point * T ** 2
-        if h2_point != 0:
-            h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+        # Check if this is power-law model (approach8)
+        if name == 'approach8' and result.beta_point is not None:
+            # Power-law: h(T) - h(T_opt) = h2 * |T - T_opt|^beta
+            h2_point = result.h2_point
+            T_opt_point = result.T_optimal_point
+            beta_point = result.beta_point
+            h_point = h2_point * np.power(np.abs(T - T_opt_point) + 1e-10, beta_point)
         else:
-            h_T_opt_point = 0
-        h_point = h_T_point - h_T_opt_point
+            # Quadratic model
+            h1_point = result.h1_point
+            h2_point = result.h2_point
+            h_T_point = h1_point * T + h2_point * T ** 2
+            if h2_point != 0:
+                h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+            else:
+                h_T_opt_point = 0
+            h_point = h_T_point - h_T_opt_point
 
         plot_data[name] = {
             'h_p5': h_p5,
@@ -1582,35 +1701,68 @@ def plot_bootstrap_T_optimal_comparison(
 def compute_derivative_uncertainty_bands(
     result: "BootstrapResult",
     T_range: np.ndarray,
-    percentiles: tuple = (5, 50, 95)
+    percentiles: tuple = (5, 50, 95),
+    approach_key: str = None
 ) -> tuple:
-    """Compute dh/dT = h1 + 2*h2*T uncertainty bands from bootstrap samples.
+    """Compute dh/dT uncertainty bands from bootstrap samples.
+
+    For quadratic models: dh/dT = h1 + 2*h2*T
+    For power-law (approach8): dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
+        approach_key: Approach identifier (e.g., 'approach8' for power-law)
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    # Get valid bootstrap samples (exclude NaN)
-    h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
+    is_power_law = (approach_key == 'approach8')
 
-    if len(h1_valid) == 0:
-        return (np.full_like(T_range, np.nan),
-                np.full_like(T_range, np.nan),
-                np.full_like(T_range, np.nan))
+    if is_power_law:
+        # Power-law model: need h2, T_optimal, and beta samples
+        valid_mask = (~np.isnan(result.h2_samples) &
+                      ~np.isnan(result.T_optimal_samples) &
+                      ~np.isnan(result.beta_samples))
+        h2_valid = result.h2_samples[valid_mask]
+        T_opt_valid = result.T_optimal_samples[valid_mask]
+        beta_valid = result.beta_samples[valid_mask]
 
-    # Compute dh/dT for each bootstrap sample
-    n_samples = len(h1_valid)
-    n_T = len(T_range)
-    dh_samples = np.zeros((n_samples, n_T))
+        if len(h2_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-    for i in range(n_samples):
-        h1 = h1_valid[i]
-        h2 = h2_valid[i]
-        dh_samples[i, :] = h1 + 2 * h2 * T_range
+        n_samples = len(h2_valid)
+        n_T = len(T_range)
+        dh_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h2 = h2_valid[i]
+            T_opt = T_opt_valid[i]
+            beta = beta_valid[i]
+            # dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+            T_diff = T_range - T_opt
+            dh = np.zeros_like(T_range)
+            nonzero = np.abs(T_diff) > 1e-10
+            dh[nonzero] = (h2 * beta *
+                           np.power(np.abs(T_diff[nonzero]), beta - 1) *
+                           np.sign(T_diff[nonzero]))
+            dh_samples[i, :] = dh
+    else:
+        # Quadratic model
+        h1_valid, h2_valid, _ = get_valid_bootstrap_samples(result)
+
+        if len(h1_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        n_samples = len(h1_valid)
+        n_T = len(T_range)
+        dh_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h1 = h1_valid[i]
+            h2 = h2_valid[i]
+            dh_samples[i, :] = h1 + 2 * h2 * T_range
 
     # Compute percentiles at each temperature
     dh_bands = []
@@ -1662,12 +1814,29 @@ def plot_bootstrap_temperature_derivative(
         result = results[name]
 
         # Compute uncertainty bands
-        dh_lower, dh_median, dh_upper = compute_derivative_uncertainty_bands(result, T)
+        # Pass approach_key for power-law handling
+        dh_lower, dh_median, dh_upper = compute_derivative_uncertainty_bands(
+            result, T, approach_key=name
+        )
 
         # Compute point estimate derivative
-        h1_point = result.h1_point
-        h2_point = result.h2_point
-        dh_point = h1_point + 2 * h2_point * T
+        # Check if this is power-law model (approach8)
+        if name == 'approach8' and result.beta_point is not None:
+            # Power-law: dh/dT = h2 * beta * |T - T_opt|^(beta-1) * sign(T - T_opt)
+            h2_point = result.h2_point
+            T_opt_point = result.T_optimal_point
+            beta_point = result.beta_point
+            T_diff = T - T_opt_point
+            dh_point = np.zeros_like(T)
+            nonzero = np.abs(T_diff) > 1e-10
+            dh_point[nonzero] = (h2_point * beta_point *
+                                 np.power(np.abs(T_diff[nonzero]), beta_point - 1) *
+                                 np.sign(T_diff[nonzero]))
+        else:
+            # Quadratic model
+            h1_point = result.h1_point
+            h2_point = result.h2_point
+            dh_point = h1_point + 2 * h2_point * T
 
         plot_data[name] = {
             'dh_lower': dh_lower,
@@ -2065,7 +2234,18 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: Approach 7 h(T) + GDP scaling combined
+    # Temperature response PDF 3: LOESS approaches (6, 7, 8)
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach6', 'approach7', 'approach8'],
+        filename='bootstrap_temperature_response_loess.pdf',
+        T_range=T_range,
+        data=data,
+        input_file=input_file
+    )
+    print("      Saved bootstrap_temperature_response_loess.pdf")
+
+    # Temperature response PDF 4: Approach 7 h(T) + GDP scaling combined
     if Y_ref is not None and 'approach7' in results:
         plot_bootstrap_approach7_combined(
             results, output_dir, Y_ref,
@@ -2081,7 +2261,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach7'],
+                    'approach6', 'approach7', 'approach8'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

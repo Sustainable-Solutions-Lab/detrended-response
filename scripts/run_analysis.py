@@ -37,8 +37,10 @@ from src.fitting import (
     fit_approach5a_precomputed_k_linear_temp,
     fit_approach5b_precomputed_k_gdp_only,
     fit_approach5c_precomputed_k_combined,
+    fit_approach5d_precomputed_k_gdp_response,
     fit_approach6_precomputed_k_loess,
     fit_approach7_gdp_response_loess,
+    fit_approach8_power_law_loess,
     fit_nocr0_joint,
     fit_nocr5_precomputed_k,
 )
@@ -166,15 +168,17 @@ def main():
     results['approach5'] = fit_approach5_precomputed_k_quadratic(data, trends_with_k, year_means)
     print("      Done.")
 
-    print("\n[8/11] Fitting Approaches 5a, 5b, 5c: Precomputed k variants...")
+    print("\n[8/11] Fitting Approaches 5a, 5b, 5c, 5d: Precomputed k variants...")
     results['approach5a'] = fit_approach5a_precomputed_k_linear_temp(data, trends_with_k, year_means)
     results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(data, trends_with_k, year_means)
     results['approach5c'] = fit_approach5c_precomputed_k_combined(data, trends_with_k, year_means)
+    results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6 & 7: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 7 & 8: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
+    results['approach8'] = fit_approach8_power_law_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
@@ -190,12 +194,18 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
-        print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
-        # Print beta for Approach 7
-        if hasattr(r, 'beta'):
+        # Special handling for Approach 8 (power-law)
+        if hasattr(r, 'T_opt'):
+            print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  T_opt = {r.T_opt:10.4f}  (SE: {r.T_opt_se:.4f})")
             print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
-            print(f"  Y_ref = {r.Y_ref:.2f}")
+        else:
+            print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
+            # Print beta for Approach 7
+            if hasattr(r, 'beta'):
+                print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
+                print(f"  Y_ref = {r.Y_ref:.2f}")
         if np.isnan(r.T_optimal):
             print(f"  T_optimal = N/A")
         else:

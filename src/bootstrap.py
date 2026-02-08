@@ -327,7 +327,11 @@ def compute_bootstrap_statistics(
         # Exclude NaN values
         valid = samples[~np.isnan(samples)]
         if len(valid) == 0:
-            return {f'p{int(p)}': np.nan for p in percentiles}
+            # Return complete dict with NaN values for consistency
+            result_dict = {'point': point_estimate, 'std': np.nan, 'n_valid': 0}
+            for p in percentiles:
+                result_dict[f'p{int(p)}'] = np.nan
+            return result_dict
 
         result_dict = {'point': point_estimate}
         for p in percentiles:
