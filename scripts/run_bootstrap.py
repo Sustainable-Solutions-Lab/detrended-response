@@ -29,6 +29,8 @@ from src.output import (
     create_output_dir,
     save_bootstrap_coefficients_csv,
     save_bootstrap_k_samples_csv,
+    save_bootstrap_var_attrib_csv,
+    save_bootstrap_country_samples_csv,
     save_bootstrap_summary_txt,
     save_bootstrap_summary_table,
     save_all_bootstrap_plots,
@@ -159,7 +161,7 @@ def main():
 
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
-    bootstrap_results = run_bootstrap(
+    bootstrap_results, country_samples = run_bootstrap(
         data=data,
         trends=trends,
         original_results=original_results,
@@ -188,6 +190,8 @@ def main():
 
     save_bootstrap_coefficients_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)
+    save_bootstrap_var_attrib_csv(bootstrap_results, output_dir, input_file=input_file)
+    save_bootstrap_country_samples_csv(country_samples, data, output_dir, input_file=input_file)
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)
 

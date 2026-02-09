@@ -82,6 +82,10 @@ class BootstrapResult:
     var_decomp_point: dict = None   # From original fit
     var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
 
+    # Variance attribution (5-component decomposition)
+    var_attrib_point: dict = None      # From original fit
+    var_attrib_samples: dict = None    # Dict mapping key -> np.ndarray of bootstrap samples
+
     # Year fixed effects k(t)
     k_point: Dict[int, float] = None      # Point estimates from original fit
     k_samples: Dict[int, np.ndarray] = None  # year -> array of shape (n_bootstrap,)
@@ -159,7 +163,7 @@ def run_bootstrap(
     verbose: bool = True,
     Y_ref: float = None,
     loess_window: int = None,
-) -> Dict[str, BootstrapResult]:
+) -> Tuple[Dict[str, BootstrapResult], np.ndarray]:
     """Run bootstrap analysis for all approaches.
 
     For each bootstrap iteration:
@@ -181,7 +185,10 @@ def run_bootstrap(
             (default: DEFAULT_LOESS_WINDOW_YEARS)
 
     Returns:
-        Dict mapping approach name to BootstrapResult
+        Tuple of:
+        - Dict mapping approach name to BootstrapResult
+        - country_samples: np.ndarray of shape (n_bootstrap, n_countries) with
+          the original country indices selected in each bootstrap iteration
     """
     # Handle default for loess_window
     if loess_window is None:
@@ -194,6 +201,9 @@ def run_bootstrap(
     approach_names = list(original_results.keys())
 
     # Initialize storage for bootstrap samples
+    # Store which countries were selected in each bootstrap iteration
+    country_samples = np.zeros((n_bootstrap, n_countries), dtype=np.int32)
+
     h1_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     h2_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     T_optimal_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
@@ -213,6 +223,16 @@ def run_bootstrap(
                 if isinstance(val, (int, float)):
                     var_decomp_samples[name][key] = np.full(n_bootstrap, np.nan)
 
+    # Variance attribution samples - initialized from original results' var_attrib keys
+    var_attrib_samples = {}
+    for name in approach_names:
+        orig = original_results[name]
+        if orig.var_attrib is not None:
+            var_attrib_samples[name] = {}
+            for key, val in orig.var_attrib.items():
+                if isinstance(val, (int, float)):
+                    var_attrib_samples[name][key] = np.full(n_bootstrap, np.nan)
+
     # Year fixed effects k(t) samples - initialized from original results
     # Get unique years from original data
     unique_years = sorted(set(data.year))
@@ -231,6 +251,7 @@ def run_bootstrap(
         try:
             # Sample countries with replacement
             selected_countries = rng.integers(0, n_countries, size=n_countries)
+            country_samples[b, :] = selected_countries
 
             # Create bootstrap dataset
             boot_data = create_bootstrap_data(data, selected_countries)
@@ -275,6 +296,12 @@ def run_bootstrap(
                     for key in var_decomp_samples[name]:
                         if key in r.var_decomp:
                             var_decomp_samples[name][key][b] = r.var_decomp[key]
+
+                # Store variance attribution samples
+                if r.var_attrib is not None and name in var_attrib_samples:
+                    for key in var_attrib_samples[name]:
+                        if key in r.var_attrib:
+                            var_attrib_samples[name][key][b] = r.var_attrib[key]
 
                 # Store k values (year fixed effects)
                 if hasattr(r, 'k') and r.k is not None:
@@ -386,11 +413,13 @@ def run_bootstrap(
             h2_high_samples=h2_high_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
+            var_attrib_point=getattr(orig, 'var_attrib', None),
+            var_attrib_samples=var_attrib_samples.get(name, None),
             k_point=k_point_to_use,
             k_samples=k_samples[name],
         )
 
-    return results
+    return results, country_samples
 
 
 def compute_bootstrap_statistics(

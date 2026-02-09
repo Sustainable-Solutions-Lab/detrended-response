@@ -120,6 +120,247 @@ def reconstruct_bootstrap_results(
     return results
 
 
+def generate_variance_decomposition_table(
+    bootstrap_results: dict,
+    output_dir: Path,
+    approaches: list = None,
+) -> None:
+    """Generate variance decomposition table with bootstrap confidence intervals.
+
+    Creates an Excel table with variance decomposition metrics as rows and
+    approaches as columns, showing point estimates with 90% confidence intervals.
+
+    Parameters
+    ----------
+    bootstrap_results : dict
+        Dictionary from load_bootstrap_results() containing:
+        - 'bootstrap_var_attrib': DataFrame with variance attribution samples
+        - 'bootstrap_summary': DataFrame with point estimates
+    output_dir : Path
+        Directory to save generated table
+    approaches : list, optional
+        List of approach keys to include. Defaults to main approaches.
+
+    Table Structure
+    ---------------
+    Row Labels              | Approach 0        | Approach 1        | ...
+    ------------------------|-------------------|-------------------|----
+    Total R²                | 0.196 [0.18,0.21] | 0.192 [0.17,0.20] | ...
+    Var(h(T)-h(Ttr))/Var    | 0.002 [0.00,0.01] | —                 | ...
+    Var(h(Ttr))/Var(dy)     | 0.175 [0.15,0.20] | —                 | ...
+    ...                     | ...               | ...               | ...
+    Sum                     | 1.000             | 1.000             | ...
+    """
+    var_attrib_df = bootstrap_results.get('bootstrap_var_attrib')
+    summary_df = bootstrap_results.get('bootstrap_summary')
+
+    if var_attrib_df is None:
+        print("      [Tables] WARNING: bootstrap_var_attrib not loaded, skipping variance decomposition table")
+        return
+    if summary_df is None:
+        print("      [Tables] WARNING: bootstrap_summary not loaded, skipping variance decomposition table")
+        return
+
+    # Default approaches to include
+    if approaches is None:
+        approaches = ['approach0', 'approach5c', 'approach5a', 'approach5b', 'approach6', 'approach8']
+
+    # Filter to approaches that exist in the data
+    available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
+    if not available_approaches:
+        print("      [Tables] WARNING: No matching approaches found in var_attrib data")
+        return
+
+    # Define the metrics to include in the table (in order)
+    # These correspond to var_attrib keys, normalized by var_dy
+    variance_metrics = [
+        ('Sigma_Delta_u_Delta_u', 'Var(h(T)-h(Ttr))/Var(Δy)'),
+        ('Sigma_v_v', 'Var(h(Ttr))/Var(Δy)'),
+        ('Sigma_j_j', 'Var(j)/Var(Δy)'),
+        ('Sigma_k_k', 'Var(k)/Var(Δy)'),
+        ('Sigma_epsilon_epsilon', 'Var(ε)/Var(Δy)'),
+    ]
+    covariance_metrics = [
+        ('Sigma_Delta_u_v', '2Cov(h(T)-h(Ttr),h(Ttr))/Var(Δy)'),
+        ('Sigma_Delta_u_j', '2Cov(h(T)-h(Ttr),j)/Var(Δy)'),
+        ('Sigma_Delta_u_k', '2Cov(h(T)-h(Ttr),k)/Var(Δy)'),
+        ('Sigma_Delta_u_epsilon', '2Cov(h(T)-h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_v_j', '2Cov(h(Ttr),j)/Var(Δy)'),
+        ('Sigma_v_k', '2Cov(h(Ttr),k)/Var(Δy)'),
+        ('Sigma_v_epsilon', '2Cov(h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_j_k', '2Cov(j,k)/Var(Δy)'),
+        ('Sigma_j_epsilon', '2Cov(j,ε)/Var(Δy)'),
+        ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
+    ]
+
+    def format_value_with_ci(point: float, samples: np.ndarray, is_covariance: bool = False) -> str:
+        """Format point estimate with 90% CI, or em-dash for zero-by-construction values."""
+        valid_samples = samples[~np.isnan(samples)]
+        if len(valid_samples) == 0:
+            return '—'
+
+        # Check if all samples are identically zero (zero by construction)
+        if np.allclose(valid_samples, 0, atol=1e-15):
+            return '—'
+
+        p5 = np.percentile(valid_samples, 5)
+        p95 = np.percentile(valid_samples, 95)
+
+        # Format with appropriate precision
+        if abs(point) < 0.001:
+            return f'{point:.4f} [{p5:.4f},{p95:.4f}]'
+        else:
+            return f'{point:.3f} [{p5:.3f},{p95:.3f}]'
+
+    # Get approach display names
+    approach_names = {}
+    for approach in available_approaches:
+        mask = summary_df['approach'] == approach
+        if mask.any():
+            approach_names[approach] = summary_df[mask].iloc[0]['approach_name']
+        else:
+            approach_names[approach] = approach
+
+    # Build the table data
+    rows = []
+
+    # Add Total R² row first (from bootstrap_summary)
+    total_r2_row = {'Metric': 'Total R²'}
+    coefficients_df = bootstrap_results.get('bootstrap_coefficients')
+    for approach in available_approaches:
+        # Get point estimate from summary
+        summary_mask = summary_df['approach'] == approach
+        if summary_mask.any():
+            point = summary_df[summary_mask].iloc[0]['total_r_squared_point']
+        else:
+            point = np.nan
+
+        # Get samples from coefficients
+        if coefficients_df is not None:
+            coef_mask = coefficients_df['approach'] == approach
+            samples = coefficients_df[coef_mask]['total_r_squared'].values
+        else:
+            samples = np.array([])
+
+        total_r2_row[approach_names[approach]] = format_value_with_ci(point, samples)
+    rows.append(total_r2_row)
+
+    # Add variance metrics
+    for key, label in variance_metrics:
+        row = {'Metric': label}
+        for approach in available_approaches:
+            mask = var_attrib_df['approach'] == approach
+            approach_data = var_attrib_df[mask]
+
+            if key not in approach_data.columns:
+                row[approach_names[approach]] = '—'
+                continue
+
+            # Get var_dy for normalization
+            if 'var_dy' in approach_data.columns:
+                var_dy_samples = approach_data['var_dy'].values
+            else:
+                row[approach_names[approach]] = '—'
+                continue
+
+            # Get the metric samples and normalize
+            metric_samples = approach_data[key].values
+            # Normalize by var_dy
+            with np.errstate(divide='ignore', invalid='ignore'):
+                normalized_samples = metric_samples / var_dy_samples
+            normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
+
+            # Point estimate is mean of samples (or could use median)
+            valid = normalized_samples[~np.isnan(normalized_samples)]
+            if len(valid) > 0:
+                point = np.median(valid)
+                row[approach_names[approach]] = format_value_with_ci(point, normalized_samples)
+            else:
+                row[approach_names[approach]] = '—'
+
+        rows.append(row)
+
+    # Add covariance metrics (multiply by 2 since we show 2*Cov)
+    for key, label in covariance_metrics:
+        row = {'Metric': label}
+        for approach in available_approaches:
+            mask = var_attrib_df['approach'] == approach
+            approach_data = var_attrib_df[mask]
+
+            if key not in approach_data.columns:
+                row[approach_names[approach]] = '—'
+                continue
+
+            # Get var_dy for normalization
+            if 'var_dy' in approach_data.columns:
+                var_dy_samples = approach_data['var_dy'].values
+            else:
+                row[approach_names[approach]] = '—'
+                continue
+
+            # Get the metric samples, multiply by 2, and normalize
+            metric_samples = approach_data[key].values * 2  # 2*Cov term
+            with np.errstate(divide='ignore', invalid='ignore'):
+                normalized_samples = metric_samples / var_dy_samples
+            normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
+
+            valid = normalized_samples[~np.isnan(normalized_samples)]
+            if len(valid) > 0:
+                point = np.median(valid)
+                row[approach_names[approach]] = format_value_with_ci(point, normalized_samples, is_covariance=True)
+            else:
+                row[approach_names[approach]] = '—'
+
+        rows.append(row)
+
+    # Add Sum row (should equal 1.0)
+    sum_row = {'Metric': 'Sum'}
+    for approach in available_approaches:
+        mask = var_attrib_df['approach'] == approach
+        approach_data = var_attrib_df[mask]
+
+        if 'var_dy' not in approach_data.columns:
+            sum_row[approach_names[approach]] = '—'
+            continue
+
+        var_dy_samples = approach_data['var_dy'].values
+
+        # Sum all variance and covariance terms
+        total_sum = np.zeros(len(approach_data))
+        for key, _ in variance_metrics:
+            if key in approach_data.columns:
+                total_sum += approach_data[key].values
+        for key, _ in covariance_metrics:
+            if key in approach_data.columns:
+                total_sum += 2 * approach_data[key].values  # 2*Cov terms
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            sum_normalized = total_sum / var_dy_samples
+        sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
+
+        valid = sum_normalized[~np.isnan(sum_normalized)]
+        if len(valid) > 0:
+            point = np.median(valid)
+            sum_row[approach_names[approach]] = f'{point:.3f}'
+        else:
+            sum_row[approach_names[approach]] = '—'
+
+    rows.append(sum_row)
+
+    # Create DataFrame
+    df = pd.DataFrame(rows)
+
+    # Save to Excel
+    xlsx_path = output_dir / 'variance_decomposition_table.xlsx'
+    df.to_excel(xlsx_path, index=False, sheet_name='Variance Decomposition')
+    print(f"      [Tables] Saved variance_decomposition_table.xlsx ({len(rows)} rows × {len(available_approaches)} approaches)")
+
+    # Also save as CSV for easier inspection
+    csv_path = output_dir / 'variance_decomposition_table.csv'
+    df.to_csv(csv_path, index=False)
+    print(f"      [Tables] Saved variance_decomposition_table.csv")
+
+
 def generate_tables(
     analysis_results: dict,
     bootstrap_results: dict,
@@ -137,10 +378,12 @@ def generate_tables(
         Dictionary from load_bootstrap_results() containing:
         - 'bootstrap_coefficients': DataFrame with all samples
         - 'bootstrap_summary': DataFrame with percentiles
+        - 'bootstrap_var_attrib': DataFrame with variance attribution samples
     output_dir : Path
         Directory to save generated tables
     """
-    print("      [Tables] Placeholder - no tables generated yet")
+    # Generate variance decomposition table
+    generate_variance_decomposition_table(bootstrap_results, output_dir)
 
 
 def generate_figures(

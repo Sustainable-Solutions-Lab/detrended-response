@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 from datetime import datetime
+import glob
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -22,6 +23,26 @@ from src.publication import (
     generate_tables,
     generate_figures,
 )
+
+
+def find_most_recent_dir(pattern: str) -> str:
+    """Find the most recent directory matching a glob pattern.
+
+    Parameters
+    ----------
+    pattern : str
+        Glob pattern to match directories (e.g., 'data/output/reference/analysis_*')
+
+    Returns
+    -------
+    str
+        Path to the most recent matching directory, or None if no match found
+    """
+    matches = sorted(glob.glob(pattern))
+    if matches:
+        # Return the last one (most recent by timestamp in name)
+        return matches[-1]
+    return None
 
 
 def load_analysis_results(analysis_dir: Path) -> dict:
@@ -99,6 +120,17 @@ def load_bootstrap_results(bootstrap_dir: Path) -> dict:
         print(f"      WARNING: bootstrap_summary_table.csv not found at {summary_path}")
         results['bootstrap_summary'] = None
 
+    # Load bootstrap var_attrib samples
+    var_attrib_path = bootstrap_dir / "bootstrap_var_attrib_samples.csv"
+    if var_attrib_path.exists():
+        results['bootstrap_var_attrib'] = pd.read_csv(var_attrib_path, comment='#')
+        n_samples = len(results['bootstrap_var_attrib'])
+        n_approaches = results['bootstrap_var_attrib']['approach'].nunique()
+        print(f"      Loaded bootstrap_var_attrib_samples.csv: {n_samples} samples across {n_approaches} approaches")
+    else:
+        print(f"      WARNING: bootstrap_var_attrib_samples.csv not found at {var_attrib_path}")
+        results['bootstrap_var_attrib'] = None
+
     return results
 
 
@@ -126,20 +158,24 @@ def create_publication_output_dir(base_dir: str = None) -> Path:
 
 
 def main():
+    # Find most recent directories for defaults
+    default_analysis_dir = find_most_recent_dir("data/output/reference/analysis_*")
+    default_bootstrap_dir = find_most_recent_dir("data/output/reference/bootstrap_*")
+
     parser = argparse.ArgumentParser(
         description="Generate publication-quality tables and figures from analysis outputs"
     )
     parser.add_argument(
         "--analysis-dir",
         type=str,
-        default="data/output/reference/analysis_20260208_090908",
-        help="Path to analysis output directory (default: data/output/reference/analysis_20260208_090908)",
+        default=default_analysis_dir,
+        help=f"Path to analysis output directory (default: most recent in data/output/reference/analysis_*)",
     )
     parser.add_argument(
         "--bootstrap-dir",
         type=str,
-        default="data/output/reference/bootstrap_20260208_082423",
-        help="Path to bootstrap output directory (default: data/output/reference/bootstrap_20260208_082423)",
+        default=default_bootstrap_dir,
+        help=f"Path to bootstrap output directory (default: most recent in data/output/reference/bootstrap_*)",
     )
     parser.add_argument(
         "--output-dir",
@@ -161,10 +197,20 @@ def main():
     print("=" * 70)
 
     # Validate input directories
+    print(f"\n[1/6] Validating input directories...")
+
+    if args.analysis_dir is None:
+        print("ERROR: No analysis directory found matching data/output/reference/analysis_*")
+        print("       Please specify --analysis-dir explicitly")
+        sys.exit(1)
+    if args.bootstrap_dir is None:
+        print("ERROR: No bootstrap directory found matching data/output/reference/bootstrap_*")
+        print("       Please specify --bootstrap-dir explicitly")
+        sys.exit(1)
+
     analysis_dir = Path(args.analysis_dir)
     bootstrap_dir = Path(args.bootstrap_dir)
 
-    print(f"\n[1/6] Validating input directories...")
     print(f"      Analysis dir: {analysis_dir}")
     print(f"      Bootstrap dir: {bootstrap_dir}")
 

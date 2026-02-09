@@ -1334,6 +1334,94 @@ def save_bootstrap_k_samples_csv(
     print(f"  Saved bootstrap_k_samples.csv ({len(df)} rows)")
 
 
+def save_bootstrap_var_attrib_csv(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save bootstrap samples of variance attribution to CSV.
+
+    Creates: bootstrap_var_attrib_samples.csv with columns:
+    - iteration: bootstrap iteration number
+    - approach: approach key (e.g., 'approach5')
+    - approach_name: human-readable approach name
+    - All var_attrib keys (Sigma_Delta_u_Delta_u, Sigma_Delta_u_v, etc.)
+
+    This allows reconstructing variance attribution confidence intervals
+    in postprocessing for publication tables.
+    """
+    rows = []
+    for name, result in results.items():
+        if result.var_attrib_samples is None:
+            continue
+
+        # Get all keys from var_attrib_samples
+        keys = sorted(result.var_attrib_samples.keys())
+        if not keys:
+            continue
+
+        for i in range(result.n_bootstrap):
+            row = {
+                'iteration': i,
+                'approach': name,
+                'approach_name': result.approach,
+            }
+            for key in keys:
+                row[key] = result.var_attrib_samples[key][i]
+            rows.append(row)
+
+    if not rows:
+        print("  No var_attrib samples to save")
+        return
+
+    df = pd.DataFrame(rows)
+    csv_path = output_dir / 'bootstrap_var_attrib_samples.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved bootstrap_var_attrib_samples.csv ({len(df)} rows)")
+
+
+def save_bootstrap_country_samples_csv(
+    country_samples: np.ndarray,
+    data: "AnalysisData",
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save bootstrap country resampling indices to CSV.
+
+    Creates: bootstrap_country_samples.csv with shape (n_bootstrap, n_countries).
+    Each row is one bootstrap iteration, each column is a "slot" in the resampled
+    dataset, and the value is the original country index (0 to n_countries-1).
+
+    This allows analysis of country influence on bootstrap results by checking
+    how often each country appears in each bootstrap sample.
+
+    Args:
+        country_samples: Array of shape (n_bootstrap, n_countries) with country indices
+        data: AnalysisData to get country ISO codes for column headers
+        output_dir: Directory to save the CSV
+        input_file: Optional input file path for annotation
+    """
+    n_bootstrap, n_countries = country_samples.shape
+
+    # Create column headers using original country ISO codes
+    col_names = [data.idx_to_iso.get(i, f"country_{i}") for i in range(n_countries)]
+
+    df = pd.DataFrame(country_samples, columns=col_names)
+    df.insert(0, 'iteration', range(n_bootstrap))
+
+    csv_path = output_dir / 'bootstrap_country_samples.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+            f.write(f"# Each row is a bootstrap iteration, each column is a 'slot' in the resampled dataset\n")
+            f.write(f"# Values are original country indices (0 to {n_countries-1})\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved bootstrap_country_samples.csv ({n_bootstrap} x {n_countries})")
+
+
 def plot_year_effects_bootstrap(
     results: Dict[str, "BootstrapResult"],
     data: AnalysisData,
