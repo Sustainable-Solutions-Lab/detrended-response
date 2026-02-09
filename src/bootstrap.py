@@ -82,6 +82,10 @@ class BootstrapResult:
     var_decomp_point: dict = None   # From original fit
     var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
 
+    # Year fixed effects k(t)
+    k_point: Dict[int, float] = None      # Point estimates from original fit
+    k_samples: Dict[int, np.ndarray] = None  # year -> array of shape (n_bootstrap,)
+
 
 def create_bootstrap_data(
     data: AnalysisData,
@@ -209,6 +213,14 @@ def run_bootstrap(
                 if isinstance(val, (int, float)):
                     var_decomp_samples[name][key] = np.full(n_bootstrap, np.nan)
 
+    # Year fixed effects k(t) samples - initialized from original results
+    # Get unique years from original data
+    unique_years = sorted(set(data.year))
+    k_samples = {
+        name: {yr: np.full(n_bootstrap, np.nan) for yr in unique_years}
+        for name in approach_names
+    }
+
     n_successful = 0
 
     if verbose:
@@ -264,6 +276,12 @@ def run_bootstrap(
                         if key in r.var_decomp:
                             var_decomp_samples[name][key][b] = r.var_decomp[key]
 
+                # Store k values (year fixed effects)
+                if hasattr(r, 'k') and r.k is not None:
+                    for yr in unique_years:
+                        if yr in r.k:
+                            k_samples[name][yr][b] = r.k[yr]
+
             n_successful += 1
 
         except Exception as e:
@@ -288,6 +306,48 @@ def run_bootstrap(
     if verbose:
         print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")
 
+    # For approach0 and nocr0, detrend k_samples by subtracting best-fit quadratic
+    # from each bootstrap. This removes the arbitrary quadratic that can shift between
+    # bootstrap samples due to different country identification constraints.
+    # These approaches set the first country's j terms to zero, which means k(t) can
+    # absorb any arbitrary quadratic; different bootstrap samples have different countries
+    # as "first", causing systematic quadratic shifts in k(t).
+    approaches_to_detrend = ['approach0', 'nocr0']
+    years_array = np.array(unique_years, dtype=float)
+    # Center years for numerical stability
+    year_center = years_array.mean()
+    years_centered = years_array - year_center
+    # Design matrix for quadratic fit (same for all)
+    X_quad = np.column_stack([np.ones(len(years_centered)),
+                               years_centered,
+                               years_centered**2])
+
+    for approach_name in approaches_to_detrend:
+        if approach_name not in k_samples:
+            continue
+        for b in range(n_bootstrap):
+            # Extract k values for this bootstrap iteration
+            k_vals = np.array([k_samples[approach_name][yr][b] for yr in unique_years])
+            if np.any(np.isnan(k_vals)):
+                continue
+            # Fit quadratic: k(t) = a0 + a1*t + a2*t^2 and subtract
+            coeffs, _, _, _ = np.linalg.lstsq(X_quad, k_vals, rcond=None)
+            k_fitted = X_quad @ coeffs
+            for i, yr in enumerate(unique_years):
+                k_samples[approach_name][yr][b] = k_vals[i] - k_fitted[i]
+
+    # Also detrend k_point for approach0 and nocr0 to match the detrended samples
+    k_point_detrended = {}
+    for approach_name in approaches_to_detrend:
+        if approach_name in original_results and original_results[approach_name].k is not None:
+            orig_k = original_results[approach_name].k
+            k_vals = np.array([orig_k[yr] for yr in unique_years])
+            coeffs, _, _, _ = np.linalg.lstsq(X_quad, k_vals, rcond=None)
+            k_fitted = X_quad @ coeffs
+            k_point_detrended[approach_name] = {
+                yr: k_vals[i] - k_fitted[i] for i, yr in enumerate(unique_years)
+            }
+
     # Build BootstrapResult for each approach
     results = {}
     for name in approach_names:
@@ -297,6 +357,13 @@ def run_bootstrap(
         # Get h2_low and h2_high point estimates if available (Approach 8 piecewise)
         h2_low_point = getattr(orig, 'h2_low', None)
         h2_high_point = getattr(orig, 'h2_high', None)
+
+        # Use detrended k_point for approach0 and nocr0
+        if name in k_point_detrended:
+            k_point_to_use = k_point_detrended[name]
+        else:
+            k_point_to_use = orig.k
+
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
@@ -319,6 +386,8 @@ def run_bootstrap(
             h2_high_samples=h2_high_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
+            k_point=k_point_to_use,
+            k_samples=k_samples[name],
         )
 
     return results

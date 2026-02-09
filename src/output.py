@@ -1295,6 +1295,194 @@ def save_bootstrap_summary_table(
     print(f"  Saved bootstrap_summary_table.xlsx")
 
 
+def save_bootstrap_k_samples_csv(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save bootstrap samples of year fixed effects k(t) to CSV.
+
+    Creates: bootstrap_k_samples.csv with columns:
+    - iteration: bootstrap iteration number
+    - approach: approach key (e.g., 'approach5')
+    - approach_name: human-readable approach name
+    - year: calendar year
+    - k_value: k(t) value for that year in that bootstrap iteration
+    """
+    rows = []
+    for name, result in results.items():
+        if result.k_samples is None:
+            continue
+
+        for year in sorted(result.k_samples.keys()):
+            k_array = result.k_samples[year]
+            for i in range(result.n_bootstrap):
+                rows.append({
+                    'iteration': i,
+                    'approach': name,
+                    'approach_name': result.approach,
+                    'year': year,
+                    'k_value': k_array[i],
+                })
+
+    df = pd.DataFrame(rows)
+    csv_path = output_dir / 'bootstrap_k_samples.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved bootstrap_k_samples.csv ({len(df)} rows)")
+
+
+def plot_year_effects_bootstrap(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    input_file: str = None,
+    approaches_to_plot: list = None
+) -> None:
+    """Plot year fixed effects k(t) with bootstrap uncertainty bands.
+
+    Creates a multi-panel figure with one panel per approach, showing:
+    - Point estimate line
+    - IQR band (25th-75th percentile, darker shading)
+    - 90% CI band (5th-95th percentile, lighter shading)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for getting year range
+        output_dir: Directory to save the plot
+        input_file: Optional input file path for annotation
+        approaches_to_plot: List of approach keys to plot. If None, plots all
+            approaches that have k_samples. Default focuses on main approaches.
+    """
+    # Default to approaches that typically have meaningful year effects
+    if approaches_to_plot is None:
+        approaches_to_plot = [
+            'approach0', 'approach1', 'approach2', 'approach3', 'approach4',
+            'approach5', 'approach6', 'approach7', 'approach8'
+        ]
+
+    # Filter to approaches that exist and have k_samples
+    available_approaches = [
+        name for name in approaches_to_plot
+        if name in results and results[name].k_samples is not None
+    ]
+
+    if not available_approaches:
+        print("  No approaches with k_samples available for plotting")
+        return
+
+    # Determine grid layout
+    n_approaches = len(available_approaches)
+    n_cols = min(3, n_approaches)
+    n_rows = (n_approaches + n_cols - 1) // n_cols
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows),
+                              squeeze=False, sharex=True)
+    axes = axes.flatten()
+
+    # Get years from data
+    unique_years = sorted(set(data.year))
+    years_array = np.array(unique_years)
+
+    # Compute global y-axis range across all approaches
+    all_k_values = []
+    for name in available_approaches:
+        result = results[name]
+        if result.k_point is not None:
+            all_k_values.extend([result.k_point[yr] for yr in unique_years if yr in result.k_point])
+        if result.k_samples is not None:
+            for yr in unique_years:
+                if yr in result.k_samples:
+                    valid = result.k_samples[yr][~np.isnan(result.k_samples[yr])]
+                    if len(valid) > 0:
+                        all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
+
+    if all_k_values:
+        y_min = min(all_k_values)
+        y_max = max(all_k_values)
+        y_margin = (y_max - y_min) * 0.1
+        y_range = (y_min - y_margin, y_max + y_margin)
+    else:
+        y_range = (-0.05, 0.05)
+
+    for idx, name in enumerate(available_approaches):
+        ax = axes[idx]
+        result = results[name]
+
+        # Extract point estimates and bootstrap percentiles
+        k_point = []
+        k_p5 = []
+        k_p25 = []
+        k_p75 = []
+        k_p95 = []
+
+        for yr in unique_years:
+            # Point estimate
+            if result.k_point is not None and yr in result.k_point:
+                k_point.append(result.k_point[yr])
+            else:
+                k_point.append(np.nan)
+
+            # Bootstrap samples
+            if result.k_samples is not None and yr in result.k_samples:
+                samples = result.k_samples[yr]
+                valid = samples[~np.isnan(samples)]
+                if len(valid) > 0:
+                    k_p5.append(np.percentile(valid, 5))
+                    k_p25.append(np.percentile(valid, 25))
+                    k_p75.append(np.percentile(valid, 75))
+                    k_p95.append(np.percentile(valid, 95))
+                else:
+                    k_p5.append(np.nan)
+                    k_p25.append(np.nan)
+                    k_p75.append(np.nan)
+                    k_p95.append(np.nan)
+            else:
+                k_p5.append(np.nan)
+                k_p25.append(np.nan)
+                k_p75.append(np.nan)
+                k_p95.append(np.nan)
+
+        k_point = np.array(k_point)
+        k_p5 = np.array(k_p5)
+        k_p25 = np.array(k_p25)
+        k_p75 = np.array(k_p75)
+        k_p95 = np.array(k_p95)
+
+        color = APPROACH_COLORS.get(name, 'blue')
+
+        # Plot 90% CI band
+        ax.fill_between(years_array, k_p5, k_p95, alpha=0.2, color=color, linewidth=0)
+        # Plot IQR band
+        ax.fill_between(years_array, k_p25, k_p75, alpha=0.3, color=color, linewidth=0)
+        # Plot point estimate
+        ax.plot(years_array, k_point, color=color, linewidth=1.5)
+
+        # Formatting
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_title(result.approach, fontsize=10)
+        ax.set_ylim(y_range)
+        ax.grid(True, alpha=0.3)
+
+        if idx >= (n_rows - 1) * n_cols:
+            ax.set_xlabel('Year')
+        if idx % n_cols == 0:
+            ax.set_ylabel('k(t)')
+
+    # Hide unused axes
+    for idx in range(n_approaches, len(axes)):
+        axes[idx].set_visible(False)
+
+    fig.suptitle('Year Fixed Effects k(t) with Bootstrap Uncertainty', fontsize=12)
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / 'year_effects_bootstrap.pdf')
+    plt.close()
+    print(f"  Saved year_effects_bootstrap.pdf")
+
+
 def compute_h_response_uncertainty_bands(
     result: "BootstrapResult",
     T_range: np.ndarray,
@@ -2002,7 +2190,7 @@ def plot_bootstrap_temperature_derivative(
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=8, loc='lower right')
+        ax.legend(fontsize=8, loc='lower left')
 
     # Hide unused subplots
     for idx in range(n_approaches, len(axes)):
@@ -2658,3 +2846,7 @@ def save_all_bootstrap_plots(
     # T_optimal comparison across all approaches
     plot_bootstrap_T_optimal_comparison(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_T_optimal_comparison.pdf")
+
+    # Year effects k(t) with bootstrap uncertainty bands
+    if data is not None:
+        plot_year_effects_bootstrap(results, data, output_dir, input_file=input_file)
