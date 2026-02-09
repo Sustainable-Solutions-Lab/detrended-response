@@ -1427,7 +1427,9 @@ def plot_year_effects_bootstrap(
     data: AnalysisData,
     output_dir: Path,
     input_file: str = None,
-    approaches_to_plot: list = None
+    approaches_to_plot: list = None,
+    filename: str = 'year_effects_bootstrap.pdf',
+    show_title: bool = True,
 ) -> None:
     """Plot year fixed effects k(t) with bootstrap uncertainty bands.
 
@@ -1443,6 +1445,8 @@ def plot_year_effects_bootstrap(
         input_file: Optional input file path for annotation
         approaches_to_plot: List of approach keys to plot. If None, plots all
             approaches that have k_samples. Default focuses on main approaches.
+        filename: Output filename (default: 'year_effects_bootstrap.pdf')
+        show_title: Whether to show the figure title (default: True)
     """
     # Default to approaches that typically have meaningful year effects
     if approaches_to_plot is None:
@@ -1563,12 +1567,13 @@ def plot_year_effects_bootstrap(
     for idx in range(n_approaches, len(axes)):
         axes[idx].set_visible(False)
 
-    fig.suptitle('Year Fixed Effects k(t) with Bootstrap Uncertainty', fontsize=12)
+    if show_title:
+        fig.suptitle('Year Fixed Effects k(t) with Bootstrap Uncertainty', fontsize=12)
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / 'year_effects_bootstrap.pdf')
+    plt.savefig(output_dir / filename)
     plt.close()
-    print(f"  Saved year_effects_bootstrap.pdf")
+    print(f"  Saved {filename}")
 
 
 def compute_h_response_uncertainty_bands(

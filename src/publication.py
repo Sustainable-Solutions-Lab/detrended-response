@@ -17,12 +17,14 @@ from src.output import (
     plot_bootstrap_temperature_derivative,
     plot_T_optimal_histograms,
     plot_h2_histograms,
+    plot_year_effects_bootstrap,
 )
 
 
 def reconstruct_bootstrap_results(
     coefficients_df: pd.DataFrame,
     summary_df: pd.DataFrame,
+    k_samples_df: pd.DataFrame = None,
 ) -> Dict[str, BootstrapResult]:
     """Reconstruct BootstrapResult objects from CSV data.
 
@@ -33,6 +35,9 @@ def reconstruct_bootstrap_results(
         iteration, approach, approach_name, h1, h2, T_optimal, r_squared, etc.
     summary_df : pd.DataFrame
         DataFrame from bootstrap_summary_table.csv with point estimates and percentiles
+    k_samples_df : pd.DataFrame, optional
+        DataFrame from bootstrap_k_samples.csv with columns:
+        iteration, approach, approach_name, year, k_value
 
     Returns
     -------
@@ -92,6 +97,32 @@ def reconstruct_bootstrap_results(
             h2_high_samples = samples['h2_high'].values
             h2_high_point = summary_row.get('h2_high_point', None)
 
+        # Reconstruct k_samples from k_samples_df if available
+        k_point = None
+        k_samples = None
+        if k_samples_df is not None:
+            k_mask = k_samples_df['approach'] == approach
+            k_data = k_samples_df[k_mask]
+            if len(k_data) > 0:
+                # Get unique years
+                years = sorted(k_data['year'].unique())
+                n_bootstrap = int(summary_row['n_bootstrap'])
+
+                # Build k_samples dict: year -> array of shape (n_bootstrap,)
+                k_samples = {}
+                for year in years:
+                    year_data = k_data[k_data['year'] == year].sort_values('iteration')
+                    k_samples[year] = year_data['k_value'].values
+
+                # Compute k_point as median of each year's samples
+                k_point = {}
+                for year in years:
+                    valid = k_samples[year][~np.isnan(k_samples[year])]
+                    if len(valid) > 0:
+                        k_point[year] = np.median(valid)
+                    else:
+                        k_point[year] = np.nan
+
         # Create BootstrapResult
         result = BootstrapResult(
             approach=approach_name,
@@ -113,6 +144,8 @@ def reconstruct_bootstrap_results(
             h2_low_samples=h2_low_samples,
             h2_high_point=h2_high_point,
             h2_high_samples=h2_high_samples,
+            k_point=k_point,
+            k_samples=k_samples,
         )
 
         results[approach] = result
@@ -422,6 +455,7 @@ def generate_figures(
     results = reconstruct_bootstrap_results(
         bootstrap_results['bootstrap_coefficients'],
         bootstrap_results['bootstrap_summary'],
+        bootstrap_results.get('bootstrap_k_samples'),
     )
     print(f"      [Figures] Reconstructed {len(results)} approaches")
 
@@ -530,3 +564,19 @@ def generate_figures(
         input_file=None,
     )
     print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
+
+    # Figure 9: Year effects k(t) - 2 panels (approach0 and approach6)
+    if data is not None:
+        print("      [Figures] Generating year effects figure (2 panels)...")
+        plot_year_effects_bootstrap(
+            results,
+            data,
+            output_dir,
+            approaches_to_plot=['approach0', 'approach6'],
+            filename='fig_year_effects_2panel.pdf',
+            show_title=False,
+            input_file=None,
+        )
+        print("      [Figures] Saved fig_year_effects_2panel.pdf")
+    else:
+        print("      [Figures] Skipping year effects figure (data not loaded)")

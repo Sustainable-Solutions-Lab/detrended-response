@@ -131,6 +131,17 @@ def load_bootstrap_results(bootstrap_dir: Path) -> dict:
         print(f"      WARNING: bootstrap_var_attrib_samples.csv not found at {var_attrib_path}")
         results['bootstrap_var_attrib'] = None
 
+    # Load bootstrap k_samples (year fixed effects)
+    k_samples_path = bootstrap_dir / "bootstrap_k_samples.csv"
+    if k_samples_path.exists():
+        results['bootstrap_k_samples'] = pd.read_csv(k_samples_path, comment='#')
+        n_samples = len(results['bootstrap_k_samples'])
+        n_approaches = results['bootstrap_k_samples']['approach'].nunique()
+        print(f"      Loaded bootstrap_k_samples.csv: {n_samples} samples across {n_approaches} approaches")
+    else:
+        print(f"      WARNING: bootstrap_k_samples.csv not found at {k_samples_path}")
+        results['bootstrap_k_samples'] = None
+
     return results
 
 
