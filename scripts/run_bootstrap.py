@@ -186,7 +186,7 @@ def main():
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
-        output_dir = create_output_dir()
+        output_dir = create_output_dir(prefix="bootstrap_")
 
     save_bootstrap_coefficients_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)

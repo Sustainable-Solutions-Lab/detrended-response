@@ -196,7 +196,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include
     if approaches is None:
-        approaches = ['approach0', 'approach5c', 'approach5a', 'approach5b', 'approach6', 'approach8']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach8']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]

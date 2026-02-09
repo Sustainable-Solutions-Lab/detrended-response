@@ -192,10 +192,18 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
         return result.h1 + 2 * result.h2 * T
 
 
-def create_output_dir(base_dir: str = "data/output") -> Path:
-    """Create timestamped output directory."""
+def create_output_dir(base_dir: str = "data/output", prefix: str = "") -> Path:
+    """Create timestamped output directory.
+
+    Args:
+        base_dir: Base directory for output (default: "data/output")
+        prefix: Optional prefix for the timestamped folder (e.g., "analysis_", "bootstrap_")
+
+    Returns:
+        Path to created output directory
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(base_dir) / timestamp
+    output_dir = Path(base_dir) / f"{prefix}{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
