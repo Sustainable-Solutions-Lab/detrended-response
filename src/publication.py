@@ -97,6 +97,32 @@ def reconstruct_bootstrap_results(
             h2_high_samples = samples['h2_high'].values
             h2_high_point = summary_row.get('h2_high_point', None)
 
+        # Handle 6a/6b-specific fields (h1_high, h1_low, T_optimal_high, T_optimal_low)
+        h1_high_point = None
+        h1_high_samples = None
+        h1_low_point = None
+        h1_low_samples = None
+        T_optimal_high_point = None
+        T_optimal_high_samples = None
+        T_optimal_low_point = None
+        T_optimal_low_samples = None
+
+        if 'h1_high' in samples.columns and not samples['h1_high'].isna().all():
+            h1_high_samples = samples['h1_high'].values
+            h1_high_point = summary_row.get('h1_high_point', None)
+
+        if 'h1_low' in samples.columns and not samples['h1_low'].isna().all():
+            h1_low_samples = samples['h1_low'].values
+            h1_low_point = summary_row.get('h1_low_point', None)
+
+        if 'T_optimal_high' in samples.columns and not samples['T_optimal_high'].isna().all():
+            T_optimal_high_samples = samples['T_optimal_high'].values
+            T_optimal_high_point = summary_row.get('T_optimal_high_point', None)
+
+        if 'T_optimal_low' in samples.columns and not samples['T_optimal_low'].isna().all():
+            T_optimal_low_samples = samples['T_optimal_low'].values
+            T_optimal_low_point = summary_row.get('T_optimal_low_point', None)
+
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
         k_samples = None
@@ -144,6 +170,14 @@ def reconstruct_bootstrap_results(
             h2_low_samples=h2_low_samples,
             h2_high_point=h2_high_point,
             h2_high_samples=h2_high_samples,
+            h1_high_point=h1_high_point,
+            h1_high_samples=h1_high_samples,
+            h1_low_point=h1_low_point,
+            h1_low_samples=h1_low_samples,
+            T_optimal_high_point=T_optimal_high_point,
+            T_optimal_high_samples=T_optimal_high_samples,
+            T_optimal_low_point=T_optimal_low_point,
+            T_optimal_low_samples=T_optimal_low_samples,
             k_point=k_point,
             k_samples=k_samples,
         )

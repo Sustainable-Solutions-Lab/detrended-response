@@ -39,8 +39,11 @@ from src.fitting import (
     fit_approach5c_precomputed_k_combined,
     fit_approach5d_precomputed_k_gdp_response,
     fit_approach6_precomputed_k_loess,
+    fit_approach6a_separate_high_low_loess,
+    fit_approach6b_low_only_loess,
     fit_approach7_gdp_response_loess,
     fit_approach8_gaussian_loess,
+    fit_approach8a_shared_Topt_loess,
     fit_nocr0_joint,
     fit_nocr5_precomputed_k,
 )
@@ -175,10 +178,13 @@ def main():
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6, 7 & 8: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 7, 8, 8a: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
+    results['approach6a'] = fit_approach6a_separate_high_low_loess(data, trends_loess, year_means)
+    results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
     results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
     results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
+    results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
@@ -194,8 +200,22 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        # Special handling for Approach 8 (Piecewise Quadratic)
-        if hasattr(r, 'h2_low') and hasattr(r, 'h2_high'):
+        # Special handling for Approach 6a/6b (separate high/low frequency)
+        if hasattr(r, 'h1_high') and hasattr(r, 'h1_low'):
+            print(f"  h1_high = {r.h1_high:.6f}  (SE: {r.h1_high_se:.6f})")
+            print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")
+            print(f"  h1_low = {r.h1_low:.6f}  (SE: {r.h1_low_se:.6f})")
+            print(f"  h2_low = {r.h2_low:.6f}  (SE: {r.h2_low_se:.6f})")
+            if not np.isnan(r.T_optimal_high):
+                print(f"  T_optimal_high = {r.T_optimal_high:.2f} C")
+            else:
+                print(f"  T_optimal_high = N/A")
+            if not np.isnan(r.T_optimal_low):
+                print(f"  T_optimal_low = {r.T_optimal_low:.2f} C")
+            else:
+                print(f"  T_optimal_low = N/A")
+        # Special handling for Approach 8/8a (Piecewise Quadratic / Shared T_opt)
+        elif hasattr(r, 'h2_low') and hasattr(r, 'h2_high') and hasattr(r, 'T_opt'):
             print(f"  h2_low = {r.h2_low:.6f}  (SE: {r.h2_low_se:.6f})")
             print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
@@ -203,13 +223,13 @@ def main():
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             # Print beta for Approach 7
-            if hasattr(r, 'beta'):
+            if hasattr(r, 'beta') and r.beta is not None:
                 print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
                 print(f"  Y_ref = {r.Y_ref:.2f}")
-        if np.isnan(r.T_optimal):
-            print(f"  T_optimal = N/A")
-        else:
-            print(f"  T_optimal = {r.T_optimal:.2f} C")
+            if np.isnan(r.T_optimal):
+                print(f"  T_optimal = N/A")
+            else:
+                print(f"  T_optimal = {r.T_optimal:.2f} C")
         print(f"  R² = {r.r_squared:.4f}")
         print(f"  Total R² = {r.total_r_squared:.4f}")
         print(f"  Adjusted R² = {r.adj_r_squared:.4f}")

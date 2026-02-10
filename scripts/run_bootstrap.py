@@ -211,24 +211,50 @@ def main():
         stats = all_stats[name]
         print(f"\n{result.approach}")
         print("-" * 50)
-        print(f"  T_optimal: {result.T_optimal_point:.2f} C")
-        print(f"    90% CI: [{stats['T_optimal']['p5']:.2f}, {stats['T_optimal']['p95']:.2f}]")
-        print(f"    IQR:    [{stats['T_optimal']['p25']:.2f}, {stats['T_optimal']['p75']:.2f}]")
-        print(f"  h1: {result.h1_point:.6f}")
-        print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
-        print(f"  h2: {result.h2_point:.6f}")
-        print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-        # Print beta for Approach 7
-        if result.beta_point is not None and 'beta' in stats:
-            print(f"  beta: {result.beta_point:.4f}")
-            print(f"    90% CI: [{stats['beta']['p5']:.4f}, {stats['beta']['p95']:.4f}]")
-        # Print h2_low and h2_high for Approach 8 (piecewise quadratic)
-        if result.h2_low_point is not None and 'h2_low' in stats:
-            print(f"  h2_low: {result.h2_low_point:.6f}")
-            print(f"    90% CI: [{stats['h2_low']['p5']:.6f}, {stats['h2_low']['p95']:.6f}]")
-        if result.h2_high_point is not None and 'h2_high' in stats:
+        # Special handling for Approach 6a/6b (separate high/low frequency)
+        if result.h1_high_point is not None and 'h1_high' in stats:
+            print(f"  h1_high: {result.h1_high_point:.6f}")
+            print(f"    90% CI: [{stats['h1_high']['p5']:.6f}, {stats['h1_high']['p95']:.6f}]")
             print(f"  h2_high: {result.h2_high_point:.6f}")
             print(f"    90% CI: [{stats['h2_high']['p5']:.6f}, {stats['h2_high']['p95']:.6f}]")
+            print(f"  h1_low: {result.h1_low_point:.6f}")
+            print(f"    90% CI: [{stats['h1_low']['p5']:.6f}, {stats['h1_low']['p95']:.6f}]")
+            print(f"  h2_low: {result.h2_low_point:.6f}")
+            print(f"    90% CI: [{stats['h2_low']['p5']:.6f}, {stats['h2_low']['p95']:.6f}]")
+            if result.T_optimal_high_point is not None and not np.isnan(result.T_optimal_high_point):
+                print(f"  T_optimal_high: {result.T_optimal_high_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_high']['p5']:.2f}, {stats['T_optimal_high']['p95']:.2f}]")
+            else:
+                print(f"  T_optimal_high: N/A")
+            if result.T_optimal_low_point is not None and not np.isnan(result.T_optimal_low_point):
+                print(f"  T_optimal_low: {result.T_optimal_low_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_low']['p5']:.2f}, {stats['T_optimal_low']['p95']:.2f}]")
+            else:
+                print(f"  T_optimal_low: N/A")
+        # Special handling for Approach 8/8a (piecewise quadratic / shared T_opt)
+        elif result.h2_low_point is not None and 'h2_low' in stats and result.h1_high_point is None:
+            print(f"  h2_low: {result.h2_low_point:.6f}")
+            print(f"    90% CI: [{stats['h2_low']['p5']:.6f}, {stats['h2_low']['p95']:.6f}]")
+            print(f"  h2_high: {result.h2_high_point:.6f}")
+            print(f"    90% CI: [{stats['h2_high']['p5']:.6f}, {stats['h2_high']['p95']:.6f}]")
+            print(f"  T_optimal: {result.T_optimal_point:.2f} C")
+            print(f"    90% CI: [{stats['T_optimal']['p5']:.2f}, {stats['T_optimal']['p95']:.2f}]")
+        else:
+            # Standard approaches
+            if not np.isnan(result.T_optimal_point):
+                print(f"  T_optimal: {result.T_optimal_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal']['p5']:.2f}, {stats['T_optimal']['p95']:.2f}]")
+                print(f"    IQR:    [{stats['T_optimal']['p25']:.2f}, {stats['T_optimal']['p75']:.2f}]")
+            else:
+                print(f"  T_optimal: N/A")
+            print(f"  h1: {result.h1_point:.6f}")
+            print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
+            print(f"  h2: {result.h2_point:.6f}")
+            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+            # Print beta for Approach 7
+            if result.beta_point is not None and 'beta' in stats:
+                print(f"  beta: {result.beta_point:.4f}")
+                print(f"    90% CI: [{stats['beta']['p5']:.4f}, {stats['beta']['p95']:.4f}]")
         print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
 
     print("\n" + "=" * 70)

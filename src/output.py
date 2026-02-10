@@ -254,8 +254,20 @@ def save_summary_table(
         # Add Y_ref for Approach 7
         if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
-        # Add T_opt, h2_low, h2_high for Approach 8 (piecewise quadratic)
-        if hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
+        # Add h1_high, h2_high, h1_low, h2_low for Approach 6a/6b (separate high/low freq)
+        if hasattr(result, 'h1_high') and hasattr(result, 'h1_low'):
+            row['h1_high'] = result.h1_high
+            row['h1_high_SE'] = result.h1_high_se
+            row['h2_high'] = result.h2_high
+            row['h2_high_SE'] = result.h2_high_se
+            row['h1_low'] = result.h1_low
+            row['h1_low_SE'] = result.h1_low_se
+            row['h2_low'] = result.h2_low
+            row['h2_low_SE'] = result.h2_low_se
+            row['T_optimal_high'] = result.T_optimal_high
+            row['T_optimal_low'] = result.T_optimal_low
+        # Add T_opt, h2_low, h2_high for Approach 8/8a (piecewise quadratic / shared T_opt)
+        elif hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
             row['T_opt'] = result.T_opt
             row['T_opt_SE'] = result.T_opt_se
             row['h2_low'] = result.h2_low
@@ -336,8 +348,22 @@ def save_summary_table(
         for name, result in results.items():
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            # Special handling for Approach 8 (piecewise quadratic)
-            if hasattr(result, 'h2_low') and hasattr(result, 'h2_high'):
+            # Special handling for Approach 6a/6b (separate high/low frequency)
+            if hasattr(result, 'h1_high') and hasattr(result, 'h1_low'):
+                f.write(f"  h1_high = {result.h1_high:.6f}  (SE: {result.h1_high_se:.6f})\n")
+                f.write(f"  h2_high = {result.h2_high:.6f}  (SE: {result.h2_high_se:.6f})\n")
+                f.write(f"  h1_low = {result.h1_low:.6f}  (SE: {result.h1_low_se:.6f})\n")
+                f.write(f"  h2_low = {result.h2_low:.6f}  (SE: {result.h2_low_se:.6f})\n")
+                if not np.isnan(result.T_optimal_high):
+                    f.write(f"  T_optimal_high = {result.T_optimal_high:.2f} C\n")
+                else:
+                    f.write(f"  T_optimal_high = N/A\n")
+                if not np.isnan(result.T_optimal_low):
+                    f.write(f"  T_optimal_low = {result.T_optimal_low:.2f} C\n")
+                else:
+                    f.write(f"  T_optimal_low = N/A\n")
+            # Special handling for Approach 8/8a (piecewise quadratic / shared T_opt)
+            elif hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
                 f.write(f"  h2_low = {result.h2_low:.6f}  (SE: {result.h2_low_se:.6f})\n")
                 f.write(f"  h2_high = {result.h2_high:.6f}  (SE: {result.h2_high_se:.6f})\n")
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
@@ -350,10 +376,10 @@ def save_summary_table(
                     f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
                     if hasattr(result, 'Y_ref'):
                         f.write(f"  Y_ref = {result.Y_ref:.2f}\n")
-            if np.isnan(result.T_optimal):
-                f.write(f"  T_optimal = N/A\n")
-            else:
-                f.write(f"  T_optimal = {result.T_optimal:.2f} C\n")
+                if np.isnan(result.T_optimal):
+                    f.write(f"  T_optimal = N/A\n")
+                else:
+                    f.write(f"  T_optimal = {result.T_optimal:.2f} C\n")
             f.write(f"  R² = {result.r_squared:.4f}\n")
             f.write(f"  Total R² = {result.total_r_squared:.4f}\n")
             f.write(f"  Adjusted R² = {result.adj_r_squared:.4f}\n")
@@ -998,11 +1024,20 @@ def save_bootstrap_coefficients_csv(
             # Add beta for approaches where it's a free parameter (7)
             if result.beta_samples is not None:
                 row['beta'] = result.beta_samples[i]
-            # Add h2_low and h2_high for Approach 8 (piecewise quadratic)
+            # Add h2_low and h2_high for Approach 8/8a (piecewise quadratic / shared T_opt)
             if result.h2_low_samples is not None:
                 row['h2_low'] = result.h2_low_samples[i]
             if result.h2_high_samples is not None:
                 row['h2_high'] = result.h2_high_samples[i]
+            # Add h1_high, h1_low, T_optimal_high, T_optimal_low for Approach 6a/6b
+            if result.h1_high_samples is not None:
+                row['h1_high'] = result.h1_high_samples[i]
+            if result.h1_low_samples is not None:
+                row['h1_low'] = result.h1_low_samples[i]
+            if result.T_optimal_high_samples is not None:
+                row['T_optimal_high'] = result.T_optimal_high_samples[i]
+            if result.T_optimal_low_samples is not None:
+                row['T_optimal_low'] = result.T_optimal_low_samples[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1078,21 +1113,60 @@ def save_bootstrap_summary_txt(
                 f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
 
-            # h2_low and h2_high (for Approach 8 piecewise quadratic)
-            if result.h2_low_point is not None and 'h2_low' in stats:
+            # h2_low and h2_high (for Approach 8/8a piecewise quadratic / shared T_opt)
+            if result.h2_low_point is not None and 'h2_low' in stats and result.h1_high_point is None:
                 f.write(f"  h2_low (Curvature for T <= T_opt):\n")
                 f.write(f"    Point estimate:  {result.h2_low_point:10.6f}\n")
                 f.write(f"    Bootstrap median:{stats['h2_low']['p50']:10.6f}\n")
                 f.write(f"    90% CI:          [{stats['h2_low']['p5']:10.6f}, {stats['h2_low']['p95']:10.6f}]\n")
                 f.write(f"    IQR:             [{stats['h2_low']['p25']:10.6f}, {stats['h2_low']['p75']:10.6f}]\n")
                 f.write(f"    Std:             {stats['h2_low']['std']:10.6f}\n")
-            if result.h2_high_point is not None and 'h2_high' in stats:
+            if result.h2_high_point is not None and 'h2_high' in stats and result.h1_high_point is None:
                 f.write(f"  h2_high (Curvature for T > T_opt):\n")
                 f.write(f"    Point estimate:  {result.h2_high_point:10.6f}\n")
                 f.write(f"    Bootstrap median:{stats['h2_high']['p50']:10.6f}\n")
                 f.write(f"    90% CI:          [{stats['h2_high']['p5']:10.6f}, {stats['h2_high']['p95']:10.6f}]\n")
                 f.write(f"    IQR:             [{stats['h2_high']['p25']:10.6f}, {stats['h2_high']['p75']:10.6f}]\n")
                 f.write(f"    Std:             {stats['h2_high']['std']:10.6f}\n")
+
+            # h1_high, h2_high, h1_low, h2_low, T_optimal_high, T_optimal_low (for Approach 6a/6b)
+            if result.h1_high_point is not None and 'h1_high' in stats:
+                f.write(f"  h1_high (Linear coef for high-frequency T):\n")
+                f.write(f"    Point estimate:  {result.h1_high_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h1_high']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h1_high']['p5']:10.6f}, {stats['h1_high']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h1_high']['std']:10.6f}\n")
+                f.write(f"  h2_high (Quadratic coef for high-frequency T):\n")
+                f.write(f"    Point estimate:  {result.h2_high_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_high']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_high']['p5']:10.6f}, {stats['h2_high']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_high']['std']:10.6f}\n")
+                f.write(f"  h1_low (Linear coef for low-frequency Ttrend):\n")
+                f.write(f"    Point estimate:  {result.h1_low_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h1_low']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h1_low']['p5']:10.6f}, {stats['h1_low']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h1_low']['std']:10.6f}\n")
+                f.write(f"  h2_low (Quadratic coef for low-frequency Ttrend):\n")
+                f.write(f"    Point estimate:  {result.h2_low_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_low']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_low']['p5']:10.6f}, {stats['h2_low']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_low']['std']:10.6f}\n")
+                if result.T_optimal_high_point is not None and 'T_optimal_high' in stats:
+                    if not np.isnan(result.T_optimal_high_point):
+                        f.write(f"  T_optimal_high (Optimal T for high-frequency, C):\n")
+                        f.write(f"    Point estimate:  {result.T_optimal_high_point:10.2f}\n")
+                        f.write(f"    Bootstrap median:{stats['T_optimal_high']['p50']:10.2f}\n")
+                        f.write(f"    90% CI:          [{stats['T_optimal_high']['p5']:8.2f}, {stats['T_optimal_high']['p95']:8.2f}]\n")
+                        f.write(f"    Std:             {stats['T_optimal_high']['std']:10.4f}\n")
+                    else:
+                        f.write(f"  T_optimal_high: N/A (h_high terms are zero)\n")
+                if result.T_optimal_low_point is not None and 'T_optimal_low' in stats:
+                    if not np.isnan(result.T_optimal_low_point):
+                        f.write(f"  T_optimal_low (Optimal T for low-frequency, C):\n")
+                        f.write(f"    Point estimate:  {result.T_optimal_low_point:10.2f}\n")
+                        f.write(f"    Bootstrap median:{stats['T_optimal_low']['p50']:10.2f}\n")
+                        f.write(f"    90% CI:          [{stats['T_optimal_low']['p5']:8.2f}, {stats['T_optimal_low']['p95']:8.2f}]\n")
+                        f.write(f"    Std:             {stats['T_optimal_low']['std']:10.4f}\n")
 
             # Key variance ratios with bootstrap CIs
             if result.var_decomp_point is not None:
@@ -1270,6 +1344,59 @@ def save_bootstrap_summary_table(
             row['h2_high_p75'] = np.nan
             row['h2_high_p95'] = np.nan
             row['h2_high_std'] = np.nan
+
+        # Add h1_high, h1_low, T_optimal_high, T_optimal_low statistics for Approach 6a/6b
+        if result.h1_high_point is not None and 'h1_high' in stats:
+            row['h1_high_point'] = result.h1_high_point
+            row['h1_high_median'] = stats['h1_high']['p50']
+            row['h1_high_p5'] = stats['h1_high']['p5']
+            row['h1_high_p95'] = stats['h1_high']['p95']
+            row['h1_high_std'] = stats['h1_high']['std']
+        else:
+            row['h1_high_point'] = np.nan
+            row['h1_high_median'] = np.nan
+            row['h1_high_p5'] = np.nan
+            row['h1_high_p95'] = np.nan
+            row['h1_high_std'] = np.nan
+
+        if result.h1_low_point is not None and 'h1_low' in stats:
+            row['h1_low_point'] = result.h1_low_point
+            row['h1_low_median'] = stats['h1_low']['p50']
+            row['h1_low_p5'] = stats['h1_low']['p5']
+            row['h1_low_p95'] = stats['h1_low']['p95']
+            row['h1_low_std'] = stats['h1_low']['std']
+        else:
+            row['h1_low_point'] = np.nan
+            row['h1_low_median'] = np.nan
+            row['h1_low_p5'] = np.nan
+            row['h1_low_p95'] = np.nan
+            row['h1_low_std'] = np.nan
+
+        if result.T_optimal_high_point is not None and 'T_optimal_high' in stats:
+            row['T_optimal_high_point'] = result.T_optimal_high_point
+            row['T_optimal_high_median'] = stats['T_optimal_high']['p50']
+            row['T_optimal_high_p5'] = stats['T_optimal_high']['p5']
+            row['T_optimal_high_p95'] = stats['T_optimal_high']['p95']
+            row['T_optimal_high_std'] = stats['T_optimal_high']['std']
+        else:
+            row['T_optimal_high_point'] = np.nan
+            row['T_optimal_high_median'] = np.nan
+            row['T_optimal_high_p5'] = np.nan
+            row['T_optimal_high_p95'] = np.nan
+            row['T_optimal_high_std'] = np.nan
+
+        if result.T_optimal_low_point is not None and 'T_optimal_low' in stats:
+            row['T_optimal_low_point'] = result.T_optimal_low_point
+            row['T_optimal_low_median'] = stats['T_optimal_low']['p50']
+            row['T_optimal_low_p5'] = stats['T_optimal_low']['p5']
+            row['T_optimal_low_p95'] = stats['T_optimal_low']['p95']
+            row['T_optimal_low_std'] = stats['T_optimal_low']['std']
+        else:
+            row['T_optimal_low_point'] = np.nan
+            row['T_optimal_low_median'] = np.nan
+            row['T_optimal_low_p5'] = np.nan
+            row['T_optimal_low_p95'] = np.nan
+            row['T_optimal_low_std'] = np.nan
 
         # Variance decomposition
         if result.var_decomp_point is not None:
