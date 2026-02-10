@@ -390,6 +390,126 @@ def generate_variance_decomposition_table(
     print(f"      [Tables] Saved variance_decomposition_table.csv")
 
 
+def generate_bootstrap_comparison_table(
+    bootstrap_results: dict,
+    output_dir: Path,
+    approaches: list = None,
+) -> None:
+    """Generate bootstrap coefficient comparison table with percentiles.
+
+    Creates an Excel/CSV table showing point estimates and bootstrap percentiles
+    (5th, 25th, 50th, 75th, 95th) for key parameters across approaches.
+
+    Parameters
+    ----------
+    bootstrap_results : dict
+        Dictionary from load_bootstrap_results() containing:
+        - 'bootstrap_summary': DataFrame with point estimates and percentiles
+    output_dir : Path
+        Directory to save generated table
+    approaches : list, optional
+        List of approach keys to include. Defaults to main approaches.
+
+    Table Structure
+    ---------------
+    Approach | h1_point | h1_p5 | h1_p25 | h1_p50 | h1_p75 | h1_p95 | h2_point | ... | T_opt_point | h2_low_point | ...
+    """
+    summary_df = bootstrap_results.get('bootstrap_summary')
+
+    if summary_df is None:
+        print("      [Tables] WARNING: bootstrap_summary not loaded, skipping bootstrap comparison table")
+        return
+
+    # Default approaches to include (same order as variance decomposition table)
+    if approaches is None:
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach8']
+
+    # Filter to approaches that exist in the data
+    available_approaches = [a for a in approaches if a in summary_df['approach'].values]
+    if not available_approaches:
+        print("      [Tables] WARNING: No matching approaches found in summary data")
+        return
+
+    # Parameters to include
+    # Standard parameters for all approaches
+    standard_params = ['h1', 'h2', 'T_optimal', 'total_r_squared']
+    # Additional parameters for piecewise approach8
+    piecewise_params = ['h2_low', 'h2_high']
+
+    # Percentiles to include
+    percentiles = ['p5', 'p25', 'p50', 'p75', 'p95']
+
+    # Build the table
+    rows = []
+
+    for approach in available_approaches:
+        mask = summary_df['approach'] == approach
+        if not mask.any():
+            continue
+        row_data = summary_df[mask].iloc[0]
+
+        row = {
+            'Approach': row_data['approach_name'],
+        }
+
+        # Add standard parameters
+        for param in standard_params:
+            # Point estimate
+            point_col = f'{param}_point'
+            if point_col in row_data.index:
+                row[f'{param}_point'] = row_data[point_col]
+            else:
+                row[f'{param}_point'] = np.nan
+
+            # Percentiles (use median for p50)
+            for pct in percentiles:
+                if pct == 'p50':
+                    pct_col = f'{param}_median'
+                else:
+                    pct_col = f'{param}_{pct}'
+
+                if pct_col in row_data.index:
+                    row[f'{param}_{pct}'] = row_data[pct_col]
+                else:
+                    row[f'{param}_{pct}'] = np.nan
+
+        # Add piecewise parameters (only populated for approach8)
+        for param in piecewise_params:
+            # Point estimate
+            point_col = f'{param}_point'
+            if point_col in row_data.index and not pd.isna(row_data[point_col]):
+                row[f'{param}_point'] = row_data[point_col]
+            else:
+                row[f'{param}_point'] = np.nan
+
+            # Percentiles
+            for pct in percentiles:
+                if pct == 'p50':
+                    pct_col = f'{param}_median'
+                else:
+                    pct_col = f'{param}_{pct}'
+
+                if pct_col in row_data.index and not pd.isna(row_data.get(pct_col)):
+                    row[f'{param}_{pct}'] = row_data[pct_col]
+                else:
+                    row[f'{param}_{pct}'] = np.nan
+
+        rows.append(row)
+
+    # Create DataFrame
+    df = pd.DataFrame(rows)
+
+    # Save to Excel
+    xlsx_path = output_dir / 'bootstrap_comparison_table.xlsx'
+    df.to_excel(xlsx_path, index=False, sheet_name='Bootstrap Comparison')
+    print(f"      [Tables] Saved bootstrap_comparison_table.xlsx ({len(rows)} approaches)")
+
+    # Also save as CSV
+    csv_path = output_dir / 'bootstrap_comparison_table.csv'
+    df.to_csv(csv_path, index=False)
+    print(f"      [Tables] Saved bootstrap_comparison_table.csv")
+
+
 def generate_tables(
     analysis_results: dict,
     bootstrap_results: dict,
@@ -413,6 +533,9 @@ def generate_tables(
     """
     # Generate variance decomposition table
     generate_variance_decomposition_table(bootstrap_results, output_dir)
+
+    # Generate bootstrap comparison table
+    generate_bootstrap_comparison_table(bootstrap_results, output_dir)
 
 
 def generate_figures(
