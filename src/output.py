@@ -582,10 +582,10 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7, 8)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach7', 'approach8'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -653,10 +653,10 @@ def plot_temperature_derivative(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 7, 8)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach7', 'approach8'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -3037,10 +3037,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS approaches (6, 7, 8)
+    # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 7, 8, 8a)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach7', 'approach8'],
+        approaches=['approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -3064,7 +3064,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach7', 'approach8'],
+                    'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

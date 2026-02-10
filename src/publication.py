@@ -224,7 +224,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach8']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -465,7 +465,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (same order as variance decomposition table)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach8']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -476,8 +476,10 @@ def generate_bootstrap_comparison_table(
     # Parameters to include
     # Standard parameters for all approaches
     standard_params = ['h1', 'h2', 'T_optimal', 'total_r_squared']
-    # Additional parameters for piecewise approach8
+    # Additional parameters for piecewise approach8/8a
     piecewise_params = ['h2_low', 'h2_high']
+    # Additional parameters for approach 6a/6b (separate high/low frequency)
+    freq_split_params = ['h1_high', 'h1_low', 'h2_high', 'h2_low', 'T_optimal_high', 'T_optimal_low']
 
     # Percentiles to include
     percentiles = ['p5', 'p25', 'p50', 'p75', 'p95']
@@ -516,8 +518,29 @@ def generate_bootstrap_comparison_table(
                 else:
                     row[f'{param}_{pct}'] = np.nan
 
-        # Add piecewise parameters (only populated for approach8)
+        # Add piecewise parameters (only populated for approach8/8a)
         for param in piecewise_params:
+            # Point estimate
+            point_col = f'{param}_point'
+            if point_col in row_data.index and not pd.isna(row_data[point_col]):
+                row[f'{param}_point'] = row_data[point_col]
+            else:
+                row[f'{param}_point'] = np.nan
+
+            # Percentiles
+            for pct in percentiles:
+                if pct == 'p50':
+                    pct_col = f'{param}_median'
+                else:
+                    pct_col = f'{param}_{pct}'
+
+                if pct_col in row_data.index and not pd.isna(row_data.get(pct_col)):
+                    row[f'{param}_{pct}'] = row_data[pct_col]
+                else:
+                    row[f'{param}_{pct}'] = np.nan
+
+        # Add frequency-split parameters (only populated for approach 6a/6b)
+        for param in freq_split_params:
             # Point estimate
             point_col = f'{param}_point'
             if point_col in row_data.index and not pd.isna(row_data[point_col]):
@@ -727,7 +750,44 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
 
-    # Figure 9: Year effects k(t) - 2 panels (approach0 and approach6)
+    # Figure 9: Temperature response - 3 panels for variant approaches (6a, 6b, 8a)
+    approaches_variants = ['approach6a', 'approach6b', 'approach8a']
+    print("      [Figures] Generating temperature response figure (3 panels - variants)...")
+    plot_bootstrap_temperature_response(
+        results,
+        output_dir,
+        approaches=approaches_variants,
+        filename='fig_temperature_response_3panel_variants.pdf',
+        T_range=(0, 30),
+        data=data,
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_temperature_response_3panel_variants.pdf")
+
+    # Figure 10: Temperature derivative - 3 panels for variant approaches (6a, 6b, 8a)
+    print("      [Figures] Generating temperature derivative figure (3 panels - variants)...")
+    plot_bootstrap_temperature_derivative(
+        results,
+        output_dir,
+        approaches=approaches_variants,
+        filename='fig_temperature_derivative_3panel_variants.pdf',
+        T_range=(0, 30),
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_temperature_derivative_3panel_variants.pdf")
+
+    # Figure 11: T_optimal histograms - 3 panels for variant approaches (6a, 6b, 8a)
+    print("      [Figures] Generating T_optimal histogram figure (3 panels - variants)...")
+    plot_T_optimal_histograms(
+        results,
+        output_dir,
+        approaches=approaches_variants,
+        filename='fig_T_optimal_histogram_3panel_variants.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_T_optimal_histogram_3panel_variants.pdf")
+
+    # Figure 12: Year effects k(t) - 2 panels (approach0 and approach6)
     if data is not None:
         print("      [Figures] Generating year effects figure (2 panels)...")
         plot_year_effects_bootstrap(
