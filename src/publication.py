@@ -161,7 +161,7 @@ def generate_variance_decomposition_table(
     """Generate variance decomposition table with bootstrap confidence intervals.
 
     Creates an Excel table with variance decomposition metrics as rows and
-    approaches as columns, showing point estimates with 90% confidence intervals.
+    approaches as columns, showing point estimates and percentiles in separate columns.
 
     Parameters
     ----------
@@ -176,13 +176,7 @@ def generate_variance_decomposition_table(
 
     Table Structure
     ---------------
-    Row Labels              | Approach 0        | Approach 1        | ...
-    ------------------------|-------------------|-------------------|----
-    Total R²                | 0.196 [0.18,0.21] | 0.192 [0.17,0.20] | ...
-    Var(h(T)-h(Ttr))/Var    | 0.002 [0.00,0.01] | —                 | ...
-    Var(h(Ttr))/Var(dy)     | 0.175 [0.15,0.20] | —                 | ...
-    ...                     | ...               | ...               | ...
-    Sum                     | 1.000             | 1.000             | ...
+    Metric | Approach0_point | Approach0_p5 | Approach0_p25 | Approach0_p50 | Approach0_p75 | Approach0_p95 | Approach1_point | ...
     """
     var_attrib_df = bootstrap_results.get('bootstrap_var_attrib')
     summary_df = bootstrap_results.get('bootstrap_summary')
@@ -226,20 +220,23 @@ def generate_variance_decomposition_table(
         ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
     ]
 
-    def format_value_with_ci(point: float, samples: np.ndarray, is_covariance: bool = False) -> str:
-        """Format point estimate with 90% CI."""
+    # Percentiles to compute
+    percentiles = [5, 25, 50, 75, 95]
+
+    def compute_stats(samples: np.ndarray) -> dict:
+        """Compute point estimate (median) and percentiles from samples."""
         valid_samples = samples[~np.isnan(samples)]
         if len(valid_samples) == 0:
-            return '—'
+            return {'point': np.nan, 'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
 
-        p5 = np.percentile(valid_samples, 5)
-        p95 = np.percentile(valid_samples, 95)
-
-        # Format with appropriate precision
-        if abs(point) < 0.001:
-            return f'{point:.4f} [{p5:.4f},{p95:.4f}]'
-        else:
-            return f'{point:.3f} [{p5:.3f},{p95:.3f}]'
+        return {
+            'point': np.median(valid_samples),
+            'p5': np.percentile(valid_samples, 5),
+            'p25': np.percentile(valid_samples, 25),
+            'p50': np.percentile(valid_samples, 50),
+            'p75': np.percentile(valid_samples, 75),
+            'p95': np.percentile(valid_samples, 95),
+        }
 
     # Get approach display names
     approach_names = {}
@@ -257,12 +254,7 @@ def generate_variance_decomposition_table(
     total_r2_row = {'Metric': 'Total R²'}
     coefficients_df = bootstrap_results.get('bootstrap_coefficients')
     for approach in available_approaches:
-        # Get point estimate from summary
-        summary_mask = summary_df['approach'] == approach
-        if summary_mask.any():
-            point = summary_df[summary_mask].iloc[0]['total_r_squared_point']
-        else:
-            point = np.nan
+        name = approach_names[approach]
 
         # Get samples from coefficients
         if coefficients_df is not None:
@@ -271,41 +263,48 @@ def generate_variance_decomposition_table(
         else:
             samples = np.array([])
 
-        total_r2_row[approach_names[approach]] = format_value_with_ci(point, samples)
+        stats = compute_stats(samples)
+        total_r2_row[f'{name}_point'] = stats['point']
+        total_r2_row[f'{name}_p5'] = stats['p5']
+        total_r2_row[f'{name}_p25'] = stats['p25']
+        total_r2_row[f'{name}_p50'] = stats['p50']
+        total_r2_row[f'{name}_p75'] = stats['p75']
+        total_r2_row[f'{name}_p95'] = stats['p95']
     rows.append(total_r2_row)
 
     # Add variance metrics
     for key, label in variance_metrics:
         row = {'Metric': label}
         for approach in available_approaches:
+            name = approach_names[approach]
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            if key not in approach_data.columns:
-                row[approach_names[approach]] = '—'
+            if key not in approach_data.columns or 'var_dy' not in approach_data.columns:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
                 continue
 
             # Get var_dy for normalization
-            if 'var_dy' in approach_data.columns:
-                var_dy_samples = approach_data['var_dy'].values
-            else:
-                row[approach_names[approach]] = '—'
-                continue
+            var_dy_samples = approach_data['var_dy'].values
 
             # Get the metric samples and normalize
             metric_samples = approach_data[key].values
-            # Normalize by var_dy
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
 
-            # Point estimate is mean of samples (or could use median)
-            valid = normalized_samples[~np.isnan(normalized_samples)]
-            if len(valid) > 0:
-                point = np.median(valid)
-                row[approach_names[approach]] = format_value_with_ci(point, normalized_samples)
-            else:
-                row[approach_names[approach]] = '—'
+            stats = compute_stats(normalized_samples)
+            row[f'{name}_point'] = stats['point']
+            row[f'{name}_p5'] = stats['p5']
+            row[f'{name}_p25'] = stats['p25']
+            row[f'{name}_p50'] = stats['p50']
+            row[f'{name}_p75'] = stats['p75']
+            row[f'{name}_p95'] = stats['p95']
 
         rows.append(row)
 
@@ -313,19 +312,21 @@ def generate_variance_decomposition_table(
     for key, label in covariance_metrics:
         row = {'Metric': label}
         for approach in available_approaches:
+            name = approach_names[approach]
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            if key not in approach_data.columns:
-                row[approach_names[approach]] = '—'
+            if key not in approach_data.columns or 'var_dy' not in approach_data.columns:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
                 continue
 
             # Get var_dy for normalization
-            if 'var_dy' in approach_data.columns:
-                var_dy_samples = approach_data['var_dy'].values
-            else:
-                row[approach_names[approach]] = '—'
-                continue
+            var_dy_samples = approach_data['var_dy'].values
 
             # Get the metric samples, multiply by 2, and normalize
             metric_samples = approach_data[key].values * 2  # 2*Cov term
@@ -333,23 +334,30 @@ def generate_variance_decomposition_table(
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
 
-            valid = normalized_samples[~np.isnan(normalized_samples)]
-            if len(valid) > 0:
-                point = np.median(valid)
-                row[approach_names[approach]] = format_value_with_ci(point, normalized_samples, is_covariance=True)
-            else:
-                row[approach_names[approach]] = '—'
+            stats = compute_stats(normalized_samples)
+            row[f'{name}_point'] = stats['point']
+            row[f'{name}_p5'] = stats['p5']
+            row[f'{name}_p25'] = stats['p25']
+            row[f'{name}_p50'] = stats['p50']
+            row[f'{name}_p75'] = stats['p75']
+            row[f'{name}_p95'] = stats['p95']
 
         rows.append(row)
 
     # Add Sum row (should equal 1.0)
     sum_row = {'Metric': 'Sum'}
     for approach in available_approaches:
+        name = approach_names[approach]
         mask = var_attrib_df['approach'] == approach
         approach_data = var_attrib_df[mask]
 
         if 'var_dy' not in approach_data.columns:
-            sum_row[approach_names[approach]] = '—'
+            sum_row[f'{name}_point'] = np.nan
+            sum_row[f'{name}_p5'] = np.nan
+            sum_row[f'{name}_p25'] = np.nan
+            sum_row[f'{name}_p50'] = np.nan
+            sum_row[f'{name}_p75'] = np.nan
+            sum_row[f'{name}_p95'] = np.nan
             continue
 
         var_dy_samples = approach_data['var_dy'].values
@@ -367,12 +375,13 @@ def generate_variance_decomposition_table(
             sum_normalized = total_sum / var_dy_samples
         sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
 
-        valid = sum_normalized[~np.isnan(sum_normalized)]
-        if len(valid) > 0:
-            point = np.median(valid)
-            sum_row[approach_names[approach]] = f'{point:.3f}'
-        else:
-            sum_row[approach_names[approach]] = '—'
+        stats = compute_stats(sum_normalized)
+        sum_row[f'{name}_point'] = stats['point']
+        sum_row[f'{name}_p5'] = stats['p5']
+        sum_row[f'{name}_p25'] = stats['p25']
+        sum_row[f'{name}_p50'] = stats['p50']
+        sum_row[f'{name}_p75'] = stats['p75']
+        sum_row[f'{name}_p95'] = stats['p95']
 
     rows.append(sum_row)
 
