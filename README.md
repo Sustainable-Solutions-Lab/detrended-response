@@ -153,6 +153,44 @@ Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
+### Approach 6a: Separate High/Low Frequency Response
+
+Extends Approach 6 by allowing different temperature response functions for high-frequency (year-to-year deviations) vs low-frequency (trend) temperature variations.
+
+```
+Δy*(t) = h_high(T) - h_low(T_trend)
+```
+
+where:
+- `h_high(T) = h₁_high·T + h₂_high·T²` — response to actual temperature
+- `h_low(T_trend) = h₁_low·T_trend + h₂_low·T_trend²` — response to trend temperature
+- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+
+**Parameters:**
+- `h₁_high, h₂_high`: High-frequency temperature response coefficients
+- `h₁_low, h₂_low`: Low-frequency (trend) temperature response coefficients
+- `T_optimal_high, T_optimal_low`: Optimal temperatures for each frequency band
+
+**Interpretation:** If climate adaptation occurs over time, the response to slow (trend) temperature changes may differ from the response to fast (year-to-year) temperature variations. Approach 6a tests whether economies respond differently to these two timescales.
+
+**Degrees of freedom:** 4 for h(T) (h₁_high, h₂_high, h₁_low, h₂_low)
+
+### Approach 6b: Low-Frequency Response Only
+
+A restricted version of Approach 6a that sets the high-frequency response to zero, attributing all temperature effects to the trend component.
+
+```
+Δy*(t) = 0 - h_low(T_trend)
+```
+
+where:
+- `h_high(T) = 0` (no response to high-frequency temperature deviations)
+- `h_low(T_trend) = h₁_low·T_trend + h₂_low·T_trend²`
+
+**Interpretation:** Tests the hypothesis that only long-term climate trends affect economic growth, while year-to-year temperature fluctuations have no systematic effect.
+
+**Degrees of freedom:** 2 for h(T) (h₁_low, h₂_low)
+
 ### Approach 7: GDP-Dependent Response with LOESS
 
 Extends Approach 6 by introducing GDP-dependent scaling of the climate response. Wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and infrastructure.
@@ -204,6 +242,28 @@ h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
 - If |h₂_high| > |h₂_low|, warming hurts hot countries more than cooling hurts cold countries
 
 **Degrees of freedom:** 3 (T_opt, h₂_low, h₂_high)
+
+### Approach 8a: Piecewise High/Low Frequency Response
+
+Combines the frequency separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for high-frequency and low-frequency temperature variations, but with a shared optimal temperature.
+
+```
+Δy*(t) = h₂_high·(T - T_opt)² - h₂_low·(T_trend - T_opt)²
+```
+
+where:
+- `h₂_high`: Curvature for high-frequency (actual) temperature deviations
+- `h₂_low`: Curvature for low-frequency (trend) temperature deviations
+- `T_opt`: Shared optimal temperature for both frequency bands
+
+**Key features:**
+- Both functions share the same optimal temperature
+- Linear terms (h₁) are implicitly zero (piecewise quadratic centered at T_opt)
+- Allows different sensitivities to fast vs slow temperature changes
+
+**Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between short-term fluctuations and long-term trends, while maintaining a common optimal temperature.
+
+**Degrees of freedom:** 3 (T_opt, h₂_high, h₂_low)
 
 ### Null Models (No Climate Response)
 
@@ -377,6 +437,51 @@ python scripts/run_bootstrap.py
 python scripts/run_bootstrap.py --n-bootstrap 1000 --output-dir results/bootstrap
 ```
 
+### Country Influence Analysis
+
+The `run_influence_analysis.py` script identifies which countries systematically skew bootstrap coefficient estimates upward or downward.
+
+```bash
+python scripts/run_influence_analysis.py
+```
+
+**What it does:**
+1. For each bootstrap iteration, counts how many times each country appears in the resampled dataset
+2. Computes percentile thresholds (5th, 25th, 75th, 95th) for each coefficient
+3. Creates binary indicators for whether each iteration exceeds the threshold
+4. Fits a Linear Probability Model: regresses the binary indicator on country counts
+5. Ranks countries by regression coefficients to identify influential countries
+
+**Options:**
+```
+--bootstrap-dir DIR    Bootstrap output directory
+                       (default: most recent data/output/reference/bootstrap_*)
+--output-dir DIR       Output directory (default: timestamped)
+--approaches LIST      Approaches to analyze (default: all)
+--coefficients LIST    Coefficients to analyze (default: approach-specific)
+--percentiles LIST     Percentile thresholds (default: 5 25 75 95)
+--regression-type      "linear" (default)
+--n-top N              Number of top/bottom countries to report (default: 10)
+```
+
+**Default coefficients by approach:**
+| Approach | Coefficients |
+|----------|--------------|
+| Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_optimal |
+| Approach 7 | h₁, h₂, T_optimal, β |
+| Approach 6a/6b | h₁_high, h₂_high, h₁_low, h₂_low, T_optimal_high, T_optimal_low |
+| Approach 8/8a | h₂_low, h₂_high, T_optimal |
+
+**Example:**
+```bash
+python scripts/run_influence_analysis.py --approaches "approach5 approach7" --n-top 15
+```
+
+**Interpretation:**
+- Countries with **positive** influence coefficients tend to **increase** the parameter when included more frequently
+- Countries with **negative** influence coefficients tend to **decrease** the parameter when included more frequently
+- Large absolute coefficients indicate high sensitivity to that country's inclusion
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
@@ -409,6 +514,14 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 | `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
 | `bootstrap_T_optimal_comparison.pdf` | Optimal temperature comparison with error bars |
 
+### Country Influence Outputs
+
+| File | Description |
+|------|-------------|
+| `country_influence_coefficients.csv` | Full regression coefficients for all approach/coefficient/percentile combinations |
+| `country_influence_rankings.csv` | Countries ranked by influence (all 157 countries per combination) |
+| `country_influence_summary.txt` | Human-readable report with top 10 influential countries |
+
 ## Project Structure
 
 ```
@@ -425,10 +538,12 @@ detrended-response/
 │   ├── detrending.py            # Country-level trend fitting (polynomial + LOESS)
 │   ├── fitting.py               # OLS regression for each approach
 │   ├── bootstrap.py             # Cluster bootstrap resampling
+│   ├── influence.py             # Country influence analysis
 │   └── output.py                # Results tables and plots
 ├── scripts/
 │   ├── run_analysis.py              # Main entry point
 │   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
+│   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
