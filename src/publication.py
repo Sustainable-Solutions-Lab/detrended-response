@@ -227,13 +227,9 @@ def generate_variance_decomposition_table(
     ]
 
     def format_value_with_ci(point: float, samples: np.ndarray, is_covariance: bool = False) -> str:
-        """Format point estimate with 90% CI, or em-dash for zero-by-construction values."""
+        """Format point estimate with 90% CI."""
         valid_samples = samples[~np.isnan(samples)]
         if len(valid_samples) == 0:
-            return '—'
-
-        # Check if all samples are identically zero (zero by construction)
-        if np.allclose(valid_samples, 0, atol=1e-15):
             return '—'
 
         p5 = np.percentile(valid_samples, 5)
