@@ -32,8 +32,6 @@ APPROACH_COEFFICIENTS = {
     'approach6': STANDARD_COEFFICIENTS,
     'nocr0': STANDARD_COEFFICIENTS,
     'nocr5': STANDARD_COEFFICIENTS,
-    # Approach 7: includes beta
-    'approach7': ['h1', 'h2', 'T_optimal', 'beta'],
     # Approach 6a/6b: high/low variants
     'approach6a': ['h1_high', 'h2_high', 'h1_low', 'h2_low', 'T_optimal_high', 'T_optimal_low'],
     'approach6b': ['h1_high', 'h2_high', 'h1_low', 'h2_low', 'T_optimal_high', 'T_optimal_low'],

@@ -77,7 +77,7 @@ def reconstruct_bootstrap_results(
         # Get approach name
         approach_name = summary_row['approach_name']
 
-        # Handle optional fields (beta for approach7, h2_low/h2_high for approach8)
+        # Handle optional fields (beta for GDP-dependent approaches, h2_low/h2_high for approach8)
         beta_point = None
         beta_samples = None
         h2_low_point = None

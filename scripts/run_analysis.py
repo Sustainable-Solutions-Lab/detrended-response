@@ -41,7 +41,6 @@ from src.fitting import (
     fit_approach6_precomputed_k_loess,
     fit_approach6a_separate_high_low_loess,
     fit_approach6b_low_only_loess,
-    fit_approach7_gdp_response_loess,
     fit_approach8_gaussian_loess,
     fit_approach8a_shared_Topt_loess,
     fit_nocr0_joint,
@@ -178,11 +177,10 @@ def main():
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 7, 8, 8a: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 8, 8a: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach6a'] = fit_approach6a_separate_high_low_loess(data, trends_loess, year_means)
     results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
-    results['approach7'] = fit_approach7_gdp_response_loess(data, trends_loess, year_means, Y_ref)
     results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
     results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
     print("      Done.")

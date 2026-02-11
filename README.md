@@ -191,27 +191,6 @@ where:
 
 **Degrees of freedom:** 2 for h(T) (h₁_low, h₂_low)
 
-### Approach 7: GDP-Dependent Response with LOESS
-
-Extends Approach 6 by introducing GDP-dependent scaling of the climate response. Wealthier countries may have greater capacity to adapt to temperature shocks through air conditioning, irrigation, healthcare, and infrastructure.
-
-```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = (Yᵢ/Y_ref)^(-β) · [h(T) - h(T_trend)]
-```
-
-where:
-- `Y` is per capita GDP
-- `Y_ref` is mean pcGDP in the most recent year (held fixed during bootstrap)
-- `β` is the GDP scaling exponent
-- `h(T) = h₁·T + h₂·T²` is the quadratic response function
-
-**Interpretation of β:**
-- `β > 0`: Poorer countries more affected by temperature
-- `β = 0`: No GDP-dependence (reduces to Approach 6)
-- Larger β = stronger income-based adaptation
-
-**Degrees of freedom:** 3 for h(T) (h₁, h₂, β)
-
 ### Approach 8: Piecewise Quadratic Response with LOESS
 
 Uses a piecewise quadratic temperature response that allows different curvatures for temperatures above vs below the optimum. This captures the asymmetry where warming may have different effects on hot vs cold countries.
@@ -468,13 +447,12 @@ python scripts/run_influence_analysis.py
 | Approach | Coefficients |
 |----------|--------------|
 | Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_optimal |
-| Approach 7 | h₁, h₂, T_optimal, β |
 | Approach 6a/6b | h₁_high, h₂_high, h₁_low, h₂_low, T_optimal_high, T_optimal_low |
 | Approach 8/8a | h₂_low, h₂_high, T_optimal |
 
 **Example:**
 ```bash
-python scripts/run_influence_analysis.py --approaches "approach5 approach7" --n-top 15
+python scripts/run_influence_analysis.py --approaches "approach5 approach6" --n-top 15
 ```
 
 **Interpretation:**

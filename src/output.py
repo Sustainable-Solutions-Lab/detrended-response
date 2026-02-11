@@ -48,7 +48,6 @@ APPROACH_COLORS = {
     'approach5c': 'red',
     'approach5d': 'purple',
     'approach6': 'orange',
-    'approach7': 'brown',
     'approach8': 'magenta',
     'nocr0': 'gray',
     'nocr5': 'gray',
@@ -72,7 +71,6 @@ APPROACH_LINESTYLES = {
     'approach5c': '-.',
     'approach5d': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
-    'approach7': (0, (5, 1)),   # densely dashed
     'approach8': (0, (5, 1)),   # densely dashed
     'nocr0': '--',
     'nocr5': ':',
@@ -247,11 +245,11 @@ def save_summary_table(
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
-        # Add beta for Approach 7
+        # Add beta for GDP-dependent approaches (5d)
         if hasattr(result, 'beta') and result.beta is not None:
             row['beta'] = result.beta
             row['beta_SE'] = result.beta_se
-        # Add Y_ref for Approach 7
+        # Add Y_ref for GDP-dependent approaches (5d)
         if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
         # Add h1_high, h2_high, h1_low, h2_low for Approach 6a/6b (separate high/low freq)
@@ -371,7 +369,7 @@ def save_summary_table(
             else:
                 f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
                 f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
-                # Add beta for Approach 7
+                # Add beta for GDP-dependent approaches (5d)
                 if hasattr(result, 'beta') and result.beta is not None:
                     f.write(f"  beta = {result.beta:10.4f}  (SE: {result.beta_se:.4f})\n")
                     if hasattr(result, 'Y_ref'):
@@ -585,7 +583,7 @@ def plot_temperature_response(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -656,7 +654,7 @@ def plot_temperature_derivative(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -763,7 +761,7 @@ def plot_year_effects(
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # Plot year means k[t] used by approaches 5, 6, 7, 8 as a heavy line
-    for name in ('approach5', 'approach6', 'approach7', 'approach8'):
+    for name in ('approach5', 'approach6', 'approach8'):
         if name in results:
             k_year_means = np.array([results[name].k[yr] for yr in unique_years])
             ax.plot(unique_years, k_year_means, color='black', linestyle='-', linewidth=3,
@@ -772,7 +770,7 @@ def plot_year_effects(
 
     for name, result in results.items():
         # Skip approaches that use the same k values as approach5 (already plotted above)
-        if name in ('approach5', 'approach5a', 'approach5b', 'approach5c', 'approach5d', 'approach6', 'approach7', 'approach8'):
+        if name in ('approach5', 'approach5a', 'approach5b', 'approach5c', 'approach5d', 'approach6', 'approach8'):
             continue
 
         # k is stored with actual year as key
@@ -867,11 +865,11 @@ def plot_gdp_scaling_factor(
     Y_range: tuple = None,
     input_file: str = None,
 ) -> None:
-    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for Approach 7.
+    """Plot the GDP scaling factor (Y/Y_ref)^(-beta) for GDP-dependent approaches.
 
     This shows how the temperature response is scaled by per capita GDP level.
     Countries with lower GDP have larger scaling factors (more affected).
-    Creates a two-panel figure when both approaches are present.
+    Currently disabled (no GDP-dependent approaches in panels list).
 
     Args:
         results: Dictionary of FitResult objects
@@ -880,10 +878,9 @@ def plot_gdp_scaling_factor(
         Y_range: GDP range for x-axis (default: from data min to max)
         input_file: Path to input data file (for annotation)
     """
-    # Collect panels to plot
+    # Collect panels to plot (no GDP-dependent approaches currently)
     panels = []
     for key, title, color in [
-        ('approach7', 'GDP-Response LOESS (Approach 7)', 'brown'),
     ]:
         if key in results:
             r = results[key]
@@ -987,9 +984,6 @@ def save_all_outputs(
     plot_year_effects(results, data, output_dir, input_file=input_file)
     plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
 
-    # Plot GDP scaling factor for Approach 7
-    if 'approach7' in results:
-        plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
     print("All outputs saved.")
     return output_dir
@@ -1587,7 +1581,7 @@ def plot_year_effects_bootstrap(
     if approaches_to_plot is None:
         approaches_to_plot = [
             'approach0', 'approach1', 'approach2', 'approach3', 'approach4',
-            'approach5', 'approach6', 'approach7', 'approach8'
+            'approach5', 'approach6', 'approach8'
         ]
 
     # Filter to approaches that exist and have k_samples
@@ -1724,17 +1718,75 @@ def compute_h_response_uncertainty_bands(
 
     For quadratic models: h(T) = h1*T + h2*T²
     For piecewise (approach8): h(T) - h(T_opt) = h2_low*(T-T_opt)² or h2_high*(T-T_opt)²
+    For approach6a/6b/8a variants: uses appropriate high/low frequency coefficients
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for piecewise)
+        approach_key: Approach identifier (e.g., 'approach8' for piecewise,
+                      'approach6a_high', 'approach6a_low', 'approach6b',
+                      'approach8a_high', 'approach8a_low')
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key == 'approach8')
+
+    # Handle approach 6a high-frequency response
+    if approach_key == 'approach6a_high':
+        h1_samples = getattr(result, 'h1_high_samples', None)
+        h2_samples = getattr(result, 'h2_high_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 6a low-frequency response
+    if approach_key == 'approach6a_low':
+        h1_samples = getattr(result, 'h1_low_samples', None)
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 6b (low-frequency only)
+    if approach_key == 'approach6b':
+        h1_samples = getattr(result, 'h1_low_samples', None)
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 8a high-frequency response (piecewise with shared T_opt)
+    if approach_key == 'approach8a_high':
+        h2_samples = getattr(result, 'h2_high_samples', None)
+        T_opt_samples = getattr(result, 'T_optimal_samples', None)
+        if h2_samples is None or T_opt_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h2_samples) & ~np.isnan(T_opt_samples)
+        h2_valid = h2_samples[valid_mask]
+        T_opt_valid = T_opt_samples[valid_mask]
+        return _compute_symmetric_piecewise_bands(h2_valid, T_opt_valid, T_range, percentiles)
+
+    # Handle approach 8a low-frequency response (piecewise with shared T_opt)
+    if approach_key == 'approach8a_low':
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        T_opt_samples = getattr(result, 'T_optimal_samples', None)
+        if h2_samples is None or T_opt_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h2_samples) & ~np.isnan(T_opt_samples)
+        h2_valid = h2_samples[valid_mask]
+        T_opt_valid = T_opt_samples[valid_mask]
+        return _compute_symmetric_piecewise_bands(h2_valid, T_opt_valid, T_range, percentiles)
 
     if is_piecewise:
         # Piecewise quadratic model: need h2_low, h2_high, T_optimal samples
@@ -1773,27 +1825,60 @@ def compute_h_response_uncertainty_bands(
         if len(h1_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        n_samples = len(h1_valid)
-        n_T = len(T_range)
-        h_relative_samples = np.zeros((n_samples, n_T))
-
-        for i in range(n_samples):
-            h1 = h1_valid[i]
-            h2 = h2_valid[i]
-            h_T = h1 * T_range + h2 * T_range ** 2
-            # Evaluate h at T_optimal
-            if h2 != 0:
-                T_opt = -h1 / (2 * h2)
-                h_T_opt = -h1 ** 2 / (4 * h2)
-            else:
-                h_T_opt = 0
-            h_relative_samples[i, :] = h_T - h_T_opt
+        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
 
     # Compute percentiles at each temperature
     h_bands = []
     for p in percentiles:
         h_bands.append(np.percentile(h_relative_samples, p, axis=0))
 
+    return tuple(h_bands)
+
+
+def _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles):
+    """Helper to compute uncertainty bands for quadratic h(T) = h1*T + h2*T²."""
+    if len(h1_valid) == 0:
+        return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+    n_samples = len(h1_valid)
+    n_T = len(T_range)
+    h_relative_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h1 = h1_valid[i]
+        h2 = h2_valid[i]
+        h_T = h1 * T_range + h2 * T_range ** 2
+        # Evaluate h at T_optimal
+        if h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+        else:
+            h_T_opt = 0
+        h_relative_samples[i, :] = h_T - h_T_opt
+
+    h_bands = []
+    for p in percentiles:
+        h_bands.append(np.percentile(h_relative_samples, p, axis=0))
+    return tuple(h_bands)
+
+
+def _compute_symmetric_piecewise_bands(h2_valid, T_opt_valid, T_range, percentiles):
+    """Helper to compute uncertainty bands for symmetric piecewise h(T) = h2*(T-T_opt)²."""
+    if len(h2_valid) == 0:
+        return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+    n_samples = len(h2_valid)
+    n_T = len(T_range)
+    h_relative_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h2 = h2_valid[i]
+        T_opt = T_opt_valid[i]
+        # h(T) - h(T_opt) = h2*(T - T_opt)² since h(T_opt) = 0
+        h_relative_samples[i, :] = h2 * (T_range - T_opt) ** 2
+
+    h_bands = []
+    for p in percentiles:
+        h_bands.append(np.percentile(h_relative_samples, p, axis=0))
     return tuple(h_bands)
 
 
@@ -1862,6 +1947,92 @@ def plot_bootstrap_parameter_distributions(
     plt.close()
 
 
+def _get_distribution_params_for_approach(name: str, result, stats: dict) -> list:
+    """Get the parameter tuples for distribution plotting based on approach type.
+
+    Returns list of tuples: (param_name, samples, point_est, param_stats, xlabel)
+    """
+    # Approach 6a: separate high/low frequency - show both
+    if name == 'approach6a':
+        params = []
+        # High-frequency params
+        h1_high_samples = getattr(result, 'h1_high_samples', None)
+        h2_high_samples = getattr(result, 'h2_high_samples', None)
+        T_opt_high_samples = getattr(result, 'T_optimal_high_samples', None)
+        if h1_high_samples is not None and 'h1_high' in stats:
+            params.append(('h1_high', h1_high_samples, getattr(result, 'h1_high_point', np.nan),
+                          stats['h1_high'], 'h₁_high'))
+        if h2_high_samples is not None and 'h2_high' in stats:
+            params.append(('h2_high', h2_high_samples, getattr(result, 'h2_high_point', np.nan),
+                          stats['h2_high'], 'h₂_high'))
+        if T_opt_high_samples is not None and 'T_optimal_high' in stats:
+            params.append(('T_optimal_high', T_opt_high_samples, getattr(result, 'T_optimal_high_point', np.nan),
+                          stats['T_optimal_high'], 'T_opt_high (°C)'))
+        # Low-frequency params
+        h1_low_samples = getattr(result, 'h1_low_samples', None)
+        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        T_opt_low_samples = getattr(result, 'T_optimal_low_samples', None)
+        if h1_low_samples is not None and 'h1_low' in stats:
+            params.append(('h1_low', h1_low_samples, getattr(result, 'h1_low_point', np.nan),
+                          stats['h1_low'], 'h₁_low'))
+        if h2_low_samples is not None and 'h2_low' in stats:
+            params.append(('h2_low', h2_low_samples, getattr(result, 'h2_low_point', np.nan),
+                          stats['h2_low'], 'h₂_low'))
+        if T_opt_low_samples is not None and 'T_optimal_low' in stats:
+            params.append(('T_optimal_low', T_opt_low_samples, getattr(result, 'T_optimal_low_point', np.nan),
+                          stats['T_optimal_low'], 'T_opt_low (°C)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Approach 6b: low-frequency only
+    if name == 'approach6b':
+        params = []
+        h1_low_samples = getattr(result, 'h1_low_samples', None)
+        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        T_opt_low_samples = getattr(result, 'T_optimal_low_samples', None)
+        if h1_low_samples is not None and 'h1_low' in stats:
+            params.append(('h1_low', h1_low_samples, getattr(result, 'h1_low_point', np.nan),
+                          stats['h1_low'], 'h₁_low'))
+        if h2_low_samples is not None and 'h2_low' in stats:
+            params.append(('h2_low', h2_low_samples, getattr(result, 'h2_low_point', np.nan),
+                          stats['h2_low'], 'h₂_low'))
+        if T_opt_low_samples is not None and 'T_optimal_low' in stats:
+            params.append(('T_optimal_low', T_opt_low_samples, getattr(result, 'T_optimal_low_point', np.nan),
+                          stats['T_optimal_low'], 'T_opt_low (°C)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Approach 8/8a: piecewise quadratic (h2_low, h2_high, T_optimal)
+    if name in ('approach8', 'approach8a'):
+        params = []
+        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        h2_high_samples = getattr(result, 'h2_high_samples', None)
+        if h2_low_samples is not None and 'h2_low' in stats:
+            params.append(('h2_low', h2_low_samples, getattr(result, 'h2_low_point', np.nan),
+                          stats['h2_low'], 'h₂_low'))
+        if h2_high_samples is not None and 'h2_high' in stats:
+            params.append(('h2_high', h2_high_samples, getattr(result, 'h2_high_point', np.nan),
+                          stats['h2_high'], 'h₂_high'))
+        if 'T_optimal' in stats:
+            params.append(('T_optimal', result.T_optimal_samples, result.T_optimal_point,
+                          stats['T_optimal'], 'T_optimal (°C)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Standard approaches: h1, h2, T_optimal
+    return _get_standard_params(result, stats)
+
+
+def _get_standard_params(result, stats: dict) -> list:
+    """Get standard parameter tuples (h1, h2, T_optimal)."""
+    params = []
+    if 'h1' in stats:
+        params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁'))
+    if 'h2' in stats:
+        params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂'))
+    if 'T_optimal' in stats:
+        params.append(('T_optimal', result.T_optimal_samples, result.T_optimal_point,
+                      stats['T_optimal'], 'T_optimal (°C)'))
+    return params
+
+
 def plot_all_bootstrap_distributions(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
@@ -1869,10 +2040,14 @@ def plot_all_bootstrap_distributions(
     filename: str = "bootstrap_distributions.pdf",
     input_file: str = None
 ) -> None:
-    """Plot h1, h2, T_optimal distributions for all approaches in a single PDF.
+    """Plot parameter distributions for all approaches in a single PDF.
 
-    Creates a multi-panel figure with one row per approach and 3 columns
-    (h1, h2, T_optimal).
+    Creates a multi-page PDF with each approach on its own page.
+    Handles different parameter structures for different approaches:
+    - Standard (0-5, 5a-5d, 6): h1, h2, T_optimal
+    - Approach 6a: h1_high, h2_high, T_opt_high, h1_low, h2_low, T_opt_low
+    - Approach 6b: h1_low, h2_low, T_opt_low
+    - Approach 8/8a: h2_low, h2_high, T_optimal
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -1884,100 +2059,223 @@ def plot_all_bootstrap_distributions(
     from matplotlib.backends.backend_pdf import PdfPages
 
     approach_names = list(results.keys())
-    n_approaches = len(approach_names)
-
-    n_cols = 3
 
     with PdfPages(output_dir / filename) as pdf:
-        # Create a figure with all approaches - one row per approach, 3 columns
-        fig, axes = plt.subplots(n_approaches, n_cols, figsize=(4.5 * n_cols, 4 * n_approaches))
-
-        if n_approaches == 1:
-            axes = axes.reshape(1, -1)
-
-        # First pass: determine x-axis ranges for each column
-        col_ranges = {i: [] for i in range(n_cols)}  # h1, h2, T_optimal
         for name in approach_names:
-            result = results[name]
-            sample_lists = [result.h1_samples, result.h2_samples, result.T_optimal_samples]
-            for col_idx, samples in enumerate(sample_lists):
-                valid_samples = samples[~np.isnan(samples)]
-                if len(valid_samples) > 0:
-                    col_ranges[col_idx].extend([valid_samples.min(), valid_samples.max()])
-
-        # Compute min/max for each column with small padding
-        col_xlims = {}
-        for col_idx, values in col_ranges.items():
-            if values:
-                xmin, xmax = min(values), max(values)
-                padding = (xmax - xmin) * 0.05
-                col_xlims[col_idx] = (xmin - padding, xmax + padding)
-            else:
-                col_xlims[col_idx] = None
-
-        for row_idx, name in enumerate(approach_names):
             result = results[name]
             stats = all_stats[name]
 
-            params = [
-                ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁'),
-                ('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂'),
-                ('T_optimal', result.T_optimal_samples, result.T_optimal_point, stats['T_optimal'], 'T_optimal (°C)'),
-            ]
+            # Get parameters for this approach type
+            params = _get_distribution_params_for_approach(name, result, stats)
 
-            for col_idx, (param_name, samples, point_est, param_stats, xlabel) in enumerate(params):
+            if not params:
+                continue
+
+            n_params = len(params)
+            # Arrange in rows of 3
+            n_cols = min(3, n_params)
+            n_rows = (n_params + n_cols - 1) // n_cols
+
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(4.5 * n_cols, 4 * n_rows))
+            if n_rows == 1 and n_cols == 1:
+                axes = np.array([[axes]])
+            elif n_rows == 1:
+                axes = axes.reshape(1, -1)
+            elif n_cols == 1:
+                axes = axes.reshape(-1, 1)
+
+            for idx, (param_name, samples, point_est, param_stats, xlabel) in enumerate(params):
+                row_idx = idx // n_cols
+                col_idx = idx % n_cols
                 ax = axes[row_idx, col_idx]
+
+                if samples is None:
+                    ax.text(0.5, 0.5, 'No samples', ha='center', va='center', transform=ax.transAxes)
+                    ax.set_xlabel(xlabel, fontsize=10)
+                    continue
 
                 # Filter valid samples
                 valid_samples = samples[~np.isnan(samples)]
                 if len(valid_samples) == 0:
                     ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center', transform=ax.transAxes)
                     ax.set_xlabel(xlabel, fontsize=10)
-                    if col_xlims[col_idx]:
-                        ax.set_xlim(col_xlims[col_idx])
                     continue
 
-                # Histogram - use fixed bins based on column range for consistency
-                if col_xlims[col_idx]:
-                    bin_edges = np.linspace(col_xlims[col_idx][0], col_xlims[col_idx][1], 51)
-                    ax.hist(valid_samples, bins=bin_edges, density=True, alpha=0.7, color='steelblue')
-                else:
-                    ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
+                # Histogram
+                ax.hist(valid_samples, bins=50, density=True, alpha=0.7, color='steelblue')
 
                 # Point estimate (red solid)
-                ax.axvline(x=point_est, color='red', linestyle='-', linewidth=2, label=f'Point: {point_est:.4f}')
+                if point_est is not None and not np.isnan(point_est):
+                    ax.axvline(x=point_est, color='red', linestyle='-', linewidth=2,
+                              label=f'Point: {point_est:.4f}')
 
                 # Bootstrap median (blue dashed)
-                median = param_stats['p50']
-                ax.axvline(x=median, color='blue', linestyle='--', linewidth=2, label=f'Median: {median:.4f}')
+                if param_stats and 'p50' in param_stats:
+                    median = param_stats['p50']
+                    ax.axvline(x=median, color='blue', linestyle='--', linewidth=2,
+                              label=f'Median: {median:.4f}')
 
-                # 90% CI bounds (gray dotted)
-                p5 = param_stats['p5']
-                p95 = param_stats['p95']
-                ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5, label=f'5%: {p5:.4f}')
-                ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5, label=f'95%: {p95:.4f}')
+                    # 90% CI bounds (gray dotted)
+                    p5 = param_stats.get('p5', np.nan)
+                    p95 = param_stats.get('p95', np.nan)
+                    if not np.isnan(p5):
+                        ax.axvline(x=p5, color='gray', linestyle=':', linewidth=1.5,
+                                  label=f'5%: {p5:.4f}')
+                    if not np.isnan(p95):
+                        ax.axvline(x=p95, color='gray', linestyle=':', linewidth=1.5,
+                                  label=f'95%: {p95:.4f}')
 
                 ax.set_xlabel(xlabel, fontsize=10)
-                if col_idx == 0:
-                    ax.set_ylabel(f'{result.approach}\n\nDensity', fontsize=10)
-                else:
-                    ax.set_ylabel('Density', fontsize=10)
+                ax.set_ylabel('Density', fontsize=10)
+                ax.set_title(xlabel, fontsize=11)
                 ax.legend(fontsize=7, loc='best')
                 ax.grid(True, alpha=0.3)
 
-                # Set consistent x-axis range for all panels in this column
-                if col_xlims[col_idx]:
-                    ax.set_xlim(col_xlims[col_idx])
+            # Hide unused subplots
+            for idx in range(n_params, n_rows * n_cols):
+                row_idx = idx // n_cols
+                col_idx = idx % n_cols
+                axes[row_idx, col_idx].set_visible(False)
 
-                # Add title only on top row
-                if row_idx == 0:
-                    ax.set_title(xlabel, fontsize=11)
+            fig.suptitle(f'Bootstrap Distributions: {result.approach}', fontsize=14, y=1.02)
+            plt.tight_layout()
+            add_input_file_annotation(fig, input_file)
+            pdf.savefig(fig, bbox_inches='tight')
+            plt.close()
 
-        fig.suptitle('Bootstrap Parameter Distributions by Approach', fontsize=14, y=1.01)
-        plt.tight_layout()
-        add_input_file_annotation(fig, input_file)
-        pdf.savefig(fig, bbox_inches='tight')
-        plt.close()
+
+def _expand_approaches_for_plotting(approaches: list, results: dict) -> list:
+    """Expand approaches that need multiple panels (6a, 8a) into sub-approaches.
+
+    Args:
+        approaches: List of approach names
+        results: Dict of BootstrapResult
+
+    Returns:
+        List of tuples: (plot_key, result_key, display_name, coefficient_variant)
+        - plot_key: unique key for this panel
+        - result_key: key to look up in results dict
+        - display_name: title for the panel
+        - coefficient_variant: 'high', 'low', or None for standard handling
+    """
+    expanded = []
+    for name in approaches:
+        if name not in results:
+            continue
+
+        if name == 'approach6a':
+            # Expand into high-frequency and low-frequency panels
+            expanded.append(('approach6a_high', name, '6a: High-Frequency Response', 'high'))
+            expanded.append(('approach6a_low', name, '6a: Low-Frequency Response', 'low'))
+        elif name == 'approach8a':
+            # Expand into high-frequency and low-frequency panels
+            expanded.append(('approach8a_high', name, '8a: High-Frequency Response', 'high'))
+            expanded.append(('approach8a_low', name, '8a: Low-Frequency Response', 'low'))
+        else:
+            # Standard approach - one panel
+            result = results[name]
+            display_name = getattr(result, 'approach', name)
+            expanded.append((name, name, display_name, None))
+
+    return expanded
+
+
+def _compute_point_estimate_response(result, T, approach_key, variant=None):
+    """Compute point estimate h(T) - h(T_opt) for a given approach.
+
+    Args:
+        result: BootstrapResult
+        T: Temperature array
+        approach_key: The approach key (may include _high/_low suffix)
+        variant: 'high', 'low', or None
+
+    Returns:
+        tuple: (h_point array, T_optimal for vertical line)
+    """
+    # Handle approach6a high-frequency
+    if approach_key == 'approach6a_high' or (approach_key == 'approach6a' and variant == 'high'):
+        h1 = getattr(result, 'h1_high_point', 0) or 0
+        h2 = getattr(result, 'h2_high_point', 0) or 0
+        T_opt = getattr(result, 'T_optimal_high_point', None)
+        h_T = h1 * T + h2 * T ** 2
+        if h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+            if T_opt is None:
+                T_opt = -h1 / (2 * h2)
+        else:
+            h_T_opt = 0
+            T_opt = T_opt or np.nan
+        return h_T - h_T_opt, T_opt
+
+    # Handle approach6a low-frequency
+    if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
+        h1 = getattr(result, 'h1_low_point', 0) or 0
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        T_opt = getattr(result, 'T_optimal_low_point', None)
+        h_T = h1 * T + h2 * T ** 2
+        if h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+            if T_opt is None:
+                T_opt = -h1 / (2 * h2)
+        else:
+            h_T_opt = 0
+            T_opt = T_opt or np.nan
+        return h_T - h_T_opt, T_opt
+
+    # Handle approach6b (low-frequency only)
+    if approach_key == 'approach6b':
+        h1 = getattr(result, 'h1_low_point', 0) or 0
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        T_opt = getattr(result, 'T_optimal_low_point', None)
+        h_T = h1 * T + h2 * T ** 2
+        if h2 != 0:
+            h_T_opt = -h1 ** 2 / (4 * h2)
+            if T_opt is None:
+                T_opt = -h1 / (2 * h2)
+        else:
+            h_T_opt = 0
+            T_opt = T_opt or np.nan
+        return h_T - h_T_opt, T_opt
+
+    # Handle approach8a high-frequency (piecewise with shared T_opt)
+    if approach_key == 'approach8a_high' or (approach_key == 'approach8a' and variant == 'high'):
+        h2 = getattr(result, 'h2_high_point', 0) or 0
+        T_opt = result.T_optimal_point
+        # h(T) - h(T_opt) = h2 * (T - T_opt)^2 since h(T_opt) = 0
+        h_point = h2 * (T - T_opt) ** 2
+        return h_point, T_opt
+
+    # Handle approach8a low-frequency (piecewise with shared T_opt)
+    if approach_key == 'approach8a_low' or (approach_key == 'approach8a' and variant == 'low'):
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        T_opt = result.T_optimal_point
+        # h(T) - h(T_opt) = h2 * (T - T_opt)^2 since h(T_opt) = 0
+        h_point = h2 * (T - T_opt) ** 2
+        return h_point, T_opt
+
+    # Handle approach8 (asymmetric piecewise)
+    if approach_key == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
+        T_opt = result.T_optimal_point
+        h2_low = result.h2_low_point
+        h2_high = result.h2_high_point
+        h_point = np.where(
+            T <= T_opt,
+            h2_low * (T - T_opt) ** 2,
+            h2_high * (T - T_opt) ** 2
+        )
+        return h_point, T_opt
+
+    # Standard quadratic model
+    h1 = result.h1_point
+    h2 = result.h2_point
+    h_T = h1 * T + h2 * T ** 2
+    if h2 != 0:
+        T_opt = -h1 / (2 * h2)
+        h_T_opt = -h1 ** 2 / (4 * h2)
+    else:
+        T_opt = result.T_optimal_point
+        h_T_opt = 0
+    return h_T - h_T_opt, T_opt
 
 
 def plot_bootstrap_temperature_response(
@@ -1995,6 +2293,9 @@ def plot_bootstrap_temperature_response(
     All panels share the same y-axis range for easy comparison.
     Output is saved as PDF.
 
+    For approaches with separate high/low frequency responses (6a, 8a),
+    two panels are created - one for each frequency band.
+
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
@@ -2010,58 +2311,52 @@ def plot_bootstrap_temperature_response(
 
     # Filter to only approaches that exist in results
     approaches = [name for name in approaches if name in results]
-    n_approaches = len(approaches)
 
-    if n_approaches == 0:
+    if len(approaches) == 0:
+        return
+
+    # Expand approaches that need multiple panels
+    plot_entries = _expand_approaches_for_plotting(approaches, results)
+    n_panels = len(plot_entries)
+
+    if n_panels == 0:
         return
 
     # First pass: compute all data and find global y-axis range
     plot_data = {}
     y_min, y_max = np.inf, -np.inf
 
-    for name in approaches:
-        result = results[name]
+    for plot_key, result_key, display_name, variant in plot_entries:
+        result = results[result_key]
 
         # Compute uncertainty bands (90% CI and IQR)
-        # Pass approach_key for power-law handling
         h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=plot_key
         )
 
         # Compute point estimate response
-        # Check if this is piecewise quadratic model (approach8)
-        if name == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
-            # Piecewise quadratic: h(T) - h(T_opt) uses h2_low for T <= T_opt, h2_high for T > T_opt
-            T_opt_point = result.T_optimal_point
-            h2_low = result.h2_low_point
-            h2_high = result.h2_high_point
-            h_point = np.where(
-                T <= T_opt_point,
-                h2_low * (T - T_opt_point) ** 2,
-                h2_high * (T - T_opt_point) ** 2
-            )
-        else:
-            # Quadratic model
-            h1_point = result.h1_point
-            h2_point = result.h2_point
-            h_T_point = h1_point * T + h2_point * T ** 2
-            if h2_point != 0:
-                h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
-            else:
-                h_T_opt_point = 0
-            h_point = h_T_point - h_T_opt_point
+        h_point, T_opt = _compute_point_estimate_response(result, T, plot_key, variant)
 
-        plot_data[name] = {
+        plot_data[plot_key] = {
             'h_p5': h_p5,
             'h_p25': h_p25,
             'h_p75': h_p75,
             'h_p95': h_p95,
             'h_point': h_point,
+            'T_opt': T_opt,
+            'display_name': display_name,
+            'result_key': result_key,
         }
 
         # Update global y range
-        y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
-        y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
+        if not np.all(np.isnan(h_p5)):
+            y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
+        if not np.all(np.isnan(h_p95)):
+            y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
+
+    # Handle case where all data is NaN
+    if np.isinf(y_min) or np.isinf(y_max):
+        y_min, y_max = -0.05, 0.05
 
     # Add some padding to y range
     y_padding = (y_max - y_min) * 0.05
@@ -2069,23 +2364,23 @@ def plot_bootstrap_temperature_response(
     y_max += y_padding
 
     # Determine grid layout
-    if n_approaches <= 3:
-        n_rows, n_cols = 1, n_approaches
-    elif n_approaches <= 4:
+    if n_panels <= 3:
+        n_rows, n_cols = 1, n_panels
+    elif n_panels <= 4:
         n_rows, n_cols = 2, 2
-    elif n_approaches <= 6:
+    elif n_panels <= 6:
         n_rows, n_cols = 2, 3
-    elif n_approaches <= 8:
+    elif n_panels <= 8:
         n_rows, n_cols = 4, 2
-    elif n_approaches <= 9:
+    elif n_panels <= 9:
         n_rows, n_cols = 3, 3
-    elif n_approaches <= 12:
+    elif n_panels <= 12:
         n_rows, n_cols = 4, 3
     else:
         n_rows, n_cols = 4, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
-    if n_approaches == 1:
+    if n_panels == 1:
         axes = [axes]
     else:
         axes = axes.flatten()
@@ -2098,11 +2393,11 @@ def plot_bootstrap_temperature_response(
         temp_recent = data.temp[mask_recent]
 
     # Second pass: create the plots
-    for idx, name in enumerate(approaches):
+    for idx, (plot_key, result_key, display_name, variant) in enumerate(plot_entries):
         ax = axes[idx]
-        result = results[name]
-        color = APPROACH_COLORS.get(name, 'steelblue')
-        pdata = plot_data[name]
+        result = results[result_key]
+        color = APPROACH_COLORS.get(result_key, 'steelblue')
+        pdata = plot_data[plot_key]
 
         # Add temperature histogram on secondary y-axis (if data provided)
         if temp_recent is not None:
@@ -2128,20 +2423,22 @@ def plot_bootstrap_temperature_response(
         ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
 
         # Mark optimal temperature
-        ax.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
-                   label=f'T_opt = {result.T_optimal_point:.1f}°C')
+        T_opt = pdata['T_opt']
+        if T_opt is not None and not np.isnan(T_opt):
+            ax.axvline(T_opt, color=color, linestyle=':', alpha=0.7,
+                       label=f'T_opt = {T_opt:.1f}°C')
 
         ax.axhline(0, color='gray', linewidth=0.5)
         ax.set_xlabel('Temperature (°C)', fontsize=10)
         ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
-        ax.set_title(f'{result.approach}', fontsize=11)
+        ax.set_title(display_name, fontsize=11)
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8, loc='lower right')
 
     # Hide unused subplots
-    for idx in range(n_approaches, len(axes)):
+    for idx in range(n_panels, len(axes)):
         axes[idx].set_visible(False)
 
     plt.tight_layout()
@@ -2219,17 +2516,75 @@ def compute_derivative_uncertainty_bands(
 
     For quadratic models: dh/dT = h1 + 2*h2*T
     For piecewise quadratic (approach8): dh/dT = 2*h2_low*(T-T_opt) or 2*h2_high*(T-T_opt)
+    For approach6a/6b/8a variants: uses appropriate high/low frequency coefficients
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach8' for piecewise quadratic)
+        approach_key: Approach identifier (e.g., 'approach8' for piecewise quadratic,
+                      'approach6a_high', 'approach6a_low', 'approach6b',
+                      'approach8a_high', 'approach8a_low')
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key == 'approach8')
+
+    # Handle approach 6a high-frequency derivative
+    if approach_key == 'approach6a_high':
+        h1_samples = getattr(result, 'h1_high_samples', None)
+        h2_samples = getattr(result, 'h2_high_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 6a low-frequency derivative
+    if approach_key == 'approach6a_low':
+        h1_samples = getattr(result, 'h1_low_samples', None)
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 6b (low-frequency only)
+    if approach_key == 'approach6b':
+        h1_samples = getattr(result, 'h1_low_samples', None)
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        if h1_samples is None or h2_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
+
+    # Handle approach 8a high-frequency derivative (piecewise with shared T_opt)
+    if approach_key == 'approach8a_high':
+        h2_samples = getattr(result, 'h2_high_samples', None)
+        T_opt_samples = getattr(result, 'T_optimal_samples', None)
+        if h2_samples is None or T_opt_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h2_samples) & ~np.isnan(T_opt_samples)
+        h2_valid = h2_samples[valid_mask]
+        T_opt_valid = T_opt_samples[valid_mask]
+        return _compute_symmetric_piecewise_derivative_bands(h2_valid, T_opt_valid, T_range, percentiles)
+
+    # Handle approach 8a low-frequency derivative (piecewise with shared T_opt)
+    if approach_key == 'approach8a_low':
+        h2_samples = getattr(result, 'h2_low_samples', None)
+        T_opt_samples = getattr(result, 'T_optimal_samples', None)
+        if h2_samples is None or T_opt_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+        valid_mask = ~np.isnan(h2_samples) & ~np.isnan(T_opt_samples)
+        h2_valid = h2_samples[valid_mask]
+        T_opt_valid = T_opt_samples[valid_mask]
+        return _compute_symmetric_piecewise_derivative_bands(h2_valid, T_opt_valid, T_range, percentiles)
 
     if is_piecewise:
         # Piecewise quadratic model: need h2_low, h2_high, T_optimal samples
@@ -2273,14 +2628,7 @@ def compute_derivative_uncertainty_bands(
         if len(h1_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
-        n_samples = len(h1_valid)
-        n_T = len(T_range)
-        dh_samples = np.zeros((n_samples, n_T))
-
-        for i in range(n_samples):
-            h1 = h1_valid[i]
-            h2 = h2_valid[i]
-            dh_samples[i, :] = h1 + 2 * h2 * T_range
+        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
 
     # Compute percentiles at each temperature
     dh_bands = []
@@ -2288,6 +2636,107 @@ def compute_derivative_uncertainty_bands(
         dh_bands.append(np.percentile(dh_samples, p, axis=0))
 
     return tuple(dh_bands)
+
+
+def _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles):
+    """Helper to compute derivative bands for quadratic dh/dT = h1 + 2*h2*T."""
+    if len(h1_valid) == 0:
+        return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+    n_samples = len(h1_valid)
+    n_T = len(T_range)
+    dh_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h1 = h1_valid[i]
+        h2 = h2_valid[i]
+        dh_samples[i, :] = h1 + 2 * h2 * T_range
+
+    dh_bands = []
+    for p in percentiles:
+        dh_bands.append(np.percentile(dh_samples, p, axis=0))
+    return tuple(dh_bands)
+
+
+def _compute_symmetric_piecewise_derivative_bands(h2_valid, T_opt_valid, T_range, percentiles):
+    """Helper to compute derivative bands for symmetric piecewise dh/dT = 2*h2*(T-T_opt)."""
+    if len(h2_valid) == 0:
+        return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+    n_samples = len(h2_valid)
+    n_T = len(T_range)
+    dh_samples = np.zeros((n_samples, n_T))
+
+    for i in range(n_samples):
+        h2 = h2_valid[i]
+        T_opt = T_opt_valid[i]
+        # dh/dT = 2*h2*(T - T_opt)
+        dh_samples[i, :] = 2 * h2 * (T_range - T_opt)
+
+    dh_bands = []
+    for p in percentiles:
+        dh_bands.append(np.percentile(dh_samples, p, axis=0))
+    return tuple(dh_bands)
+
+
+def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
+    """Compute point estimate dh/dT for a given approach.
+
+    Args:
+        result: BootstrapResult
+        T: Temperature array
+        approach_key: The approach key (may include _high/_low suffix)
+        variant: 'high', 'low', or None
+
+    Returns:
+        dh_point array
+    """
+    # Handle approach6a high-frequency
+    if approach_key == 'approach6a_high' or (approach_key == 'approach6a' and variant == 'high'):
+        h1 = getattr(result, 'h1_high_point', 0) or 0
+        h2 = getattr(result, 'h2_high_point', 0) or 0
+        return h1 + 2 * h2 * T
+
+    # Handle approach6a low-frequency
+    if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
+        h1 = getattr(result, 'h1_low_point', 0) or 0
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        return h1 + 2 * h2 * T
+
+    # Handle approach6b (low-frequency only)
+    if approach_key == 'approach6b':
+        h1 = getattr(result, 'h1_low_point', 0) or 0
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        return h1 + 2 * h2 * T
+
+    # Handle approach8a high-frequency (piecewise with shared T_opt)
+    if approach_key == 'approach8a_high' or (approach_key == 'approach8a' and variant == 'high'):
+        h2 = getattr(result, 'h2_high_point', 0) or 0
+        T_opt = result.T_optimal_point
+        return 2 * h2 * (T - T_opt)
+
+    # Handle approach8a low-frequency (piecewise with shared T_opt)
+    if approach_key == 'approach8a_low' or (approach_key == 'approach8a' and variant == 'low'):
+        h2 = getattr(result, 'h2_low_point', 0) or 0
+        T_opt = result.T_optimal_point
+        return 2 * h2 * (T - T_opt)
+
+    # Handle approach8 (asymmetric piecewise)
+    if approach_key == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
+        T_opt = result.T_optimal_point
+        h2_low = result.h2_low_point
+        h2_high = result.h2_high_point
+        T_diff = T - T_opt
+        return np.where(
+            T <= T_opt,
+            2 * h2_low * T_diff,
+            2 * h2_high * T_diff
+        )
+
+    # Standard quadratic model
+    h1 = result.h1_point
+    h2 = result.h2_point
+    return h1 + 2 * h2 * T
 
 
 def plot_bootstrap_temperature_derivative(
@@ -2304,6 +2753,9 @@ def plot_bootstrap_temperature_derivative(
     All panels share the same y-axis range for easy comparison.
     Output is saved as PDF.
 
+    For approaches with separate high/low frequency responses (6a, 8a),
+    two panels are created - one for each frequency band.
+
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
@@ -2319,54 +2771,50 @@ def plot_bootstrap_temperature_derivative(
 
     # Filter to only approaches that exist in results
     approaches = [name for name in approaches if name in results]
-    n_approaches = len(approaches)
 
-    if n_approaches == 0:
+    if len(approaches) == 0:
+        return
+
+    # Expand approaches that need multiple panels
+    plot_entries = _expand_approaches_for_plotting(approaches, results)
+    n_panels = len(plot_entries)
+
+    if n_panels == 0:
         return
 
     # First pass: compute all data and find global y-axis range
     plot_data = {}
     y_min, y_max = np.inf, -np.inf
 
-    for name in approaches:
-        result = results[name]
+    for plot_key, result_key, display_name, variant in plot_entries:
+        result = results[result_key]
 
         # Compute uncertainty bands (90% CI and IQR)
-        # Pass approach_key for power-law handling
         dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
-            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=plot_key
         )
 
         # Compute point estimate derivative
-        # Check if this is piecewise quadratic model (approach8)
-        if name == 'approach8' and result.h2_low_point is not None and result.h2_high_point is not None:
-            # Piecewise quadratic: dh/dT = 2*h2_low*(T-T_opt) for T <= T_opt, 2*h2_high*(T-T_opt) for T > T_opt
-            T_opt_point = result.T_optimal_point
-            h2_low = result.h2_low_point
-            h2_high = result.h2_high_point
-            T_diff = T - T_opt_point
-            dh_point = np.where(
-                T <= T_opt_point,
-                2 * h2_low * T_diff,
-                2 * h2_high * T_diff
-            )
-        else:
-            # Quadratic model
-            h1_point = result.h1_point
-            h2_point = result.h2_point
-            dh_point = h1_point + 2 * h2_point * T
+        dh_point = _compute_derivative_point_estimate(result, T, plot_key, variant)
 
-        plot_data[name] = {
+        plot_data[plot_key] = {
             'dh_p5': dh_p5,
             'dh_p25': dh_p25,
             'dh_p75': dh_p75,
             'dh_p95': dh_p95,
             'dh_point': dh_point,
+            'display_name': display_name,
         }
 
         # Update global y range
-        y_min = min(y_min, np.nanmin(dh_p5), np.nanmin(dh_point))
-        y_max = max(y_max, np.nanmax(dh_p95), np.nanmax(dh_point))
+        if not np.all(np.isnan(dh_p5)):
+            y_min = min(y_min, np.nanmin(dh_p5), np.nanmin(dh_point))
+        if not np.all(np.isnan(dh_p95)):
+            y_max = max(y_max, np.nanmax(dh_p95), np.nanmax(dh_point))
+
+    # Handle case where all data is NaN
+    if np.isinf(y_min) or np.isinf(y_max):
+        y_min, y_max = -0.01, 0.01
 
     # Add some padding to y range
     y_padding = (y_max - y_min) * 0.05
@@ -2374,33 +2822,32 @@ def plot_bootstrap_temperature_derivative(
     y_max += y_padding
 
     # Determine grid layout
-    if n_approaches <= 3:
-        n_rows, n_cols = 1, n_approaches
-    elif n_approaches <= 4:
+    if n_panels <= 3:
+        n_rows, n_cols = 1, n_panels
+    elif n_panels <= 4:
         n_rows, n_cols = 2, 2
-    elif n_approaches <= 6:
+    elif n_panels <= 6:
         n_rows, n_cols = 2, 3
-    elif n_approaches <= 8:
+    elif n_panels <= 8:
         n_rows, n_cols = 4, 2
-    elif n_approaches <= 9:
+    elif n_panels <= 9:
         n_rows, n_cols = 3, 3
-    elif n_approaches <= 12:
+    elif n_panels <= 12:
         n_rows, n_cols = 4, 3
     else:
         n_rows, n_cols = 4, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
-    if n_approaches == 1:
+    if n_panels == 1:
         axes = [axes]
     else:
         axes = axes.flatten()
 
     # Second pass: create the plots
-    for idx, name in enumerate(approaches):
+    for idx, (plot_key, result_key, display_name, variant) in enumerate(plot_entries):
         ax = axes[idx]
-        result = results[name]
-        color = APPROACH_COLORS.get(name, 'steelblue')
-        pdata = plot_data[name]
+        color = APPROACH_COLORS.get(result_key, 'steelblue')
+        pdata = plot_data[plot_key]
 
         # Plot 90% CI band
         ax.fill_between(T, pdata['dh_p5'], pdata['dh_p95'], alpha=0.2, color=color, label='90% CI')
@@ -2414,14 +2861,14 @@ def plot_bootstrap_temperature_derivative(
         ax.axhline(0, color='gray', linewidth=0.5)
         ax.set_xlabel('Temperature (°C)', fontsize=10)
         ax.set_ylabel('dh/dT', fontsize=10)
-        ax.set_title(f'{result.approach}', fontsize=11)
+        ax.set_title(display_name, fontsize=11)
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8, loc='lower left')
 
     # Hide unused subplots
-    for idx in range(n_approaches, len(axes)):
+    for idx in range(n_panels, len(axes)):
         axes[idx].set_visible(False)
 
     plt.tight_layout()
@@ -2720,10 +3167,10 @@ def plot_bootstrap_gdp_scaling(
     data: AnalysisData = None,
     input_file: str = None,
 ) -> None:
-    """Plot GDP scaling factor with bootstrap uncertainty bands for Approach 7.
+    """Plot GDP scaling factor with bootstrap uncertainty bands for GDP-dependent approaches.
 
     Shows the spread of (Y/Y_ref)^(-beta) curves across bootstrap samples.
-    Creates a two-panel figure when both approaches are present.
+    Currently disabled (no GDP-dependent approaches in panels list).
 
     Args:
         results: Dict of BootstrapResult
@@ -2734,10 +3181,9 @@ def plot_bootstrap_gdp_scaling(
         data: AnalysisData for adding GDP histogram (optional)
         input_file: Path to input data file (for annotation)
     """
-    # Collect panels to plot
+    # Collect panels to plot (no GDP-dependent approaches currently)
     panels = []
     for key, title, color in [
-        ('approach7', 'GDP-Response LOESS (Approach 7)', 'brown'),
     ]:
         if key in results:
             result = results[key]
@@ -2833,157 +3279,6 @@ def plot_bootstrap_gdp_scaling(
     plt.close()
 
 
-def plot_bootstrap_approach7_combined(
-    results: Dict[str, "BootstrapResult"],
-    output_dir: Path,
-    Y_ref: float,
-    T_range: tuple = (0, 30),
-    Y_range: tuple = None,
-    filename: str = "bootstrap_temperature_response_gdp.pdf",
-    data: AnalysisData = None,
-    input_file: str = None,
-) -> None:
-    """Plot Approach 7 h(T) response and GDP scaling side by side in one row.
-
-    Left panel: temperature response h(T) - h(T*) with bootstrap CI
-    Right panel: GDP scaling factor (Y/Y_ref)^(-beta) with bootstrap CI
-
-    Args:
-        results: Dict of BootstrapResult for each approach
-        output_dir: Directory to save the plot
-        Y_ref: Reference GDP value
-        T_range: Temperature range for x-axis of left panel
-        Y_range: GDP range for x-axis of right panel (default: 500 to 100000)
-        filename: Output filename
-        data: AnalysisData for adding data density histograms (optional)
-        input_file: Path to input data file (for annotation)
-    """
-    if 'approach7' not in results:
-        return
-
-    result = results['approach7']
-    if result.beta_point is None or result.beta_samples is None:
-        return
-
-    valid_betas = result.beta_samples[~np.isnan(result.beta_samples)]
-    if len(valid_betas) == 0:
-        return
-
-    if Y_range is None:
-        Y_range = (500, 100000)
-
-    color = APPROACH_COLORS.get('approach7', 'brown')
-
-    fig, (ax_temp, ax_gdp) = plt.subplots(1, 2, figsize=(14, 5))
-
-    # --- Left panel: Temperature response h(T) - h(T*) ---
-    T = np.linspace(T_range[0], T_range[1], 200)
-
-    h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-        result, T, percentiles=(5, 25, 50, 75, 95)
-    )
-
-    h1_point = result.h1_point
-    h2_point = result.h2_point
-    h_T_point = h1_point * T + h2_point * T ** 2
-    if h2_point != 0:
-        h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
-    else:
-        h_T_opt_point = 0
-    h_point = h_T_point - h_T_opt_point
-
-    # Temperature histogram
-    if data is not None:
-        max_year = data.year_range[1]
-        mask_recent = data.year == max_year
-        temp_recent = data.temp[mask_recent]
-        ax_temp2 = ax_temp.twinx()
-        bins = np.linspace(T_range[0], T_range[1], 30)
-        ax_temp2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
-        ax_temp2.set_ylabel('Data density', fontsize=8, color='gray')
-        ax_temp2.tick_params(axis='y', labelcolor='gray', labelsize=7)
-        ax_temp2.set_ylim(bottom=0)
-        ax_temp2.set_zorder(ax_temp.get_zorder() - 1)
-        ax_temp.set_zorder(ax_temp2.get_zorder() + 1)
-        ax_temp.patch.set_visible(False)
-
-    ax_temp.fill_between(T, h_p5, h_p95, alpha=0.2, color=color, label='90% CI')
-    ax_temp.fill_between(T, h_p25, h_p75, alpha=0.3, color=color, label='IQR')
-    ax_temp.plot(T, h_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
-    ax_temp.axvline(result.T_optimal_point, color=color, linestyle=':', alpha=0.7,
-                    label=f'T_opt = {result.T_optimal_point:.1f}°C')
-    ax_temp.axhline(0, color='gray', linewidth=0.5)
-    ax_temp.set_xlabel('Temperature (°C)', fontsize=10)
-    ax_temp.set_ylabel('h(T) - h(T_opt)', fontsize=10)
-    ax_temp.set_title(f'{result.approach}', fontsize=11)
-    ax_temp.set_xlim(T_range)
-    ax_temp.grid(True, alpha=0.3)
-    ax_temp.legend(fontsize=8, loc='lower left')
-
-    # --- Right panel: GDP scaling factor ---
-    Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
-
-    # Plot individual bootstrap samples (thin lines)
-    n_samples_to_plot = min(100, len(valid_betas))
-    sample_indices = np.linspace(0, len(valid_betas) - 1, n_samples_to_plot, dtype=int)
-    for idx in sample_indices:
-        beta_b = valid_betas[idx]
-        g_b = (Y / Y_ref) ** (-beta_b)
-        ax_gdp.plot(Y, g_b, color=color, alpha=0.05, linewidth=0.5)
-
-    # Compute percentile bands
-    g_samples = np.zeros((len(valid_betas), len(Y)))
-    for i, beta_b in enumerate(valid_betas):
-        g_samples[i, :] = (Y / Y_ref) ** (-beta_b)
-    g_p5 = np.percentile(g_samples, 5, axis=0)
-    g_p25 = np.percentile(g_samples, 25, axis=0)
-    g_p75 = np.percentile(g_samples, 75, axis=0)
-    g_p95 = np.percentile(g_samples, 95, axis=0)
-
-    # GDP histogram
-    if data is not None:
-        max_year = data.year_range[1]
-        mask_recent = data.year == max_year
-        gdp_recent = data.pcGDP[mask_recent]
-        ax_gdp2 = ax_gdp.twinx()
-        bins = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 30)
-        ax_gdp2.hist(gdp_recent, bins=bins, color='gray', alpha=0.3, density=True)
-        ax_gdp2.set_ylabel(f'Data density ({max_year})', fontsize=10, color='gray')
-        ax_gdp2.tick_params(axis='y', labelcolor='gray', labelsize=8)
-        ax_gdp2.set_ylim(bottom=0)
-        ax_gdp2.set_zorder(ax_gdp.get_zorder() - 1)
-        ax_gdp.set_zorder(ax_gdp2.get_zorder() + 1)
-        ax_gdp.patch.set_visible(False)
-
-    ax_gdp.fill_between(Y, g_p5, g_p95, color=color, alpha=0.2, label='90% CI')
-    ax_gdp.fill_between(Y, g_p25, g_p75, color=color, alpha=0.3, label='IQR')
-    g_point = (Y / Y_ref) ** (-result.beta_point)
-    ax_gdp.plot(Y, g_point, color=color, linewidth=2.5,
-                label=f'Point estimate (β = {result.beta_point:.3f})')
-    ax_gdp.axhline(1.0, color='gray', linestyle='--', alpha=0.5)
-    ax_gdp.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref ≈ ${Y_ref:,.0f}')
-    ax_gdp.set_xscale('log')
-    ax_gdp.set_xlabel('Per Capita GDP ($)', fontsize=12)
-    ax_gdp.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
-    ax_gdp.set_title('GDP Scaling Factor', fontsize=11)
-    ax_gdp.legend(loc='upper right', fontsize=8)
-    ax_gdp.grid(True, alpha=0.3)
-
-    # Beta distribution inset
-    ax_inset = ax_gdp.inset_axes([0.72, 0.42, 0.25, 0.30])
-    ax_inset.hist(valid_betas, bins=30, color=color, alpha=0.7, density=True)
-    ax_inset.axvline(result.beta_point, color='red', linewidth=1.5, label='Point est.')
-    ax_inset.set_xlabel('β', fontsize=9)
-    ax_inset.set_ylabel('Density', fontsize=9)
-    ax_inset.set_title('Bootstrap β distribution', fontsize=9)
-    ax_inset.tick_params(labelsize=8)
-
-    plt.tight_layout()
-    add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename)
-    plt.close()
-
-
 def save_all_bootstrap_plots(
     results: Dict[str, "BootstrapResult"],
     all_stats: Dict[str, Dict],
@@ -2997,8 +3292,7 @@ def save_all_bootstrap_plots(
 
     Calls:
     - plot_all_bootstrap_distributions() for all approaches in single PDF
-    - plot_bootstrap_temperature_response() for basic approaches (0,1,2,3) and precomputed k (4,5,6)
-    - plot_bootstrap_approach7_combined() for Approach 7 h(T) + GDP scaling
+    - plot_bootstrap_temperature_response() for basic, precomputed k, and LOESS approaches
     - plot_bootstrap_temperature_derivative() for all approaches
     - plot_bootstrap_T_optimal_comparison() for all approaches
 
@@ -3007,7 +3301,7 @@ def save_all_bootstrap_plots(
         all_stats: Dict mapping approach key to statistics dict
         output_dir: Directory to save plots
         T_range: Temperature range for response plots
-        Y_ref: Reference GDP for Approach 7 GDP scaling plot
+        Y_ref: Reference GDP (unused, kept for API compatibility)
         data: AnalysisData for adding data density histograms (optional)
         input_file: Path to input data file (for annotation)
     """
@@ -3037,10 +3331,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 7, 8, 8a)
+    # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 8, 8a)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
+        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -3048,23 +3342,12 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_loess.pdf")
 
-    # Temperature response PDF 4: Approach 7 h(T) + GDP scaling combined
-    if Y_ref is not None and 'approach7' in results:
-        plot_bootstrap_approach7_combined(
-            results, output_dir, Y_ref,
-            T_range=T_range,
-            data=data,
-            input_file=input_file,
-            filename='bootstrap_temperature_response_gdp.pdf',
-        )
-        print("      Saved bootstrap_temperature_response_gdp.pdf")
-
     # Temperature derivative plot - all approaches in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach6a', 'approach6b', 'approach7', 'approach8', 'approach8a'],
+                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
