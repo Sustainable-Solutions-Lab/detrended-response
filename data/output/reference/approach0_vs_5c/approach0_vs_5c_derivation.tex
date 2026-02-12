@@ -1,0 +1,200 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+
+\title{Deriving Approach~0 Parameters from Approach~5c Quantities}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{The Two Approaches}
+
+\subsection{Approach~0: Conjoined OLS}
+
+Approach~0 fits all parameters simultaneously via a single OLS regression:
+\begin{equation}
+\Delta y_i(t) = h_1 T_i(t) + h_2 T_i(t)^2 + j_{0,i} + j_{1,i}\,t + j_{2,i}\,t^2 + k(t)
+\label{eq:approach0}
+\end{equation}
+where $\Delta y_i(t)$ is the per capita GDP growth rate for country~$i$ in year~$t$,
+$T_i(t)$ is the annual mean temperature, $h_1$ and $h_2$ are climate response coefficients,
+$j_{0,i} + j_{1,i}\,t + j_{2,i}\,t^2$ is a country-specific quadratic time trend,
+and $k(t)$ is a year fixed effect (one parameter per year).
+
+For identification, Approach~0 constrains the reference country (country~0) to have
+$j_{0,0} = j_{1,0} = j_{2,0} = 0$.
+This removes the degeneracy whereby an arbitrary quadratic in~$t$ could be added to
+all $j_i(t)$ and subtracted from $k(t)$ without changing the fit.
+
+\subsection{Approach~5c: Precomputed $k$ with Separate Detrending}
+
+Approach~5c decomposes the estimation into sequential steps:
+\begin{enumerate}
+\item Compute year means: $k_{\mathrm{mean}}(t) = \frac{1}{N_t}\sum_i \Delta y_i(t)$,
+      where $N_t$ is the number of countries observed in year~$t$.
+\item Fit country-specific quadratic trends to the residual $\Delta y_i(t) - k_{\mathrm{mean}}(t)$:
+      \begin{equation}
+      \Delta y_i(t) - k_{\mathrm{mean}}(t) \approx g_{0,i} + g_{1,i}\,t + g_{2,i}\,t^2
+      \label{eq:g_trends}
+      \end{equation}
+\item Fit country-specific linear temperature trends:
+      \begin{equation}
+      T_i(t) \approx T_{0,i} + T_{1,i}\,t
+      \label{eq:T_trends}
+      \end{equation}
+\item Fit the climate response to the doubly-detrended residual:
+      \begin{equation}
+      [\Delta y_i(t) - k_{\mathrm{mean}}(t)] - [g_{0,i} + g_{1,i}\,t + g_{2,i}\,t^2]
+      = h_1\,T_i^*(t) + h_2\,[T_i^*(t)]^2
+      \label{eq:5c_fit}
+      \end{equation}
+      where $T_i^*(t) = T_i(t) - (T_{0,i} + T_{1,i}\,t)$ is the linearly detrended temperature.
+\end{enumerate}
+
+\section{Relating the Parameters}
+
+\subsection{Expanding Approach~0's Model Using Approach~5c Quantities}
+
+In Approach~0, the country time trend $j_i(t) = j_{0,i} + j_{1,i}\,t + j_{2,i}\,t^2$
+absorbs everything in $\Delta y_i(t)$ that is not explained by the climate response
+$h(T) = h_1 T + h_2 T^2$ or the year effect $k(t)$.
+
+In Approach~5c, the country trend $g_i(t) = g_{0,i} + g_{1,i}\,t + g_{2,i}\,t^2$
+is fit to $\Delta y_i(t) - k_{\mathrm{mean}}(t)$, which includes both the
+non-climatic country trend and the climate response to the temperature trend.
+We can write:
+\begin{equation}
+g_i(t) \approx j_i(t) + h(T_{\mathrm{trend},i}(t)) + [k(t) - k_{\mathrm{mean}}(t)]_{\mathrm{trend}}
+\end{equation}
+where $T_{\mathrm{trend},i}(t) = T_{0,i} + T_{1,i}\,t$ is the linear temperature trend
+and $[\cdot]_{\mathrm{trend}}$ denotes the quadratic trend component.
+
+\subsection{Expanding the Climate Response to the Temperature Trend}
+
+The climate response evaluated at the linear temperature trend is:
+\begin{align}
+h(T_{\mathrm{trend},i}(t)) &= h_1(T_{0,i} + T_{1,i}\,t) + h_2(T_{0,i} + T_{1,i}\,t)^2 \notag \\
+&= \bigl(h_1\,T_{0,i} + h_2\,T_{0,i}^2\bigr) \notag \\
+&\quad + \bigl(h_1\,T_{1,i} + 2\,h_2\,T_{0,i}\,T_{1,i}\bigr)\,t \notag \\
+&\quad + \bigl(h_2\,T_{1,i}^2\bigr)\,t^2
+\label{eq:h_trend_expanded}
+\end{align}
+
+This is a quadratic in~$t$ with coefficients that depend on the country's temperature
+trend parameters $T_{0,i}$ and $T_{1,i}$.
+
+\subsection{Predicting $j$ Coefficients}
+
+Collecting the constant, linear, and quadratic terms, the predicted (raw) $j$ coefficients are:
+\begin{align}
+\tilde{j}_{0,i} &= g_{0,i} - \bigl(h_1\,T_{0,i} + h_2\,T_{0,i}^2\bigr) \label{eq:j0_raw} \\
+\tilde{j}_{1,i} &= g_{1,i} - \bigl(h_1\,T_{1,i} + 2\,h_2\,T_{0,i}\,T_{1,i}\bigr) \label{eq:j1_raw} \\
+\tilde{j}_{2,i} &= g_{2,i} - h_2\,T_{1,i}^2 \label{eq:j2_raw}
+\end{align}
+where $g_{0,i}$, $g_{1,i}$, $g_{2,i}$ are from the quadratic fit to
+$\Delta y_i(t) - k_{\mathrm{mean}}(t)$ (Eq.~\ref{eq:g_trends}),
+and $T_{0,i}$, $T_{1,i}$ are from the linear temperature trend (Eq.~\ref{eq:T_trends}).
+
+\subsection{Re-referencing to Match Approach~0's Identification}
+
+Approach~0 sets $j_{0,0} = j_{1,0} = j_{2,0} = 0$ for the reference country (country~0).
+The raw predictions $\tilde{j}_{m,i}$ from Eqs.~(\ref{eq:j0_raw})--(\ref{eq:j2_raw})
+will generally be nonzero for country~0. To match Approach~0's convention,
+we subtract country~0's values:
+\begin{equation}
+\hat{j}_{m,i} = \tilde{j}_{m,i} - \tilde{j}_{m,0}, \qquad m \in \{0, 1, 2\}
+\label{eq:j_reref}
+\end{equation}
+This ensures $\hat{j}_{m,0} = 0$ for all~$m$.
+
+\subsection{Absorbing the Reference Quadratic into $k$}
+
+The quadratic $\tilde{j}_{0,0} + \tilde{j}_{1,0}\,t + \tilde{j}_{2,0}\,t^2$
+that was subtracted from all countries' $j$ coefficients must be added to $k$
+to preserve the model's total prediction. The predicted year effect becomes:
+\begin{equation}
+\hat{k}(t) = k_{\mathrm{mean}}(t) + \tilde{j}_{0,0} + \tilde{j}_{1,0}\,t + \tilde{j}_{2,0}\,t^2
+\label{eq:k_adjusted}
+\end{equation}
+
+\subsection{Mean Adjustment}
+
+After the re-referencing, a small residual offset $\delta$ may remain between
+$\overline{\hat{k}}$ (the time-mean of the predicted $k$) and $\overline{k^{(0)}}$
+(the time-mean of Approach~0's $k$). This constant can be freely redistributed
+between $k$ and all $j_{0,i}$ values without changing the model.
+We apply a final mean adjustment:
+\begin{align}
+\delta &= \overline{\hat{k}} - \overline{k^{(0)}} \label{eq:delta} \\
+\hat{k}'(t) &= \hat{k}(t) - \delta \label{eq:k_final} \\
+\hat{j}'_{0,i} &= \hat{j}_{0,i} - \delta \label{eq:j0_final}
+\end{align}
+The $j_{1,i}$ and $j_{2,i}$ predictions are unaffected by this constant shift.
+
+\section{Choice of $h_1$ and $h_2$}
+
+The predictions in Eqs.~(\ref{eq:j0_raw})--(\ref{eq:j2_raw}) require values for
+$h_1$ and~$h_2$. Two natural choices exist:
+
+\begin{enumerate}
+\item \textbf{Approach~5c's own $h_1$, $h_2$}: Uses only Approach~5c quantities,
+      but the small difference between Approach~0 and 5c estimates propagates through
+      the $T_{0,i}^2$ terms, creating systematic offsets (especially in $j_{0,i}$).
+
+\item \textbf{Approach~0's $h_1$, $h_2$}: Produces near-perfect agreement
+      ($R^2 > 0.998$ for all panels), confirming that the decomposition is
+      algebraically consistent. The remaining scatter reflects only the difference
+      between $k_{\mathrm{mean}}(t)$ (equal-weighted country average) and
+      the OLS-estimated year fixed effects $k^{(0)}(t)$.
+\end{enumerate}
+
+The final calculation uses Approach~0's $h_1$ and $h_2$, combined with Approach~5c's
+pre-computed trends ($g_{m,i}$, $T_{0,i}$, $T_{1,i}$, $k_{\mathrm{mean}}$).
+
+\section{Summary of Steps}
+
+\begin{enumerate}
+\item Load data and compute country trends $T_{0,i}$, $T_{1,i}$ (linear fit to temperature).
+\item Compute year means $k_{\mathrm{mean}}(t) = \text{mean}_i(\Delta y_i(t))$.
+\item Compute $g_{0,i}$, $g_{1,i}$, $g_{2,i}$ (quadratic fit to $\Delta y_i - k_{\mathrm{mean}}$).
+\item Fit Approach~0 to obtain $h_1^{(0)}$, $h_2^{(0)}$, $k^{(0)}(t)$.
+\item Compute raw predicted $j$ via Eqs.~(\ref{eq:j0_raw})--(\ref{eq:j2_raw})
+      using $h_1 = h_1^{(0)}$, $h_2 = h_2^{(0)}$.
+\item Re-reference by subtracting country~0's values (Eq.~\ref{eq:j_reref}).
+\item Compute predicted $k$ by absorbing the reference quadratic (Eq.~\ref{eq:k_adjusted}).
+\item Apply mean adjustment $\delta$ (Eqs.~\ref{eq:delta}--\ref{eq:j0_final}).
+\item Extract Approach~0's actual $j$ coefficients by fitting quadratics to
+      $r_i(t) = \Delta y_i(t) - h_1^{(0)} T_i(t) - h_2^{(0)} T_i(t)^2 - k^{(0)}(t)$.
+\item Compare predicted vs.\ actual parameters in scatter plots.
+\end{enumerate}
+
+\section{Results}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Parameter & Slope & Intercept & $R^2$ & $r$ \\
+\midrule
+$k(t)$    & 1.0174 & $+0.0019$ & 0.9959 & 0.9981 \\
+$j_{0,i}$ & 1.0038 & $-0.0005$ & 0.9993 & 0.9997 \\
+$j_{1,i}$ & 0.9983 & $+0.0000$ & 0.9999 & 1.0000 \\
+$j_{2,i}$ & 0.9952 & $+0.0000$ & 0.9982 & 0.9992 \\
+\bottomrule
+\end{tabular}
+\caption{Best-fit regression of Approach~0 values (y-axis) on Approach~5c predictions
+(x-axis). Slopes near~1 and intercepts near~0 confirm consistency.
+$R^2$ is computed relative to the 1:1 line, not the best-fit line.}
+\label{tab:results}
+\end{table}
+
+The $j_{0,i}$, $j_{1,i}$, and $j_{2,i}$ predictions are in near-perfect agreement
+(all $R^2 > 0.998$). The $k(t)$ comparison shows $R^2 = 0.996$ with a slope of 1.017;
+the residual scatter reflects the difference between $k_{\mathrm{mean}}(t)$
+(an equal-weighted country average) and the OLS year fixed effects from Approach~0
+(which are observation-weighted and jointly estimated with all other parameters).
+
+\end{document}

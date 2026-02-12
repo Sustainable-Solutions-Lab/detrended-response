@@ -460,6 +460,33 @@ python scripts/run_influence_analysis.py --approaches "approach5 approach6" --n-
 - Countries with **negative** influence coefficients tend to **decrease** the parameter when included more frequently
 - Large absolute coefficients indicate high sensitivity to that country's inclusion
 
+### Approach 0 vs 5c Parameter Comparison
+
+The `compare_approach0_5c.py` script generates scatter plots comparing parameters from Approach 0 (conjoined OLS) against parameters predicted from Approach 5c's pre-computed trends combined with Approach 0's h₁ and h₂.
+
+```bash
+python scripts/compare_approach0_5c.py
+```
+
+**What it does:**
+1. Fits Approach 0 and Approach 5c to the same data
+2. Extracts per-country j coefficients from Approach 0 residuals
+3. Predicts j coefficients from Approach 5c's pre-computed trends (g, T₀, T₁) using Approach 0's h₁, h₂
+4. Re-references by subtracting country 0's predicted j values (matching Approach 0's identification constraint), absorbing the subtracted quadratic into k
+5. Applies a mean adjustment to align k levels
+6. Generates a 2×2 scatter plot: (a) k(t), (b) j₀,ᵢ, (c) j₁,ᵢ, (d) j₂,ᵢ with best-fit regression equations, R², and correlation
+
+**Options:**
+```
+--data-file PATH   Input CSV file (default: data/input/Maddison_CRU_dataset.csv)
+--output-dir DIR   Output directory (default: data/output/approach0_vs_5c)
+```
+
+**Outputs:**
+- `approach0_vs_5c_scatter.pdf` — 2×2 scatter plot with 1:1 reference and best-fit lines
+- `approach0_vs_5c_scatter_data.csv` — Underlying scatter data for all panels
+- `approach0_vs_5c_derivation.tex` — LaTeX derivation of the equations used
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
@@ -522,6 +549,7 @@ detrended-response/
 │   ├── run_analysis.py              # Main entry point
 │   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
 │   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
+│   ├── compare_approach0_5c.py         # Scatter plots comparing Approach 0 vs 5c parameters
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
