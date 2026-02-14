@@ -198,21 +198,26 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        # Special handling for Approach 6a/6b (separate high/low frequency)
-        if hasattr(r, 'h1_high') and hasattr(r, 'h1_low'):
-            print(f"  h1_high = {r.h1_high:.6f}  (SE: {r.h1_high_se:.6f})")
-            print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")
-            print(f"  h1_low = {r.h1_low:.6f}  (SE: {r.h1_low_se:.6f})")
-            print(f"  h2_low = {r.h2_low:.6f}  (SE: {r.h2_low_se:.6f})")
-            if not np.isnan(r.T_optimal_high):
-                print(f"  T_optimal_high = {r.T_optimal_high:.2f} C")
+        # Special handling for Approach 6a/6b (separate total/trend frequency)
+        if hasattr(r, 'h1_total') and hasattr(r, 'h1_trend'):
+            print(f"  h1_total = {r.h1_total:.6f}  (SE: {r.h1_total_se:.6f})")
+            print(f"  h2_total = {r.h2_total:.6f}  (SE: {r.h2_total_se:.6f})")
+            print(f"  h1_trend = {r.h1_trend:.6f}  (SE: {r.h1_trend_se:.6f})")
+            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
+            if not np.isnan(r.T_optimal_total):
+                print(f"  T_optimal_total = {r.T_optimal_total:.2f} C")
             else:
-                print(f"  T_optimal_high = N/A")
-            if not np.isnan(r.T_optimal_low):
-                print(f"  T_optimal_low = {r.T_optimal_low:.2f} C")
+                print(f"  T_optimal_total = N/A")
+            if not np.isnan(r.T_optimal_trend):
+                print(f"  T_optimal_trend = {r.T_optimal_trend:.2f} C")
             else:
-                print(f"  T_optimal_low = N/A")
-        # Special handling for Approach 8/8a (Piecewise Quadratic / Shared T_opt)
+                print(f"  T_optimal_trend = N/A")
+        # Special handling for Approach 8a (total/trend with shared T_opt)
+        elif hasattr(r, 'h2_total') and hasattr(r, 'h2_trend') and hasattr(r, 'T_opt'):
+            print(f"  h2_total = {r.h2_total:.6f}  (SE: {r.h2_total_se:.6f})")
+            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
+            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+        # Special handling for Approach 8 (Piecewise Quadratic, temperature regions)
         elif hasattr(r, 'h2_low') and hasattr(r, 'h2_high') and hasattr(r, 'T_opt'):
             print(f"  h2_low = {r.h2_low:.6f}  (SE: {r.h2_low_se:.6f})")
             print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")

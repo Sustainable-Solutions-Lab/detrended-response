@@ -162,23 +162,23 @@ Extends Approach 6 by allowing different temperature response functions for the 
 ```
 
 where:
-- `h_total(T) = h₁_high·T + h₂_high·T²` — response to actual (total) temperature
-- `h_trend(T_trend) = h₁_low·T_trend + h₂_low·T_trend²` — response to trend temperature
+- `h_total(T) = h₁_total·T + h₂_total·T²` — response to actual (total) temperature
+- `h_trend(T_trend) = h₁_trend·T_trend + h₂_trend·T_trend²` — response to trend temperature
 - `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
 
 **Parameters:**
-- `h₁_high, h₂_high`: Total temperature response coefficients (response to actual T)
-- `h₁_low, h₂_low`: Trend temperature response coefficients (response to T_trend)
-- `T_optimal_high, T_optimal_low`: Optimal temperatures for total and trend components
+- `h₁_total, h₂_total`: Total temperature response coefficients (response to actual T)
+- `h₁_trend, h₂_trend`: Trend temperature response coefficients (response to T_trend)
+- `T_optimal_total, T_optimal_trend`: Optimal temperatures for total and trend components
 
 **Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
 ```
-h_total(T) - h_trend(T) = (h₁_high - h₁_low)·T + (h₂_high - h₂_low)·T²
+h_total(T) - h_trend(T) = (h₁_total - h₁_trend)·T + (h₂_total - h₂_trend)·T²
 ```
 
 **Interpretation:** If climate adaptation occurs over time, the response to trend temperature changes may differ from the response to total temperature. Approach 6a tests whether economies respond differently to these two components.
 
-**Degrees of freedom:** 4 for h(T) (h₁_high, h₂_high, h₁_low, h₂_low)
+**Degrees of freedom:** 4 for h(T) (h₁_total, h₂_total, h₁_trend, h₂_trend)
 
 ### Approach 6b: Trend Response Only
 
@@ -457,8 +457,9 @@ python scripts/run_influence_analysis.py
 | Approach | Coefficients |
 |----------|--------------|
 | Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_optimal |
-| Approach 6a/6b | h₁_high, h₂_high, h₁_low, h₂_low, T_optimal_high, T_optimal_low |
-| Approach 8/8a | h₂_low, h₂_high, T_optimal |
+| Approach 6a/6b | h₁_total, h₂_total, h₁_trend, h₂_trend, T_optimal_total, T_optimal_trend |
+| Approach 8 | h₂_low, h₂_high, T_optimal |
+| Approach 8a | h₂_total, h₂_trend, T_optimal |
 
 **Example:**
 ```bash

@@ -211,28 +211,36 @@ def main():
         stats = all_stats[name]
         print(f"\n{result.approach}")
         print("-" * 50)
-        # Special handling for Approach 6a/6b (separate high/low frequency)
-        if result.h1_high_point is not None and 'h1_high' in stats:
-            print(f"  h1_high: {result.h1_high_point:.6f}")
-            print(f"    90% CI: [{stats['h1_high']['p5']:.6f}, {stats['h1_high']['p95']:.6f}]")
-            print(f"  h2_high: {result.h2_high_point:.6f}")
-            print(f"    90% CI: [{stats['h2_high']['p5']:.6f}, {stats['h2_high']['p95']:.6f}]")
-            print(f"  h1_low: {result.h1_low_point:.6f}")
-            print(f"    90% CI: [{stats['h1_low']['p5']:.6f}, {stats['h1_low']['p95']:.6f}]")
-            print(f"  h2_low: {result.h2_low_point:.6f}")
-            print(f"    90% CI: [{stats['h2_low']['p5']:.6f}, {stats['h2_low']['p95']:.6f}]")
-            if result.T_optimal_high_point is not None and not np.isnan(result.T_optimal_high_point):
-                print(f"  T_optimal_high: {result.T_optimal_high_point:.2f} C")
-                print(f"    90% CI: [{stats['T_optimal_high']['p5']:.2f}, {stats['T_optimal_high']['p95']:.2f}]")
+        # Special handling for Approach 6a/6b (separate total/trend frequency)
+        if result.h1_total_point is not None and 'h1_total' in stats:
+            print(f"  h1_total: {result.h1_total_point:.6f}")
+            print(f"    90% CI: [{stats['h1_total']['p5']:.6f}, {stats['h1_total']['p95']:.6f}]")
+            print(f"  h2_total: {result.h2_total_point:.6f}")
+            print(f"    90% CI: [{stats['h2_total']['p5']:.6f}, {stats['h2_total']['p95']:.6f}]")
+            print(f"  h1_trend: {result.h1_trend_point:.6f}")
+            print(f"    90% CI: [{stats['h1_trend']['p5']:.6f}, {stats['h1_trend']['p95']:.6f}]")
+            print(f"  h2_trend: {result.h2_trend_point:.6f}")
+            print(f"    90% CI: [{stats['h2_trend']['p5']:.6f}, {stats['h2_trend']['p95']:.6f}]")
+            if result.T_optimal_total_point is not None and not np.isnan(result.T_optimal_total_point):
+                print(f"  T_optimal_total: {result.T_optimal_total_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_total']['p5']:.2f}, {stats['T_optimal_total']['p95']:.2f}]")
             else:
-                print(f"  T_optimal_high: N/A")
-            if result.T_optimal_low_point is not None and not np.isnan(result.T_optimal_low_point):
-                print(f"  T_optimal_low: {result.T_optimal_low_point:.2f} C")
-                print(f"    90% CI: [{stats['T_optimal_low']['p5']:.2f}, {stats['T_optimal_low']['p95']:.2f}]")
+                print(f"  T_optimal_total: N/A")
+            if result.T_optimal_trend_point is not None and not np.isnan(result.T_optimal_trend_point):
+                print(f"  T_optimal_trend: {result.T_optimal_trend_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_trend']['p5']:.2f}, {stats['T_optimal_trend']['p95']:.2f}]")
             else:
-                print(f"  T_optimal_low: N/A")
-        # Special handling for Approach 8/8a (piecewise quadratic / shared T_opt)
-        elif result.h2_low_point is not None and 'h2_low' in stats and result.h1_high_point is None:
+                print(f"  T_optimal_trend: N/A")
+        # Special handling for Approach 8a (total/trend with shared T_opt)
+        elif result.h2_total_point is not None and 'h2_total' in stats and result.h1_total_point is None:
+            print(f"  h2_total: {result.h2_total_point:.6f}")
+            print(f"    90% CI: [{stats['h2_total']['p5']:.6f}, {stats['h2_total']['p95']:.6f}]")
+            print(f"  h2_trend: {result.h2_trend_point:.6f}")
+            print(f"    90% CI: [{stats['h2_trend']['p5']:.6f}, {stats['h2_trend']['p95']:.6f}]")
+            print(f"  T_optimal: {result.T_optimal_point:.2f} C")
+            print(f"    90% CI: [{stats['T_optimal']['p5']:.2f}, {stats['T_optimal']['p95']:.2f}]")
+        # Special handling for Approach 8 (piecewise quadratic, temperature regions)
+        elif result.h2_low_point is not None and 'h2_low' in stats:
             print(f"  h2_low: {result.h2_low_point:.6f}")
             print(f"    90% CI: [{stats['h2_low']['p5']:.6f}, {stats['h2_low']['p95']:.6f}]")
             print(f"  h2_high: {result.h2_high_point:.6f}")

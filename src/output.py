@@ -252,19 +252,27 @@ def save_summary_table(
         # Add Y_ref for GDP-dependent approaches (5d)
         if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
-        # Add h1_high, h2_high, h1_low, h2_low for Approach 6a/6b (separate high/low freq)
-        if hasattr(result, 'h1_high') and hasattr(result, 'h1_low'):
-            row['h1_high'] = result.h1_high
-            row['h1_high_SE'] = result.h1_high_se
-            row['h2_high'] = result.h2_high
-            row['h2_high_SE'] = result.h2_high_se
-            row['h1_low'] = result.h1_low
-            row['h1_low_SE'] = result.h1_low_se
-            row['h2_low'] = result.h2_low
-            row['h2_low_SE'] = result.h2_low_se
-            row['T_optimal_high'] = result.T_optimal_high
-            row['T_optimal_low'] = result.T_optimal_low
-        # Add T_opt, h2_low, h2_high for Approach 8/8a (piecewise quadratic / shared T_opt)
+        # Add h1_total, h2_total, h1_trend, h2_trend for Approach 6a/6b (separate total/trend freq)
+        if hasattr(result, 'h1_total') and hasattr(result, 'h1_trend'):
+            row['h1_total'] = result.h1_total
+            row['h1_total_SE'] = result.h1_total_se
+            row['h2_total'] = result.h2_total
+            row['h2_total_SE'] = result.h2_total_se
+            row['h1_trend'] = result.h1_trend
+            row['h1_trend_SE'] = result.h1_trend_se
+            row['h2_trend'] = result.h2_trend
+            row['h2_trend_SE'] = result.h2_trend_se
+            row['T_optimal_total'] = result.T_optimal_total
+            row['T_optimal_trend'] = result.T_optimal_trend
+        # Add T_opt, h2_total, h2_trend for Approach 8a (shared T_opt, total/trend)
+        elif hasattr(result, 'T_opt') and hasattr(result, 'h2_total'):
+            row['T_opt'] = result.T_opt
+            row['T_opt_SE'] = result.T_opt_se
+            row['h2_total'] = result.h2_total
+            row['h2_total_SE'] = result.h2_total_se
+            row['h2_trend'] = result.h2_trend
+            row['h2_trend_SE'] = result.h2_trend_se
+        # Add T_opt, h2_low, h2_high for Approach 8 (piecewise quadratic)
         elif hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
             row['T_opt'] = result.T_opt
             row['T_opt_SE'] = result.T_opt_se
@@ -346,21 +354,27 @@ def save_summary_table(
         for name, result in results.items():
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            # Special handling for Approach 6a/6b (separate high/low frequency)
-            if hasattr(result, 'h1_high') and hasattr(result, 'h1_low'):
-                f.write(f"  h1_high = {result.h1_high:.6f}  (SE: {result.h1_high_se:.6f})\n")
-                f.write(f"  h2_high = {result.h2_high:.6f}  (SE: {result.h2_high_se:.6f})\n")
-                f.write(f"  h1_low = {result.h1_low:.6f}  (SE: {result.h1_low_se:.6f})\n")
-                f.write(f"  h2_low = {result.h2_low:.6f}  (SE: {result.h2_low_se:.6f})\n")
-                if not np.isnan(result.T_optimal_high):
-                    f.write(f"  T_optimal_high = {result.T_optimal_high:.2f} C\n")
+            # Special handling for Approach 6a/6b (separate total/trend frequency)
+            if hasattr(result, 'h1_total') and hasattr(result, 'h1_trend'):
+                f.write(f"  h1_total = {result.h1_total:.6f}  (SE: {result.h1_total_se:.6f})\n")
+                f.write(f"  h2_total = {result.h2_total:.6f}  (SE: {result.h2_total_se:.6f})\n")
+                f.write(f"  h1_trend = {result.h1_trend:.6f}  (SE: {result.h1_trend_se:.6f})\n")
+                f.write(f"  h2_trend = {result.h2_trend:.6f}  (SE: {result.h2_trend_se:.6f})\n")
+                if not np.isnan(result.T_optimal_total):
+                    f.write(f"  T_optimal_total = {result.T_optimal_total:.2f} C\n")
                 else:
-                    f.write(f"  T_optimal_high = N/A\n")
-                if not np.isnan(result.T_optimal_low):
-                    f.write(f"  T_optimal_low = {result.T_optimal_low:.2f} C\n")
+                    f.write(f"  T_optimal_total = N/A\n")
+                if not np.isnan(result.T_optimal_trend):
+                    f.write(f"  T_optimal_trend = {result.T_optimal_trend:.2f} C\n")
                 else:
-                    f.write(f"  T_optimal_low = N/A\n")
-            # Special handling for Approach 8/8a (piecewise quadratic / shared T_opt)
+                    f.write(f"  T_optimal_trend = N/A\n")
+            # Special handling for Approach 8a (shared T_opt, total/trend)
+            elif hasattr(result, 'T_opt') and hasattr(result, 'h2_total'):
+                f.write(f"  h2_total = {result.h2_total:.6f}  (SE: {result.h2_total_se:.6f})\n")
+                f.write(f"  h2_trend = {result.h2_trend:.6f}  (SE: {result.h2_trend_se:.6f})\n")
+                T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
+                f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
+            # Special handling for Approach 8 (piecewise quadratic)
             elif hasattr(result, 'T_opt') and hasattr(result, 'h2_low'):
                 f.write(f"  h2_low = {result.h2_low:.6f}  (SE: {result.h2_low_se:.6f})\n")
                 f.write(f"  h2_high = {result.h2_high:.6f}  (SE: {result.h2_high_se:.6f})\n")
@@ -1018,20 +1032,25 @@ def save_bootstrap_coefficients_csv(
             # Add beta for approaches where it's a free parameter (7)
             if result.beta_samples is not None:
                 row['beta'] = result.beta_samples[i]
-            # Add h2_low and h2_high for Approach 8/8a (piecewise quadratic / shared T_opt)
-            if result.h2_low_samples is not None:
+            # Add h2_low and h2_high for Approach 8 (piecewise quadratic)
+            if result.h2_low_samples is not None and not np.isnan(result.h2_low_samples[i]):
                 row['h2_low'] = result.h2_low_samples[i]
-            if result.h2_high_samples is not None:
+            if result.h2_high_samples is not None and not np.isnan(result.h2_high_samples[i]):
                 row['h2_high'] = result.h2_high_samples[i]
-            # Add h1_high, h1_low, T_optimal_high, T_optimal_low for Approach 6a/6b
-            if result.h1_high_samples is not None:
-                row['h1_high'] = result.h1_high_samples[i]
-            if result.h1_low_samples is not None:
-                row['h1_low'] = result.h1_low_samples[i]
-            if result.T_optimal_high_samples is not None:
-                row['T_optimal_high'] = result.T_optimal_high_samples[i]
-            if result.T_optimal_low_samples is not None:
-                row['T_optimal_low'] = result.T_optimal_low_samples[i]
+            # Add h1_total, h1_trend, T_optimal_total, T_optimal_trend for Approach 6a/6b
+            if result.h1_total_samples is not None and not np.isnan(result.h1_total_samples[i]):
+                row['h1_total'] = result.h1_total_samples[i]
+            if result.h1_trend_samples is not None and not np.isnan(result.h1_trend_samples[i]):
+                row['h1_trend'] = result.h1_trend_samples[i]
+            if result.T_optimal_total_samples is not None and not np.isnan(result.T_optimal_total_samples[i]):
+                row['T_optimal_total'] = result.T_optimal_total_samples[i]
+            if result.T_optimal_trend_samples is not None and not np.isnan(result.T_optimal_trend_samples[i]):
+                row['T_optimal_trend'] = result.T_optimal_trend_samples[i]
+            # Add h2_total and h2_trend for Approach 8a (shared T_opt, total/trend)
+            if result.h2_total_samples is not None and not np.isnan(result.h2_total_samples[i]):
+                row['h2_total'] = result.h2_total_samples[i]
+            if result.h2_trend_samples is not None and not np.isnan(result.h2_trend_samples[i]):
+                row['h2_trend'] = result.h2_trend_samples[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1107,15 +1126,15 @@ def save_bootstrap_summary_txt(
                 f.write(f"    IQR:             [{stats['beta']['p25']:10.4f}, {stats['beta']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['beta']['std']:10.4f}\n")
 
-            # h2_low and h2_high (for Approach 8/8a piecewise quadratic / shared T_opt)
-            if result.h2_low_point is not None and 'h2_low' in stats and result.h1_high_point is None:
+            # h2_low and h2_high (for Approach 8 piecewise quadratic)
+            if result.h2_low_point is not None and 'h2_low' in stats and result.h1_total_point is None:
                 f.write(f"  h2_low (Curvature for T <= T_opt):\n")
                 f.write(f"    Point estimate:  {result.h2_low_point:10.6f}\n")
                 f.write(f"    Bootstrap median:{stats['h2_low']['p50']:10.6f}\n")
                 f.write(f"    90% CI:          [{stats['h2_low']['p5']:10.6f}, {stats['h2_low']['p95']:10.6f}]\n")
                 f.write(f"    IQR:             [{stats['h2_low']['p25']:10.6f}, {stats['h2_low']['p75']:10.6f}]\n")
                 f.write(f"    Std:             {stats['h2_low']['std']:10.6f}\n")
-            if result.h2_high_point is not None and 'h2_high' in stats and result.h1_high_point is None:
+            if result.h2_high_point is not None and 'h2_high' in stats and result.h1_total_point is None:
                 f.write(f"  h2_high (Curvature for T > T_opt):\n")
                 f.write(f"    Point estimate:  {result.h2_high_point:10.6f}\n")
                 f.write(f"    Bootstrap median:{stats['h2_high']['p50']:10.6f}\n")
@@ -1123,44 +1142,60 @@ def save_bootstrap_summary_txt(
                 f.write(f"    IQR:             [{stats['h2_high']['p25']:10.6f}, {stats['h2_high']['p75']:10.6f}]\n")
                 f.write(f"    Std:             {stats['h2_high']['std']:10.6f}\n")
 
-            # h1_high, h2_high, h1_low, h2_low, T_optimal_high, T_optimal_low (for Approach 6a/6b)
-            if result.h1_high_point is not None and 'h1_high' in stats:
-                f.write(f"  h1_high (Linear coef for high-frequency T):\n")
-                f.write(f"    Point estimate:  {result.h1_high_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['h1_high']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['h1_high']['p5']:10.6f}, {stats['h1_high']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['h1_high']['std']:10.6f}\n")
-                f.write(f"  h2_high (Quadratic coef for high-frequency T):\n")
-                f.write(f"    Point estimate:  {result.h2_high_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['h2_high']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['h2_high']['p5']:10.6f}, {stats['h2_high']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['h2_high']['std']:10.6f}\n")
-                f.write(f"  h1_low (Linear coef for low-frequency Ttrend):\n")
-                f.write(f"    Point estimate:  {result.h1_low_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['h1_low']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['h1_low']['p5']:10.6f}, {stats['h1_low']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['h1_low']['std']:10.6f}\n")
-                f.write(f"  h2_low (Quadratic coef for low-frequency Ttrend):\n")
-                f.write(f"    Point estimate:  {result.h2_low_point:10.6f}\n")
-                f.write(f"    Bootstrap median:{stats['h2_low']['p50']:10.6f}\n")
-                f.write(f"    90% CI:          [{stats['h2_low']['p5']:10.6f}, {stats['h2_low']['p95']:10.6f}]\n")
-                f.write(f"    Std:             {stats['h2_low']['std']:10.6f}\n")
-                if result.T_optimal_high_point is not None and 'T_optimal_high' in stats:
-                    if not np.isnan(result.T_optimal_high_point):
-                        f.write(f"  T_optimal_high (Optimal T for high-frequency, C):\n")
-                        f.write(f"    Point estimate:  {result.T_optimal_high_point:10.2f}\n")
-                        f.write(f"    Bootstrap median:{stats['T_optimal_high']['p50']:10.2f}\n")
-                        f.write(f"    90% CI:          [{stats['T_optimal_high']['p5']:8.2f}, {stats['T_optimal_high']['p95']:8.2f}]\n")
-                        f.write(f"    Std:             {stats['T_optimal_high']['std']:10.4f}\n")
+            # h2_total and h2_trend (for Approach 8a shared T_opt, total/trend)
+            if result.h2_total_point is not None and 'h2_total' in stats:
+                f.write(f"  h2_total (Curvature for total response):\n")
+                f.write(f"    Point estimate:  {result.h2_total_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_total']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_total']['p5']:10.6f}, {stats['h2_total']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{stats['h2_total']['p25']:10.6f}, {stats['h2_total']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_total']['std']:10.6f}\n")
+            if result.h2_trend_point is not None and 'h2_trend' in stats:
+                f.write(f"  h2_trend (Curvature for trend response):\n")
+                f.write(f"    Point estimate:  {result.h2_trend_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_trend']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_trend']['p5']:10.6f}, {stats['h2_trend']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{stats['h2_trend']['p25']:10.6f}, {stats['h2_trend']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_trend']['std']:10.6f}\n")
+
+            # h1_total, h2_total, h1_trend, h2_trend, T_optimal_total, T_optimal_trend (for Approach 6a/6b)
+            if result.h1_total_point is not None and 'h1_total' in stats:
+                f.write(f"  h1_total (Linear coef for total response T):\n")
+                f.write(f"    Point estimate:  {result.h1_total_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h1_total']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h1_total']['p5']:10.6f}, {stats['h1_total']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h1_total']['std']:10.6f}\n")
+                f.write(f"  h2_total (Quadratic coef for total response T):\n")
+                f.write(f"    Point estimate:  {result.h2_total_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_total']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_total']['p5']:10.6f}, {stats['h2_total']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_total']['std']:10.6f}\n")
+                f.write(f"  h1_trend (Linear coef for trend response Ttrend):\n")
+                f.write(f"    Point estimate:  {result.h1_trend_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h1_trend']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h1_trend']['p5']:10.6f}, {stats['h1_trend']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h1_trend']['std']:10.6f}\n")
+                f.write(f"  h2_trend (Quadratic coef for trend response Ttrend):\n")
+                f.write(f"    Point estimate:  {result.h2_trend_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h2_trend']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h2_trend']['p5']:10.6f}, {stats['h2_trend']['p95']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h2_trend']['std']:10.6f}\n")
+                if result.T_optimal_total_point is not None and 'T_optimal_total' in stats:
+                    if not np.isnan(result.T_optimal_total_point):
+                        f.write(f"  T_optimal_total (Optimal T for total response, C):\n")
+                        f.write(f"    Point estimate:  {result.T_optimal_total_point:10.2f}\n")
+                        f.write(f"    Bootstrap median:{stats['T_optimal_total']['p50']:10.2f}\n")
+                        f.write(f"    90% CI:          [{stats['T_optimal_total']['p5']:8.2f}, {stats['T_optimal_total']['p95']:8.2f}]\n")
+                        f.write(f"    Std:             {stats['T_optimal_total']['std']:10.4f}\n")
                     else:
-                        f.write(f"  T_optimal_high: N/A (h_high terms are zero)\n")
-                if result.T_optimal_low_point is not None and 'T_optimal_low' in stats:
-                    if not np.isnan(result.T_optimal_low_point):
-                        f.write(f"  T_optimal_low (Optimal T for low-frequency, C):\n")
-                        f.write(f"    Point estimate:  {result.T_optimal_low_point:10.2f}\n")
-                        f.write(f"    Bootstrap median:{stats['T_optimal_low']['p50']:10.2f}\n")
-                        f.write(f"    90% CI:          [{stats['T_optimal_low']['p5']:8.2f}, {stats['T_optimal_low']['p95']:8.2f}]\n")
-                        f.write(f"    Std:             {stats['T_optimal_low']['std']:10.4f}\n")
+                        f.write(f"  T_optimal_total: N/A (h_total terms are zero)\n")
+                if result.T_optimal_trend_point is not None and 'T_optimal_trend' in stats:
+                    if not np.isnan(result.T_optimal_trend_point):
+                        f.write(f"  T_optimal_trend (Optimal T for trend response, C):\n")
+                        f.write(f"    Point estimate:  {result.T_optimal_trend_point:10.2f}\n")
+                        f.write(f"    Bootstrap median:{stats['T_optimal_trend']['p50']:10.2f}\n")
+                        f.write(f"    90% CI:          [{stats['T_optimal_trend']['p5']:8.2f}, {stats['T_optimal_trend']['p95']:8.2f}]\n")
+                        f.write(f"    Std:             {stats['T_optimal_trend']['std']:10.4f}\n")
 
             # Key variance ratios with bootstrap CIs
             if result.var_decomp_point is not None:
@@ -1339,58 +1374,85 @@ def save_bootstrap_summary_table(
             row['h2_high_p95'] = np.nan
             row['h2_high_std'] = np.nan
 
-        # Add h1_high, h1_low, T_optimal_high, T_optimal_low statistics for Approach 6a/6b
-        if result.h1_high_point is not None and 'h1_high' in stats:
-            row['h1_high_point'] = result.h1_high_point
-            row['h1_high_median'] = stats['h1_high']['p50']
-            row['h1_high_p5'] = stats['h1_high']['p5']
-            row['h1_high_p95'] = stats['h1_high']['p95']
-            row['h1_high_std'] = stats['h1_high']['std']
+        # Add h1_total, h1_trend, T_optimal_total, T_optimal_trend statistics for Approach 6a/6b
+        if result.h1_total_point is not None and 'h1_total' in stats:
+            row['h1_total_point'] = result.h1_total_point
+            row['h1_total_median'] = stats['h1_total']['p50']
+            row['h1_total_p5'] = stats['h1_total']['p5']
+            row['h1_total_p95'] = stats['h1_total']['p95']
+            row['h1_total_std'] = stats['h1_total']['std']
         else:
-            row['h1_high_point'] = np.nan
-            row['h1_high_median'] = np.nan
-            row['h1_high_p5'] = np.nan
-            row['h1_high_p95'] = np.nan
-            row['h1_high_std'] = np.nan
+            row['h1_total_point'] = np.nan
+            row['h1_total_median'] = np.nan
+            row['h1_total_p5'] = np.nan
+            row['h1_total_p95'] = np.nan
+            row['h1_total_std'] = np.nan
 
-        if result.h1_low_point is not None and 'h1_low' in stats:
-            row['h1_low_point'] = result.h1_low_point
-            row['h1_low_median'] = stats['h1_low']['p50']
-            row['h1_low_p5'] = stats['h1_low']['p5']
-            row['h1_low_p95'] = stats['h1_low']['p95']
-            row['h1_low_std'] = stats['h1_low']['std']
+        if result.h1_trend_point is not None and 'h1_trend' in stats:
+            row['h1_trend_point'] = result.h1_trend_point
+            row['h1_trend_median'] = stats['h1_trend']['p50']
+            row['h1_trend_p5'] = stats['h1_trend']['p5']
+            row['h1_trend_p95'] = stats['h1_trend']['p95']
+            row['h1_trend_std'] = stats['h1_trend']['std']
         else:
-            row['h1_low_point'] = np.nan
-            row['h1_low_median'] = np.nan
-            row['h1_low_p5'] = np.nan
-            row['h1_low_p95'] = np.nan
-            row['h1_low_std'] = np.nan
+            row['h1_trend_point'] = np.nan
+            row['h1_trend_median'] = np.nan
+            row['h1_trend_p5'] = np.nan
+            row['h1_trend_p95'] = np.nan
+            row['h1_trend_std'] = np.nan
 
-        if result.T_optimal_high_point is not None and 'T_optimal_high' in stats:
-            row['T_optimal_high_point'] = result.T_optimal_high_point
-            row['T_optimal_high_median'] = stats['T_optimal_high']['p50']
-            row['T_optimal_high_p5'] = stats['T_optimal_high']['p5']
-            row['T_optimal_high_p95'] = stats['T_optimal_high']['p95']
-            row['T_optimal_high_std'] = stats['T_optimal_high']['std']
+        if result.T_optimal_total_point is not None and 'T_optimal_total' in stats:
+            row['T_optimal_total_point'] = result.T_optimal_total_point
+            row['T_optimal_total_median'] = stats['T_optimal_total']['p50']
+            row['T_optimal_total_p5'] = stats['T_optimal_total']['p5']
+            row['T_optimal_total_p95'] = stats['T_optimal_total']['p95']
+            row['T_optimal_total_std'] = stats['T_optimal_total']['std']
         else:
-            row['T_optimal_high_point'] = np.nan
-            row['T_optimal_high_median'] = np.nan
-            row['T_optimal_high_p5'] = np.nan
-            row['T_optimal_high_p95'] = np.nan
-            row['T_optimal_high_std'] = np.nan
+            row['T_optimal_total_point'] = np.nan
+            row['T_optimal_total_median'] = np.nan
+            row['T_optimal_total_p5'] = np.nan
+            row['T_optimal_total_p95'] = np.nan
+            row['T_optimal_total_std'] = np.nan
 
-        if result.T_optimal_low_point is not None and 'T_optimal_low' in stats:
-            row['T_optimal_low_point'] = result.T_optimal_low_point
-            row['T_optimal_low_median'] = stats['T_optimal_low']['p50']
-            row['T_optimal_low_p5'] = stats['T_optimal_low']['p5']
-            row['T_optimal_low_p95'] = stats['T_optimal_low']['p95']
-            row['T_optimal_low_std'] = stats['T_optimal_low']['std']
+        if result.T_optimal_trend_point is not None and 'T_optimal_trend' in stats:
+            row['T_optimal_trend_point'] = result.T_optimal_trend_point
+            row['T_optimal_trend_median'] = stats['T_optimal_trend']['p50']
+            row['T_optimal_trend_p5'] = stats['T_optimal_trend']['p5']
+            row['T_optimal_trend_p95'] = stats['T_optimal_trend']['p95']
+            row['T_optimal_trend_std'] = stats['T_optimal_trend']['std']
         else:
-            row['T_optimal_low_point'] = np.nan
-            row['T_optimal_low_median'] = np.nan
-            row['T_optimal_low_p5'] = np.nan
-            row['T_optimal_low_p95'] = np.nan
-            row['T_optimal_low_std'] = np.nan
+            row['T_optimal_trend_point'] = np.nan
+            row['T_optimal_trend_median'] = np.nan
+            row['T_optimal_trend_p5'] = np.nan
+            row['T_optimal_trend_p95'] = np.nan
+            row['T_optimal_trend_std'] = np.nan
+
+        # Add h2_total, h2_trend statistics for Approach 8a
+        if result.h2_total_point is not None and 'h2_total' in stats:
+            row['h2_total_point'] = result.h2_total_point
+            row['h2_total_median'] = stats['h2_total']['p50']
+            row['h2_total_p5'] = stats['h2_total']['p5']
+            row['h2_total_p95'] = stats['h2_total']['p95']
+            row['h2_total_std'] = stats['h2_total']['std']
+        else:
+            row['h2_total_point'] = np.nan
+            row['h2_total_median'] = np.nan
+            row['h2_total_p5'] = np.nan
+            row['h2_total_p95'] = np.nan
+            row['h2_total_std'] = np.nan
+
+        if result.h2_trend_point is not None and 'h2_trend' in stats:
+            row['h2_trend_point'] = result.h2_trend_point
+            row['h2_trend_median'] = stats['h2_trend']['p50']
+            row['h2_trend_p5'] = stats['h2_trend']['p5']
+            row['h2_trend_p95'] = stats['h2_trend']['p95']
+            row['h2_trend_std'] = stats['h2_trend']['std']
+        else:
+            row['h2_trend_point'] = np.nan
+            row['h2_trend_median'] = np.nan
+            row['h2_trend_p5'] = np.nan
+            row['h2_trend_p95'] = np.nan
+            row['h2_trend_std'] = np.nan
 
         # Variance decomposition
         if result.var_decomp_point is not None:
@@ -1985,61 +2047,61 @@ def plot_climate_response_contours(
         result = results[approach]
 
         if approach == 'approach6a':
-            h1_high = getattr(result, 'h1_high_point', 0) or 0
-            h2_high = getattr(result, 'h2_high_point', 0) or 0
-            h1_low = getattr(result, 'h1_low_point', 0) or 0
-            h2_low = getattr(result, 'h2_low_point', 0) or 0
+            h1_total = getattr(result, 'h1_total_point', 0) or 0
+            h2_total = getattr(result, 'h2_total_point', 0) or 0
+            h1_trend = getattr(result, 'h1_trend_point', 0) or 0
+            h2_trend = getattr(result, 'h2_trend_point', 0) or 0
 
             # Center at optima
-            h_total_opt = -h1_high**2 / (4 * h2_high) if h2_high != 0 else 0
-            h_trend_opt = -h1_low**2 / (4 * h2_low) if h2_low != 0 else 0
+            h_total_opt = -h1_total**2 / (4 * h2_total) if h2_total != 0 else 0
+            h_trend_opt = -h1_trend**2 / (4 * h2_trend) if h2_trend != 0 else 0
 
             # Response functions for rows 0-1 (Ttrend on x-axis)
-            h_total = h1_high * T_grid + h2_high * T_grid**2
-            h_trend = h1_low * Ttrend_grid + h2_low * Ttrend_grid**2
+            h_total = h1_total * T_grid + h2_total * T_grid**2
+            h_trend = h1_trend * Ttrend_grid + h2_trend * Ttrend_grid**2
             response_total_only = h_total - h_total_opt
             response_full = (h_total - h_total_opt) - (h_trend - h_trend_opt)
 
             # Response functions for row 2 (T on x-axis)
             # h_total(T) - h_trend(T - deltaT)
-            h_total_row2 = h1_high * T_grid_row2 + h2_high * T_grid_row2**2
-            h_trend_row2 = h1_low * Ttrend_grid_row2 + h2_low * Ttrend_grid_row2**2
+            h_total_row2 = h1_total * T_grid_row2 + h2_total * T_grid_row2**2
+            h_trend_row2 = h1_trend * Ttrend_grid_row2 + h2_trend * Ttrend_grid_row2**2
             response_full_row2 = (h_total_row2 - h_total_opt) - (h_trend_row2 - h_trend_opt)
 
             # Derivatives for rows 0-1: dh/dT = h1 + 2*h2*T
-            deriv_total = h1_high + 2 * h2_high * T_grid
-            deriv_trend = h1_low + 2 * h2_low * Ttrend_grid
+            deriv_total = h1_total + 2 * h2_total * T_grid
+            deriv_trend = h1_trend + 2 * h2_trend * Ttrend_grid
             deriv_full = deriv_total - deriv_trend
 
             # Derivatives for row 2 (T on x-axis)
             # (dh_total/dT)(T) - (dh_trend/dT)(T - deltaT)
-            deriv_total_row2 = h1_high + 2 * h2_high * T_grid_row2
-            deriv_trend_row2 = h1_low + 2 * h2_low * Ttrend_grid_row2
+            deriv_total_row2 = h1_total + 2 * h2_total * T_grid_row2
+            deriv_trend_row2 = h1_trend + 2 * h2_trend * Ttrend_grid_row2
             deriv_full_row2 = deriv_total_row2 - deriv_trend_row2
 
-            T_opt_trend = getattr(result, 'T_optimal_low_point', None)
+            T_opt_trend = getattr(result, 'T_optimal_trend_point', None)
 
         elif approach == 'approach8a':
-            h2_high = getattr(result, 'h2_high_point', 0) or 0
-            h2_low = getattr(result, 'h2_low_point', 0) or 0
+            h2_total = getattr(result, 'h2_total_point', 0) or 0
+            h2_trend = getattr(result, 'h2_trend_point', 0) or 0
             T_opt = result.T_optimal_point
 
             # Response functions for rows 0-1 (Ttrend on x-axis)
-            response_total_only = h2_high * (T_grid - T_opt)**2
-            response_full = h2_high * (T_grid - T_opt)**2 - h2_low * (Ttrend_grid - T_opt)**2
+            response_total_only = h2_total * (T_grid - T_opt)**2
+            response_full = h2_total * (T_grid - T_opt)**2 - h2_trend * (Ttrend_grid - T_opt)**2
 
             # Response functions for row 2 (T on x-axis)
             # h_total(T) - h_trend(T - deltaT)
-            response_full_row2 = h2_high * (T_grid_row2 - T_opt)**2 - h2_low * (Ttrend_grid_row2 - T_opt)**2
+            response_full_row2 = h2_total * (T_grid_row2 - T_opt)**2 - h2_trend * (Ttrend_grid_row2 - T_opt)**2
 
             # Derivatives for rows 0-1: dh/dT = 2*h2*(T - T_opt)
-            deriv_total = 2 * h2_high * (T_grid - T_opt)
-            deriv_trend = 2 * h2_low * (Ttrend_grid - T_opt)
+            deriv_total = 2 * h2_total * (T_grid - T_opt)
+            deriv_trend = 2 * h2_trend * (Ttrend_grid - T_opt)
             deriv_full = deriv_total - deriv_trend
 
             # Derivatives for row 2 (T on x-axis)
-            deriv_total_row2 = 2 * h2_high * (T_grid_row2 - T_opt)
-            deriv_trend_row2 = 2 * h2_low * (Ttrend_grid_row2 - T_opt)
+            deriv_total_row2 = 2 * h2_total * (T_grid_row2 - T_opt)
+            deriv_trend_row2 = 2 * h2_trend * (Ttrend_grid_row2 - T_opt)
             deriv_full_row2 = deriv_total_row2 - deriv_trend_row2
 
             T_opt_trend = T_opt
@@ -2181,39 +2243,39 @@ def plot_climate_response_contours(
             result = results[approach]
 
             if approach == 'approach6a':
-                h1_high = getattr(result, 'h1_high_point', 0) or 0
-                h2_high = getattr(result, 'h2_high_point', 0) or 0
-                h1_low = getattr(result, 'h1_low_point', 0) or 0
-                h2_low = getattr(result, 'h2_low_point', 0) or 0
+                h1_total = getattr(result, 'h1_total_point', 0) or 0
+                h2_total = getattr(result, 'h2_total_point', 0) or 0
+                h1_trend = getattr(result, 'h1_trend_point', 0) or 0
+                h2_trend = getattr(result, 'h2_trend_point', 0) or 0
 
                 # Center at optima
-                h_total_opt = -h1_high**2 / (4 * h2_high) if h2_high != 0 else 0
-                h_trend_opt = -h1_low**2 / (4 * h2_low) if h2_low != 0 else 0
+                h_total_opt = -h1_total**2 / (4 * h2_total) if h2_total != 0 else 0
+                h_trend_opt = -h1_trend**2 / (4 * h2_trend) if h2_trend != 0 else 0
 
                 # h_total(T) - h_trend(Ttrend)
-                h_total = h1_high * T_grid_p3 + h2_high * T_grid_p3**2
-                h_trend = h1_low * Ttrend_grid_p3 + h2_low * Ttrend_grid_p3**2
+                h_total = h1_total * T_grid_p3 + h2_total * T_grid_p3**2
+                h_trend = h1_trend * Ttrend_grid_p3 + h2_trend * Ttrend_grid_p3**2
                 response = (h_total - h_total_opt) - (h_trend - h_trend_opt)
 
                 # Derivatives: dh_total/dT - dh_trend/dTtrend
-                deriv_total = h1_high + 2 * h2_high * T_grid_p3
-                deriv_trend = h1_low + 2 * h2_low * Ttrend_grid_p3
+                deriv_total = h1_total + 2 * h2_total * T_grid_p3
+                deriv_trend = h1_trend + 2 * h2_trend * Ttrend_grid_p3
                 deriv = deriv_total - deriv_trend
 
-                T_opt_trend = getattr(result, 'T_optimal_low_point', None)
-                T_opt_total = -h1_high / (2 * h2_high) if h2_high != 0 else None
+                T_opt_trend = getattr(result, 'T_optimal_trend_point', None)
+                T_opt_total = -h1_total / (2 * h2_total) if h2_total != 0 else None
 
             elif approach == 'approach8a':
-                h2_high = getattr(result, 'h2_high_point', 0) or 0
-                h2_low = getattr(result, 'h2_low_point', 0) or 0
+                h2_total = getattr(result, 'h2_total_point', 0) or 0
+                h2_trend = getattr(result, 'h2_trend_point', 0) or 0
                 T_opt = result.T_optimal_point
 
                 # h_total(T) - h_trend(Ttrend)
-                response = h2_high * (T_grid_p3 - T_opt)**2 - h2_low * (Ttrend_grid_p3 - T_opt)**2
+                response = h2_total * (T_grid_p3 - T_opt)**2 - h2_trend * (Ttrend_grid_p3 - T_opt)**2
 
                 # Derivatives: dh_total/dT - dh_trend/dTtrend
-                deriv_total = 2 * h2_high * (T_grid_p3 - T_opt)
-                deriv_trend = 2 * h2_low * (Ttrend_grid_p3 - T_opt)
+                deriv_total = 2 * h2_total * (T_grid_p3 - T_opt)
+                deriv_trend = 2 * h2_trend * (Ttrend_grid_p3 - T_opt)
                 deriv = deriv_total - deriv_trend
 
                 T_opt_trend = T_opt
@@ -2315,26 +2377,26 @@ def compute_h_response_uncertainty_bands(
     """
     is_piecewise = (approach_key == 'approach8')
 
-    # Handle approach 6a total response: h_high(T) - h_low(T)
+    # Handle approach 6a total response: h_total(T) - h_trend(T)
     # This matches the contour plot at T_delta = 0 (where T = T_trend)
     if approach_key == 'approach6a_total':
-        h1_high_samples = getattr(result, 'h1_high_samples', None)
-        h2_high_samples = getattr(result, 'h2_high_samples', None)
-        h1_low_samples = getattr(result, 'h1_low_samples', None)
-        h2_low_samples = getattr(result, 'h2_low_samples', None)
-        if h1_high_samples is None or h2_high_samples is None or h1_low_samples is None or h2_low_samples is None:
+        h1_total_samples = getattr(result, 'h1_total_samples', None)
+        h2_total_samples = getattr(result, 'h2_total_samples', None)
+        h1_trend_samples = getattr(result, 'h1_trend_samples', None)
+        h2_trend_samples = getattr(result, 'h2_trend_samples', None)
+        if h1_total_samples is None or h2_total_samples is None or h1_trend_samples is None or h2_trend_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = (~np.isnan(h1_high_samples) & ~np.isnan(h2_high_samples) &
-                      ~np.isnan(h1_low_samples) & ~np.isnan(h2_low_samples))
-        # Total coefficients: h1_total = h1_high - h1_low, h2_total = h2_high - h2_low
-        h1_total = h1_high_samples[valid_mask] - h1_low_samples[valid_mask]
-        h2_total = h2_high_samples[valid_mask] - h2_low_samples[valid_mask]
-        return _compute_quadratic_bands(h1_total, h2_total, T_range, percentiles)
+        valid_mask = (~np.isnan(h1_total_samples) & ~np.isnan(h2_total_samples) &
+                      ~np.isnan(h1_trend_samples) & ~np.isnan(h2_trend_samples))
+        # Net coefficients: h1_net = h1_total - h1_trend, h2_net = h2_total - h2_trend
+        h1_net = h1_total_samples[valid_mask] - h1_trend_samples[valid_mask]
+        h2_net = h2_total_samples[valid_mask] - h2_trend_samples[valid_mask]
+        return _compute_quadratic_bands(h1_net, h2_net, T_range, percentiles)
 
-    # Handle approach 6a low-frequency response
+    # Handle approach 6a trend response
     if approach_key == 'approach6a_low':
-        h1_samples = getattr(result, 'h1_low_samples', None)
-        h2_samples = getattr(result, 'h2_low_samples', None)
+        h1_samples = getattr(result, 'h1_trend_samples', None)
+        h2_samples = getattr(result, 'h2_trend_samples', None)
         if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
         valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
@@ -2342,10 +2404,10 @@ def compute_h_response_uncertainty_bands(
         h2_valid = h2_samples[valid_mask]
         return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
 
-    # Handle approach 6b (low-frequency only)
+    # Handle approach 6b (trend only)
     if approach_key == 'approach6b':
-        h1_samples = getattr(result, 'h1_low_samples', None)
-        h2_samples = getattr(result, 'h2_low_samples', None)
+        h1_samples = getattr(result, 'h1_trend_samples', None)
+        h2_samples = getattr(result, 'h2_trend_samples', None)
         if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
         valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
@@ -2353,23 +2415,23 @@ def compute_h_response_uncertainty_bands(
         h2_valid = h2_samples[valid_mask]
         return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
 
-    # Handle approach 8a total response: (h2_high - h2_low) * (T - T_opt)^2
+    # Handle approach 8a total response: (h2_total - h2_trend) * (T - T_opt)^2
     # This matches the contour plot at T_delta = 0 (where T = T_trend)
     if approach_key == 'approach8a_total':
-        h2_high_samples = getattr(result, 'h2_high_samples', None)
-        h2_low_samples = getattr(result, 'h2_low_samples', None)
+        h2_total_samples = getattr(result, 'h2_total_samples', None)
+        h2_trend_samples = getattr(result, 'h2_trend_samples', None)
         T_opt_samples = getattr(result, 'T_optimal_samples', None)
-        if h2_high_samples is None or h2_low_samples is None or T_opt_samples is None:
+        if h2_total_samples is None or h2_trend_samples is None or T_opt_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = ~np.isnan(h2_high_samples) & ~np.isnan(h2_low_samples) & ~np.isnan(T_opt_samples)
-        # Total curvature: h2_total = h2_high - h2_low
-        h2_total = h2_high_samples[valid_mask] - h2_low_samples[valid_mask]
+        valid_mask = ~np.isnan(h2_total_samples) & ~np.isnan(h2_trend_samples) & ~np.isnan(T_opt_samples)
+        # Net curvature: h2_net = h2_total - h2_trend
+        h2_net = h2_total_samples[valid_mask] - h2_trend_samples[valid_mask]
         T_opt_valid = T_opt_samples[valid_mask]
-        return _compute_symmetric_piecewise_bands(h2_total, T_opt_valid, T_range, percentiles)
+        return _compute_symmetric_piecewise_bands(h2_net, T_opt_valid, T_range, percentiles)
 
-    # Handle approach 8a low-frequency response (piecewise with shared T_opt)
+    # Handle approach 8a trend response (piecewise with shared T_opt)
     if approach_key == 'approach8a_low':
-        h2_samples = getattr(result, 'h2_low_samples', None)
+        h2_samples = getattr(result, 'h2_trend_samples', None)
         T_opt_samples = getattr(result, 'T_optimal_samples', None)
         if h2_samples is None or T_opt_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
@@ -2542,56 +2604,56 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
 
     Returns list of tuples: (param_name, samples, point_est, param_stats, xlabel)
     """
-    # Approach 6a: separate high/low frequency - show both
+    # Approach 6a: separate total/trend frequency - show both
     if name == 'approach6a':
         params = []
-        # High-frequency params
-        h1_high_samples = getattr(result, 'h1_high_samples', None)
-        h2_high_samples = getattr(result, 'h2_high_samples', None)
-        T_opt_high_samples = getattr(result, 'T_optimal_high_samples', None)
-        if h1_high_samples is not None and 'h1_high' in stats:
-            params.append(('h1_high', h1_high_samples, getattr(result, 'h1_high_point', np.nan),
-                          stats['h1_high'], 'h₁_high'))
-        if h2_high_samples is not None and 'h2_high' in stats:
-            params.append(('h2_high', h2_high_samples, getattr(result, 'h2_high_point', np.nan),
-                          stats['h2_high'], 'h₂_high'))
-        if T_opt_high_samples is not None and 'T_optimal_high' in stats:
-            params.append(('T_optimal_high', T_opt_high_samples, getattr(result, 'T_optimal_high_point', np.nan),
-                          stats['T_optimal_high'], 'T_opt_high (°C)'))
-        # Low-frequency params
-        h1_low_samples = getattr(result, 'h1_low_samples', None)
-        h2_low_samples = getattr(result, 'h2_low_samples', None)
-        T_opt_low_samples = getattr(result, 'T_optimal_low_samples', None)
-        if h1_low_samples is not None and 'h1_low' in stats:
-            params.append(('h1_low', h1_low_samples, getattr(result, 'h1_low_point', np.nan),
-                          stats['h1_low'], 'h₁_low'))
-        if h2_low_samples is not None and 'h2_low' in stats:
-            params.append(('h2_low', h2_low_samples, getattr(result, 'h2_low_point', np.nan),
-                          stats['h2_low'], 'h₂_low'))
-        if T_opt_low_samples is not None and 'T_optimal_low' in stats:
-            params.append(('T_optimal_low', T_opt_low_samples, getattr(result, 'T_optimal_low_point', np.nan),
-                          stats['T_optimal_low'], 'T_opt_low (°C)'))
+        # Total params
+        h1_total_samples = getattr(result, 'h1_total_samples', None)
+        h2_total_samples = getattr(result, 'h2_total_samples', None)
+        T_opt_total_samples = getattr(result, 'T_optimal_total_samples', None)
+        if h1_total_samples is not None and 'h1_total' in stats:
+            params.append(('h1_total', h1_total_samples, getattr(result, 'h1_total_point', np.nan),
+                          stats['h1_total'], 'h₁_total'))
+        if h2_total_samples is not None and 'h2_total' in stats:
+            params.append(('h2_total', h2_total_samples, getattr(result, 'h2_total_point', np.nan),
+                          stats['h2_total'], 'h₂_total'))
+        if T_opt_total_samples is not None and 'T_optimal_total' in stats:
+            params.append(('T_optimal_total', T_opt_total_samples, getattr(result, 'T_optimal_total_point', np.nan),
+                          stats['T_optimal_total'], 'T_opt_total (°C)'))
+        # Trend params
+        h1_trend_samples = getattr(result, 'h1_trend_samples', None)
+        h2_trend_samples = getattr(result, 'h2_trend_samples', None)
+        T_opt_trend_samples = getattr(result, 'T_optimal_trend_samples', None)
+        if h1_trend_samples is not None and 'h1_trend' in stats:
+            params.append(('h1_trend', h1_trend_samples, getattr(result, 'h1_trend_point', np.nan),
+                          stats['h1_trend'], 'h₁_trend'))
+        if h2_trend_samples is not None and 'h2_trend' in stats:
+            params.append(('h2_trend', h2_trend_samples, getattr(result, 'h2_trend_point', np.nan),
+                          stats['h2_trend'], 'h₂_trend'))
+        if T_opt_trend_samples is not None and 'T_optimal_trend' in stats:
+            params.append(('T_optimal_trend', T_opt_trend_samples, getattr(result, 'T_optimal_trend_point', np.nan),
+                          stats['T_optimal_trend'], 'T_opt_trend (°C)'))
         return params if params else _get_standard_params(result, stats)
 
-    # Approach 6b: low-frequency only
+    # Approach 6b: trend only
     if name == 'approach6b':
         params = []
-        h1_low_samples = getattr(result, 'h1_low_samples', None)
-        h2_low_samples = getattr(result, 'h2_low_samples', None)
-        T_opt_low_samples = getattr(result, 'T_optimal_low_samples', None)
-        if h1_low_samples is not None and 'h1_low' in stats:
-            params.append(('h1_low', h1_low_samples, getattr(result, 'h1_low_point', np.nan),
-                          stats['h1_low'], 'h₁_low'))
-        if h2_low_samples is not None and 'h2_low' in stats:
-            params.append(('h2_low', h2_low_samples, getattr(result, 'h2_low_point', np.nan),
-                          stats['h2_low'], 'h₂_low'))
-        if T_opt_low_samples is not None and 'T_optimal_low' in stats:
-            params.append(('T_optimal_low', T_opt_low_samples, getattr(result, 'T_optimal_low_point', np.nan),
-                          stats['T_optimal_low'], 'T_opt_low (°C)'))
+        h1_trend_samples = getattr(result, 'h1_trend_samples', None)
+        h2_trend_samples = getattr(result, 'h2_trend_samples', None)
+        T_opt_trend_samples = getattr(result, 'T_optimal_trend_samples', None)
+        if h1_trend_samples is not None and 'h1_trend' in stats:
+            params.append(('h1_trend', h1_trend_samples, getattr(result, 'h1_trend_point', np.nan),
+                          stats['h1_trend'], 'h₁_trend'))
+        if h2_trend_samples is not None and 'h2_trend' in stats:
+            params.append(('h2_trend', h2_trend_samples, getattr(result, 'h2_trend_point', np.nan),
+                          stats['h2_trend'], 'h₂_trend'))
+        if T_opt_trend_samples is not None and 'T_optimal_trend' in stats:
+            params.append(('T_optimal_trend', T_opt_trend_samples, getattr(result, 'T_optimal_trend_point', np.nan),
+                          stats['T_optimal_trend'], 'T_opt_trend (°C)'))
         return params if params else _get_standard_params(result, stats)
 
-    # Approach 8/8a: piecewise quadratic (h2_low, h2_high, T_optimal)
-    if name in ('approach8', 'approach8a'):
+    # Approach 8: piecewise quadratic (h2_low, h2_high, T_optimal)
+    if name == 'approach8':
         params = []
         h2_low_samples = getattr(result, 'h2_low_samples', None)
         h2_high_samples = getattr(result, 'h2_high_samples', None)
@@ -2601,6 +2663,22 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
         if h2_high_samples is not None and 'h2_high' in stats:
             params.append(('h2_high', h2_high_samples, getattr(result, 'h2_high_point', np.nan),
                           stats['h2_high'], 'h₂_high'))
+        if 'T_optimal' in stats:
+            params.append(('T_optimal', result.T_optimal_samples, result.T_optimal_point,
+                          stats['T_optimal'], 'T_optimal (°C)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Approach 8a: total/trend (h2_total, h2_trend, T_optimal)
+    if name == 'approach8a':
+        params = []
+        h2_total_samples = getattr(result, 'h2_total_samples', None)
+        h2_trend_samples = getattr(result, 'h2_trend_samples', None)
+        if h2_total_samples is not None and 'h2_total' in stats:
+            params.append(('h2_total', h2_total_samples, getattr(result, 'h2_total_point', np.nan),
+                          stats['h2_total'], 'h₂_total'))
+        if h2_trend_samples is not None and 'h2_trend' in stats:
+            params.append(('h2_trend', h2_trend_samples, getattr(result, 'h2_trend_point', np.nan),
+                          stats['h2_trend'], 'h₂_trend'))
         if 'T_optimal' in stats:
             params.append(('T_optimal', result.T_optimal_samples, result.T_optimal_point,
                           stats['T_optimal'], 'T_optimal (°C)'))
@@ -2635,9 +2713,10 @@ def plot_all_bootstrap_distributions(
     Creates a multi-page PDF with each approach on its own page.
     Handles different parameter structures for different approaches:
     - Standard (0-5, 5a-5d, 6): h1, h2, T_optimal
-    - Approach 6a: h1_high, h2_high, T_opt_high, h1_low, h2_low, T_opt_low
-    - Approach 6b: h1_low, h2_low, T_opt_low
-    - Approach 8/8a: h2_low, h2_high, T_optimal
+    - Approach 6a: h1_total, h2_total, T_opt_total, h1_trend, h2_trend, T_opt_trend
+    - Approach 6b: h1_trend, h2_trend, T_opt_trend
+    - Approach 8: h2_low, h2_high, T_optimal
+    - Approach 8a: h2_total, h2_trend, T_optimal
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -2784,34 +2863,34 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
     Returns:
         tuple: (h_point array, T_optimal for vertical line)
     """
-    # Handle approach6a total response: h_high(T) - h_low(T)
+    # Handle approach6a total response: h_total(T) - h_trend(T)
     # This matches the contour plot at T_delta = 0 (where T = T_trend)
     if approach_key == 'approach6a_total' or (approach_key == 'approach6a' and variant == 'total'):
-        h1_high = getattr(result, 'h1_high_point', 0) or 0
-        h2_high = getattr(result, 'h2_high_point', 0) or 0
-        h1_low = getattr(result, 'h1_low_point', 0) or 0
-        h2_low = getattr(result, 'h2_low_point', 0) or 0
+        h1_total = getattr(result, 'h1_total_point', 0) or 0
+        h2_total = getattr(result, 'h2_total_point', 0) or 0
+        h1_trend = getattr(result, 'h1_trend_point', 0) or 0
+        h2_trend = getattr(result, 'h2_trend_point', 0) or 0
 
-        # Total response = h_high(T) - h_low(T)
-        h1_total = h1_high - h1_low
-        h2_total = h2_high - h2_low
+        # Net response = h_total(T) - h_trend(T)
+        h1_net = h1_total - h1_trend
+        h2_net = h2_total - h2_trend
 
-        h_T = h1_total * T + h2_total * T ** 2
+        h_T = h1_net * T + h2_net * T ** 2
 
-        # Find optimal temperature for total response
-        if h2_total != 0:
-            T_opt = -h1_total / (2 * h2_total)
-            h_T_opt = -h1_total ** 2 / (4 * h2_total)
+        # Find optimal temperature for net response
+        if h2_net != 0:
+            T_opt = -h1_net / (2 * h2_net)
+            h_T_opt = -h1_net ** 2 / (4 * h2_net)
         else:
             T_opt = np.nan
             h_T_opt = 0
         return h_T - h_T_opt, T_opt
 
-    # Handle approach6a low-frequency
+    # Handle approach6a trend response
     if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
-        h1 = getattr(result, 'h1_low_point', 0) or 0
-        h2 = getattr(result, 'h2_low_point', 0) or 0
-        T_opt = getattr(result, 'T_optimal_low_point', None)
+        h1 = getattr(result, 'h1_trend_point', 0) or 0
+        h2 = getattr(result, 'h2_trend_point', 0) or 0
+        T_opt = getattr(result, 'T_optimal_trend_point', None)
         h_T = h1 * T + h2 * T ** 2
         if h2 != 0:
             h_T_opt = -h1 ** 2 / (4 * h2)
@@ -2822,11 +2901,11 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
             T_opt = T_opt or np.nan
         return h_T - h_T_opt, T_opt
 
-    # Handle approach6b (low-frequency only)
+    # Handle approach6b (trend only)
     if approach_key == 'approach6b':
-        h1 = getattr(result, 'h1_low_point', 0) or 0
-        h2 = getattr(result, 'h2_low_point', 0) or 0
-        T_opt = getattr(result, 'T_optimal_low_point', None)
+        h1 = getattr(result, 'h1_trend_point', 0) or 0
+        h2 = getattr(result, 'h2_trend_point', 0) or 0
+        T_opt = getattr(result, 'T_optimal_trend_point', None)
         h_T = h1 * T + h2 * T ** 2
         if h2 != 0:
             h_T_opt = -h1 ** 2 / (4 * h2)
@@ -2837,20 +2916,20 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
             T_opt = T_opt or np.nan
         return h_T - h_T_opt, T_opt
 
-    # Handle approach8a total response: (h2_high - h2_low) * (T - T_opt)^2
+    # Handle approach8a total response: (h2_total - h2_trend) * (T - T_opt)^2
     # This matches the contour plot at T_delta = 0 (where T = T_trend)
     if approach_key == 'approach8a_total' or (approach_key == 'approach8a' and variant == 'total'):
-        h2_high = getattr(result, 'h2_high_point', 0) or 0
-        h2_low = getattr(result, 'h2_low_point', 0) or 0
+        h2_total = getattr(result, 'h2_total_point', 0) or 0
+        h2_trend = getattr(result, 'h2_trend_point', 0) or 0
         T_opt = result.T_optimal_point
-        # Total response = h2_high*(T-T_opt)² - h2_low*(T-T_opt)² = (h2_high - h2_low)*(T-T_opt)²
-        h2_total = h2_high - h2_low
-        h_point = h2_total * (T - T_opt) ** 2
+        # Net response = h2_total*(T-T_opt)² - h2_trend*(T-T_opt)² = (h2_total - h2_trend)*(T-T_opt)²
+        h2_net = h2_total - h2_trend
+        h_point = h2_net * (T - T_opt) ** 2
         return h_point, T_opt
 
-    # Handle approach8a low-frequency (piecewise with shared T_opt)
+    # Handle approach8a trend (piecewise with shared T_opt)
     if approach_key == 'approach8a_low' or (approach_key == 'approach8a' and variant == 'low'):
-        h2 = getattr(result, 'h2_low_point', 0) or 0
+        h2 = getattr(result, 'h2_trend_point', 0) or 0
         T_opt = result.T_optimal_point
         # h(T) - h(T_opt) = h2 * (T - T_opt)^2 since h(T_opt) = 0
         h_point = h2 * (T - T_opt) ** 2
@@ -3134,10 +3213,10 @@ def compute_derivative_uncertainty_bands(
     """
     is_piecewise = (approach_key == 'approach8')
 
-    # Handle approach 6a high-frequency derivative
+    # Handle approach 6a total derivative
     if approach_key == 'approach6a_high':
-        h1_samples = getattr(result, 'h1_high_samples', None)
-        h2_samples = getattr(result, 'h2_high_samples', None)
+        h1_samples = getattr(result, 'h1_total_samples', None)
+        h2_samples = getattr(result, 'h2_total_samples', None)
         if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
         valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
@@ -3145,10 +3224,10 @@ def compute_derivative_uncertainty_bands(
         h2_valid = h2_samples[valid_mask]
         return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
 
-    # Handle approach 6a low-frequency derivative
+    # Handle approach 6a trend derivative
     if approach_key == 'approach6a_low':
-        h1_samples = getattr(result, 'h1_low_samples', None)
-        h2_samples = getattr(result, 'h2_low_samples', None)
+        h1_samples = getattr(result, 'h1_trend_samples', None)
+        h2_samples = getattr(result, 'h2_trend_samples', None)
         if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
         valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
@@ -3156,10 +3235,10 @@ def compute_derivative_uncertainty_bands(
         h2_valid = h2_samples[valid_mask]
         return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
 
-    # Handle approach 6b (low-frequency only)
+    # Handle approach 6b (trend only)
     if approach_key == 'approach6b':
-        h1_samples = getattr(result, 'h1_low_samples', None)
-        h2_samples = getattr(result, 'h2_low_samples', None)
+        h1_samples = getattr(result, 'h1_trend_samples', None)
+        h2_samples = getattr(result, 'h2_trend_samples', None)
         if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
         valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
@@ -3294,27 +3373,27 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
     Returns:
         dh_point array
     """
-    # Handle approach6a high-frequency
+    # Handle approach6a total
     if approach_key == 'approach6a_high' or (approach_key == 'approach6a' and variant == 'high'):
-        h1 = getattr(result, 'h1_high_point', 0) or 0
-        h2 = getattr(result, 'h2_high_point', 0) or 0
+        h1 = getattr(result, 'h1_total_point', 0) or 0
+        h2 = getattr(result, 'h2_total_point', 0) or 0
         return h1 + 2 * h2 * T
 
-    # Handle approach6a low-frequency
+    # Handle approach6a trend
     if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
-        h1 = getattr(result, 'h1_low_point', 0) or 0
-        h2 = getattr(result, 'h2_low_point', 0) or 0
+        h1 = getattr(result, 'h1_trend_point', 0) or 0
+        h2 = getattr(result, 'h2_trend_point', 0) or 0
         return h1 + 2 * h2 * T
 
-    # Handle approach6b (low-frequency only)
+    # Handle approach6b (trend only)
     if approach_key == 'approach6b':
-        h1 = getattr(result, 'h1_low_point', 0) or 0
-        h2 = getattr(result, 'h2_low_point', 0) or 0
+        h1 = getattr(result, 'h1_trend_point', 0) or 0
+        h2 = getattr(result, 'h2_trend_point', 0) or 0
         return h1 + 2 * h2 * T
 
-    # Handle approach8a high-frequency (piecewise with shared T_opt)
+    # Handle approach8a total (piecewise with shared T_opt)
     if approach_key == 'approach8a_high' or (approach_key == 'approach8a' and variant == 'high'):
-        h2 = getattr(result, 'h2_high_point', 0) or 0
+        h2 = getattr(result, 'h2_total_point', 0) or 0
         T_opt = result.T_optimal_point
         return 2 * h2 * (T - T_opt)
 

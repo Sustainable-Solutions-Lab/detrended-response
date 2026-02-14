@@ -413,22 +413,22 @@ class FitResultApproach6ab:
 
     Where:
         - delta-y*(t) = dy(t) - k(t) - f_trend(dy(t) - k(t)) (same as approach 6)
-        - h_total(T) = h1_high * T + h2_high * T^2 (response to actual temperature)
-        - h_trend(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2 (response to trend)
+        - h_total(T) = h1_total * T + h2_total * T^2 (response to actual temperature)
+        - h_trend(Ttrend) = h1_trend * Ttrend + h2_trend * Ttrend^2 (response to trend)
 
-    Total Response (when T = Ttrend): (h1_high - h1_low)*T + (h2_high - h2_low)*T^2
+    Total Response (when T = Ttrend): (h1_total - h1_trend)*T + (h2_total - h2_trend)*T^2
     """
     approach: str
     # Total (actual T) coefficients (zero for 6b)
-    h1_high: float
-    h2_high: float
-    h1_high_se: float
-    h2_high_se: float
+    h1_total: float
+    h2_total: float
+    h1_total_se: float
+    h2_total_se: float
     # Trend (Ttrend) coefficients
-    h1_low: float
-    h2_low: float
-    h1_low_se: float
-    h2_low_se: float
+    h1_trend: float
+    h2_trend: float
+    h1_trend_se: float
+    h2_trend_se: float
     # Year effects
     k: Dict[int, float]
     # Fit stats
@@ -439,8 +439,8 @@ class FitResultApproach6ab:
     n_params: int
     residuals: np.ndarray
     # Derived
-    T_optimal_high: float  # -h1_high/(2*h2_high)
-    T_optimal_low: float   # -h1_low/(2*h2_low)
+    T_optimal_total: float  # -h1_total/(2*h2_total)
+    T_optimal_trend: float  # -h1_trend/(2*h2_trend)
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -460,21 +460,21 @@ class FitResultApproach6ab:
 class FitResultApproach8a:
     """Container for Approach 8a results with separate total/trend and shared T_opt.
 
-    Model: delta-y*(t) = h2_high * (T - T_opt)^2 - h2_low * (Ttrend - T_opt)^2
+    Model: delta-y*(t) = h2_total * (T - T_opt)^2 - h2_trend * (Ttrend - T_opt)^2
 
     Where:
-        - h2_high: curvature for total (actual T) response
-        - h2_low: curvature for trend (Ttrend) response
+        - h2_total: curvature for total (actual T) response
+        - h2_trend: curvature for trend (Ttrend) response
         - T_opt: shared optimal temperature
 
-    Total Response (when T = Ttrend): (h2_high - h2_low) * (T - T_opt)^2
+    Total Response (when T = Ttrend): (h2_total - h2_trend) * (T - T_opt)^2
     """
     approach: str
     # Curvature coefficients
-    h2_high: float
-    h2_high_se: float
-    h2_low: float
-    h2_low_se: float
+    h2_total: float
+    h2_total_se: float
+    h2_trend: float
+    h2_trend_se: float
     # Shared optimal temperature
     T_opt: float
     T_opt_se: float
@@ -1989,11 +1989,11 @@ def fit_approach6a_separate_high_low_loess(
 
     Where:
         - delta-y*(t) = dy(t) - k(t) - y_loess (same as approach 6)
-        - h_total(T) = h1_high * T + h2_high * T^2 (response to total/actual temperature)
-        - h_trend(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2 (response to trend temperature)
+        - h_total(T) = h1_total * T + h2_total * T^2 (response to total/actual temperature)
+        - h_trend(Ttrend) = h1_trend * Ttrend + h2_trend * Ttrend^2 (response to trend temperature)
         - k(t) pre-computed (not in OLS)
 
-    Total Response: When T = Ttrend, the net effect is (h1_high-h1_low)*T + (h2_high-h2_low)*T^2
+    Total Response: When T = Ttrend, the net effect is (h1_total-h1_trend)*T + (h2_total-h2_trend)*T^2
 
     4-parameter OLS with design matrix: [T, T^2, -Ttrend, -Ttrend^2]
 
@@ -2022,73 +2022,73 @@ def fit_approach6a_separate_high_low_loess(
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
     # Extract coefficients
-    h1_high = beta[0]
-    h2_high = beta[1]
-    h1_low = beta[2]
-    h2_low = beta[3]
-    h1_high_se = np.sqrt(cov[0, 0])
-    h2_high_se = np.sqrt(cov[1, 1])
-    h1_low_se = np.sqrt(cov[2, 2])
-    h2_low_se = np.sqrt(cov[3, 3])
+    h1_total = beta[0]
+    h2_total = beta[1]
+    h1_trend = beta[2]
+    h2_trend = beta[3]
+    h1_total_se = np.sqrt(cov[0, 0])
+    h2_total_se = np.sqrt(cov[1, 1])
+    h1_trend_se = np.sqrt(cov[2, 2])
+    h2_trend_se = np.sqrt(cov[3, 3])
 
     # Year effects are pre-computed year means
     k = dict(year_means)
 
     # Fit statistics
-    n_params = 4  # h1_high, h2_high, h1_low, h2_low
+    n_params = 4  # h1_total, h2_total, h1_trend, h2_trend
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Total R² (variance explained in original dy)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperatures
-    T_optimal_high = compute_T_optimal(h1_high, h2_high)
-    T_optimal_low = compute_T_optimal(h1_low, h2_low)
+    T_optimal_total = compute_T_optimal(h1_total, h2_total)
+    T_optimal_trend = compute_T_optimal(h1_trend, h2_trend)
 
     # Compute RMS values
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
-    # h_high(T)
-    h_high_T = h1_high * T + h2_high * T**2
-    # h_low(Ttrend)
-    h_low_Ttrend = h1_low * Ttrend + h2_low * Ttrend**2
+    # h_total(T)
+    h_total_T = h1_total * T + h2_total * T**2
+    # h_trend(Ttrend)
+    h_trend_Ttrend = h1_trend * Ttrend + h2_trend * Ttrend**2
 
-    # RMS imbalance: h_low(Ttrend) + j_trend + k (since at trend: h_high - h_low should be zero in steady state)
-    imbalance = h_low_Ttrend + j_trend + k_values
+    # RMS imbalance: h_trend(Ttrend) + j_trend + k (since at trend: h_total - h_trend should be zero in steady state)
+    imbalance = h_trend_Ttrend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
-    # RMS of h(T) - climate response magnitude (use high-frequency response to actual T)
-    rms_h = np.sqrt(np.mean((h_high_T - h_low_Ttrend) ** 2))
+    # RMS of h(T) - climate response magnitude (use total response to actual T)
+    rms_h = np.sqrt(np.mean((h_total_T - h_trend_Ttrend) ** 2))
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
-    # Delta_u = h_high(T) - h_low(Ttrend) (climate fluctuation effect)
-    Delta_u = h_high_T - h_low_Ttrend
+    # Delta_u = h_total(T) - h_trend(Ttrend) (climate fluctuation effect)
+    Delta_u = h_total_T - h_trend_Ttrend
     components = {
-        'h_high_T': h_high_T,
-        'h_low_Ttrend': -h_low_Ttrend,  # negative because model is h_high - h_low
+        'h_total_T': h_total_T,
+        'h_trend_Ttrend': -h_trend_Ttrend,  # negative because model is h_total - h_trend
         'j': j_trend,
         'k': k_values,
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    # v = h_low(Ttrend) is the baseline at trend temperature
-    v = h_low_Ttrend
+    # v = h_trend(Ttrend) is the baseline at trend temperature
+    v = h_trend_Ttrend
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach6ab(
-        approach="6a: Separate High/Low Freq LOESS",
-        h1_high=h1_high,
-        h2_high=h2_high,
-        h1_high_se=h1_high_se,
-        h2_high_se=h2_high_se,
-        h1_low=h1_low,
-        h2_low=h2_low,
-        h1_low_se=h1_low_se,
-        h2_low_se=h2_low_se,
+        approach="6a: Separate Total/Trend Freq LOESS",
+        h1_total=h1_total,
+        h2_total=h2_total,
+        h1_total_se=h1_total_se,
+        h2_total_se=h2_total_se,
+        h1_trend=h1_trend,
+        h2_trend=h2_trend,
+        h1_trend_se=h1_trend_se,
+        h2_trend_se=h2_trend_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2096,8 +2096,8 @@ def fit_approach6a_separate_high_low_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal_high=T_optimal_high,
-        T_optimal_low=T_optimal_low,
+        T_optimal_total=T_optimal_total,
+        T_optimal_trend=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2114,7 +2114,7 @@ def fit_approach6b_low_only_loess(
 
     Model: delta-y*(t) = 0 - h_trend(Ttrend)
 
-    Same as 6a but total response (h_high) terms are zero.
+    Same as 6a but total response (h_total) terms are zero.
 
     2-parameter OLS with design matrix: [-Ttrend, -Ttrend^2]
 
@@ -2124,7 +2124,7 @@ def fit_approach6b_low_only_loess(
         year_means: Pre-computed k[t] = mean(dy_i[t])
 
     Returns:
-        FitResultApproach6ab with h_high (total) coefficients set to zero
+        FitResultApproach6ab with h_total coefficients set to zero
     """
     # Get temperature and trend temperature
     T = data.temp
@@ -2142,70 +2142,70 @@ def fit_approach6b_low_only_loess(
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
-    # Extract coefficients (h_high terms are zero)
-    h1_high = 0.0
-    h2_high = 0.0
-    h1_high_se = 0.0
-    h2_high_se = 0.0
-    h1_low = beta[0]
-    h2_low = beta[1]
-    h1_low_se = np.sqrt(cov[0, 0])
-    h2_low_se = np.sqrt(cov[1, 1])
+    # Extract coefficients (h_total terms are zero)
+    h1_total = 0.0
+    h2_total = 0.0
+    h1_total_se = 0.0
+    h2_total_se = 0.0
+    h1_trend = beta[0]
+    h2_trend = beta[1]
+    h1_trend_se = np.sqrt(cov[0, 0])
+    h2_trend_se = np.sqrt(cov[1, 1])
 
     # Year effects are pre-computed year means
     k = dict(year_means)
 
     # Fit statistics
-    n_params = 2  # h1_low, h2_low
+    n_params = 2  # h1_trend, h2_trend
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Total R² (variance explained in original dy)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperatures
-    T_optimal_high = np.nan  # No high-frequency response
-    T_optimal_low = compute_T_optimal(h1_low, h2_low)
+    T_optimal_total = np.nan  # No total response
+    T_optimal_trend = compute_T_optimal(h1_trend, h2_trend)
 
     # Compute RMS values
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
-    # h_low(Ttrend)
-    h_low_Ttrend = h1_low * Ttrend + h2_low * Ttrend**2
+    # h_trend(Ttrend)
+    h_trend_Ttrend = h1_trend * Ttrend + h2_trend * Ttrend**2
 
-    # RMS imbalance: h_low(Ttrend) + j_trend + k
-    imbalance = h_low_Ttrend + j_trend + k_values
+    # RMS imbalance: h_trend(Ttrend) + j_trend + k
+    imbalance = h_trend_Ttrend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
-    # RMS of climate response (just -h_low since h_high = 0)
-    Delta_u = -h_low_Ttrend
+    # RMS of climate response (just -h_trend since h_total = 0)
+    Delta_u = -h_trend_Ttrend
     rms_h = np.sqrt(np.mean(Delta_u ** 2))
     imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
-        'h_low_Ttrend': -h_low_Ttrend,  # negative because model is -h_low
+        'h_trend_Ttrend': -h_trend_Ttrend,  # negative because model is -h_trend
         'j': j_trend,
         'k': k_values,
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    # v = h_low(Ttrend) is the baseline
-    v = h_low_Ttrend
+    # v = h_trend(Ttrend) is the baseline
+    v = h_trend_Ttrend
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach6ab(
-        approach="6b: Low Freq Only LOESS",
-        h1_high=h1_high,
-        h2_high=h2_high,
-        h1_high_se=h1_high_se,
-        h2_high_se=h2_high_se,
-        h1_low=h1_low,
-        h2_low=h2_low,
-        h1_low_se=h1_low_se,
-        h2_low_se=h2_low_se,
+        approach="6b: Trend Freq Only LOESS",
+        h1_total=h1_total,
+        h2_total=h2_total,
+        h1_total_se=h1_total_se,
+        h2_total_se=h2_total_se,
+        h1_trend=h1_trend,
+        h2_trend=h2_trend,
+        h1_trend_se=h1_trend_se,
+        h2_trend_se=h2_trend_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2213,8 +2213,8 @@ def fit_approach6b_low_only_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal_high=T_optimal_high,
-        T_optimal_low=T_optimal_low,
+        T_optimal_total=T_optimal_total,
+        T_optimal_trend=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2232,15 +2232,15 @@ def fit_approach8a_shared_Topt_loess(
 ) -> FitResultApproach8a:
     """Approach 8a: Separate total/trend response with shared T_opt and LOESS detrending.
 
-    Model: delta-y*(t) = h2_high * (T - T_opt)^2 - h2_low * (Ttrend - T_opt)^2
+    Model: delta-y*(t) = h2_total * (T - T_opt)^2 - h2_trend * (Ttrend - T_opt)^2
 
     Both total (actual T) and trend (Ttrend) responses share a common optimal temperature T_opt.
 
-    Total Response: When T = Ttrend, the net effect is (h2_high - h2_low) * (T - T_opt)^2
+    Total Response: When T = Ttrend, the net effect is (h2_total - h2_trend) * (T - T_opt)^2
 
     Nonlinear optimization:
         - Outer: L-BFGS-B over T_opt
-        - Inner: 2-parameter OLS for h2_high (total), h2_low (trend)
+        - Inner: 2-parameter OLS for h2_total (total), h2_trend (trend)
 
     Args:
         data: AnalysisData object
@@ -2249,7 +2249,7 @@ def fit_approach8a_shared_Topt_loess(
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
 
     Returns:
-        FitResultApproach8a with T_opt, h2_high (total), h2_low (trend), and standard errors
+        FitResultApproach8a with T_opt, h2_total (total), h2_trend (trend), and standard errors
     """
     # Get temperature and trend temperature
     T = data.temp
@@ -2262,13 +2262,13 @@ def fit_approach8a_shared_Topt_loess(
         y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
 
     def compute_sse_for_T_opt(T_opt_val):
-        """Compute SSE for given T_opt by solving inner 2-parameter OLS for h2_high, h2_low."""
+        """Compute SSE for given T_opt by solving inner 2-parameter OLS for h2_total, h2_trend."""
         # Design matrix: [(T - T_opt)^2, -(Ttrend - T_opt)^2]
         X1 = (T - T_opt_val) ** 2
         X2 = -(Ttrend - T_opt_val) ** 2
         X = np.column_stack([X1, X2])
 
-        # Solve OLS: min ||y - X @ [h2_high, h2_low]||^2
+        # Solve OLS: min ||y - X @ [h2_total, h2_trend]||^2
         try:
             beta_ols, _, _, _ = linalg.lstsq(X, y)
             y_pred = X @ beta_ols
@@ -2290,16 +2290,16 @@ def fit_approach8a_shared_Topt_loess(
     )
     T_opt_opt = result.x[0]
 
-    # Re-fit at optimal T_opt to get h2_high, h2_low, residuals, covariance
+    # Re-fit at optimal T_opt to get h2_total, h2_trend, residuals, covariance
     X1 = (T - T_opt_opt) ** 2
     X2 = -(Ttrend - T_opt_opt) ** 2
     X_opt = np.column_stack([X1, X2])
 
     beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
-    h2_high = beta_ols[0]
-    h2_low = beta_ols[1]
-    h2_high_se = np.sqrt(cov[0, 0])
-    h2_low_se = np.sqrt(cov[1, 1])
+    h2_total = beta_ols[0]
+    h2_trend = beta_ols[1]
+    h2_total_se = np.sqrt(cov[0, 0])
+    h2_trend_se = np.sqrt(cov[1, 1])
 
     # Compute SE for T_opt using numerical Hessian
     T_opt_se = compute_1d_se_numerical(
@@ -2314,7 +2314,7 @@ def fit_approach8a_shared_Topt_loess(
     k = dict(year_means)
 
     # Fit statistics
-    n_params = 3  # h2_high, h2_low, T_opt
+    n_params = 3  # h2_total, h2_trend, T_opt
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
 
     # Total R² (variance explained in original dy)
@@ -2324,16 +2324,16 @@ def fit_approach8a_shared_Topt_loess(
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
-    # h_high(T) = h2_high * (T - T_opt)^2
-    h_high_T = h2_high * (T - T_opt_opt) ** 2
-    # h_low(Ttrend) = h2_low * (Ttrend - T_opt)^2
-    h_low_Ttrend = h2_low * (Ttrend - T_opt_opt) ** 2
+    # h_total(T) = h2_total * (T - T_opt)^2
+    h_total_T = h2_total * (T - T_opt_opt) ** 2
+    # h_trend(Ttrend) = h2_trend * (Ttrend - T_opt)^2
+    h_trend_Ttrend = h2_trend * (Ttrend - T_opt_opt) ** 2
 
-    # Climate response: h_high(T) - h_low(Ttrend)
-    Delta_u = h_high_T - h_low_Ttrend
+    # Climate response: h_total(T) - h_trend(Ttrend)
+    Delta_u = h_total_T - h_trend_Ttrend
 
-    # RMS imbalance: h_low(Ttrend) + j_trend + k
-    imbalance = h_low_Ttrend + j_trend + k_values
+    # RMS imbalance: h_trend(Ttrend) + j_trend + k
+    imbalance = h_trend_Ttrend + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # RMS of climate response
@@ -2342,24 +2342,24 @@ def fit_approach8a_shared_Topt_loess(
 
     # Compute variance decomposition
     components = {
-        'h_high_T': h_high_T,
-        'h_low_Ttrend': -h_low_Ttrend,  # negative because model is h_high - h_low
+        'h_total_T': h_total_T,
+        'h_trend_Ttrend': -h_trend_Ttrend,  # negative because model is h_total - h_trend
         'j': j_trend,
         'k': k_values,
     }
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    v = h_low_Ttrend
+    v = h_trend_Ttrend
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8a(
-        approach="8a: Shared T_opt High/Low LOESS",
-        h2_high=h2_high,
-        h2_high_se=h2_high_se,
-        h2_low=h2_low,
-        h2_low_se=h2_low_se,
+        approach="8a: Shared T_opt Total/Trend LOESS",
+        h2_total=h2_total,
+        h2_total_se=h2_total_se,
+        h2_trend=h2_trend,
+        h2_trend_se=h2_trend_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
         k=k,

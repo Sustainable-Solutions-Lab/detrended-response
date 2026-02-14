@@ -32,12 +32,13 @@ APPROACH_COEFFICIENTS = {
     'approach6': STANDARD_COEFFICIENTS,
     'nocr0': STANDARD_COEFFICIENTS,
     'nocr5': STANDARD_COEFFICIENTS,
-    # Approach 6a/6b: high/low variants
-    'approach6a': ['h1_high', 'h2_high', 'h1_low', 'h2_low', 'T_optimal_high', 'T_optimal_low'],
-    'approach6b': ['h1_high', 'h2_high', 'h1_low', 'h2_low', 'T_optimal_high', 'T_optimal_low'],
-    # Approach 8/8a: piecewise quadratic
+    # Approach 6a/6b: total/trend variants
+    'approach6a': ['h1_total', 'h2_total', 'h1_trend', 'h2_trend', 'T_optimal_total', 'T_optimal_trend'],
+    'approach6b': ['h1_total', 'h2_total', 'h1_trend', 'h2_trend', 'T_optimal_total', 'T_optimal_trend'],
+    # Approach 8: piecewise quadratic
     'approach8': ['h2_low', 'h2_high', 'T_optimal'],
-    'approach8a': ['h2_low', 'h2_high', 'T_optimal'],
+    # Approach 8a: total/trend (shared T_optimal)
+    'approach8a': ['h2_total', 'h2_trend', 'T_optimal'],
 }
 
 
