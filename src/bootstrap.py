@@ -606,6 +606,14 @@ def compute_bootstrap_statistics(
     if result.h0_point is not None and result.h0_samples is not None:
         stats['h0'] = get_percentile_stats(result.h0_samples, result.h0_point)
 
+    # Add h1_dep, h2_dep, T_optimal_dep statistics if present (Approach 6c)
+    if result.h1_dep_point is not None and result.h1_dep_samples is not None:
+        stats['h1_dep'] = get_percentile_stats(result.h1_dep_samples, result.h1_dep_point)
+    if result.h2_dep_point is not None and result.h2_dep_samples is not None:
+        stats['h2_dep'] = get_percentile_stats(result.h2_dep_samples, result.h2_dep_point)
+    if result.T_optimal_dep_point is not None and result.T_optimal_dep_samples is not None:
+        stats['T_optimal_dep'] = get_percentile_stats(result.T_optimal_dep_samples, result.T_optimal_dep_point)
+
     # Variance decomposition statistics
     if result.var_decomp_point is not None and result.var_decomp_samples is not None:
         for key, samples in result.var_decomp_samples.items():

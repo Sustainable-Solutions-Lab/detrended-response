@@ -231,6 +231,26 @@ def main():
                 print(f"    90% CI: [{stats['T_optimal_trend']['p5']:.2f}, {stats['T_optimal_trend']['p95']:.2f}]")
             else:
                 print(f"  T_optimal_trend: N/A")
+        # Special handling for Approach 6c (departure/trend decomposition)
+        elif result.h1_dep_point is not None and 'h1_dep' in stats:
+            print(f"  h1_dep: {result.h1_dep_point:.6f}")
+            print(f"    90% CI: [{stats['h1_dep']['p5']:.6f}, {stats['h1_dep']['p95']:.6f}]")
+            print(f"  h2_dep: {result.h2_dep_point:.6f}")
+            print(f"    90% CI: [{stats['h2_dep']['p5']:.6f}, {stats['h2_dep']['p95']:.6f}]")
+            print(f"  h1_trend: {result.h1_trend_point:.6f}")
+            print(f"    90% CI: [{stats['h1_trend']['p5']:.6f}, {stats['h1_trend']['p95']:.6f}]")
+            print(f"  h2_trend: {result.h2_trend_point:.6f}")
+            print(f"    90% CI: [{stats['h2_trend']['p5']:.6f}, {stats['h2_trend']['p95']:.6f}]")
+            if result.T_optimal_dep_point is not None and not np.isnan(result.T_optimal_dep_point):
+                print(f"  T_optimal_dep: {result.T_optimal_dep_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_dep']['p5']:.2f}, {stats['T_optimal_dep']['p95']:.2f}]")
+            else:
+                print(f"  T_optimal_dep: N/A")
+            if result.T_optimal_trend_point is not None and not np.isnan(result.T_optimal_trend_point):
+                print(f"  T_optimal_trend: {result.T_optimal_trend_point:.2f} C")
+                print(f"    90% CI: [{stats['T_optimal_trend']['p5']:.2f}, {stats['T_optimal_trend']['p95']:.2f}]")
+            else:
+                print(f"  T_optimal_trend: N/A")
         # Special handling for Approach 8a (total/trend with shared T_opt)
         elif result.h2_total_point is not None and 'h2_total' in stats and result.h1_total_point is None:
             print(f"  h2_total: {result.h2_total_point:.6f}")
@@ -259,6 +279,10 @@ def main():
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+            # Print h0 for Approach 8b (modulated response)
+            if result.h0_point is not None and 'h0' in stats:
+                print(f"  h0: {result.h0_point:.6f}")
+                print(f"    90% CI: [{stats['h0']['p5']:.6f}, {stats['h0']['p95']:.6f}]")
             # Print beta for Approach 7
             if result.beta_point is not None and 'beta' in stats:
                 print(f"  beta: {result.beta_point:.4f}")
