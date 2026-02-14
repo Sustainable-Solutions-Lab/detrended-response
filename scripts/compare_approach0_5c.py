@@ -222,13 +222,6 @@ def main():
         for yr in unique_years
     ])
 
-    # Shift k5c to match k0's mean; subtract same shift from j0 predictions
-    k_mean_diff = np.mean(k5c_values) - np.mean(k0_values)
-    k5c_values = k5c_values - k_mean_diff
-    for c in j0_pred:
-        j0_pred[c] -= k_mean_diff
-    print(f"  k mean shift: {k_mean_diff:.6f}")
-
     # Build arrays for scatter (all countries including reference country 0)
     countries = list(range(data.n_countries))
     j0_act_arr = np.array([j0_actual[c] for c in countries])

@@ -153,19 +153,6 @@ k5c_values = [
 ]
 ```
 
-### Step 7: Apply Mean Adjustment
-
-A final mean adjustment aligns the overall levels:
-
-```python
-k_mean_diff = np.mean(k5c_values) - np.mean(k0_values)
-k5c_values = k5c_values - k_mean_diff
-for c in j0_pred:
-    j0_pred[c] -= k_mean_diff
-```
-
-This adjustment is necessary because there's an arbitrary constant that can shift between k and j₀ without changing the model fit.
-
 ## Expected Results
 
 If both approaches estimate the same underlying model correctly, the scatter plots should show:
