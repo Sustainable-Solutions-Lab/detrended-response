@@ -524,6 +524,8 @@ python scripts/compare_approach0_5c.py
 - `approach0_vs_5c_scatter_data.csv` — Underlying scatter data for all panels
 - `approach0_vs_5c_derivation.tex` — LaTeX derivation of the equations used
 
+For a detailed step-by-step mathematical derivation of this analysis, see [METHODS_DETAIL.md](METHODS_DETAIL.md).
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
