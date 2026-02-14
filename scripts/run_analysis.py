@@ -41,8 +41,10 @@ from src.fitting import (
     fit_approach6_precomputed_k_loess,
     fit_approach6a_separate_high_low_loess,
     fit_approach6b_low_only_loess,
+    fit_approach6c_departure_trend_loess,
     fit_approach8_gaussian_loess,
     fit_approach8a_shared_Topt_loess,
+    fit_approach8b_modulated_loess,
     fit_nocr0_joint,
     fit_nocr5_precomputed_k,
 )
@@ -177,12 +179,14 @@ def main():
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 8, 8a: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 6c, 8, 8a, 8b: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach6a'] = fit_approach6a_separate_high_low_loess(data, trends_loess, year_means)
     results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
+    results['approach6c'] = fit_approach6c_departure_trend_loess(data, trends_loess, year_means)
     results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
     results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
+    results['approach8b'] = fit_approach8b_modulated_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
@@ -212,6 +216,20 @@ def main():
                 print(f"  T_optimal_trend = {r.T_optimal_trend:.2f} C")
             else:
                 print(f"  T_optimal_trend = N/A")
+        # Special handling for Approach 6c (departure/trend decomposition)
+        elif hasattr(r, 'h1_dep') and hasattr(r, 'h1_trend'):
+            print(f"  h1_dep = {r.h1_dep:.6f}  (SE: {r.h1_dep_se:.6f})")
+            print(f"  h2_dep = {r.h2_dep:.6f}  (SE: {r.h2_dep_se:.6f})")
+            print(f"  h1_trend = {r.h1_trend:.6f}  (SE: {r.h1_trend_se:.6f})")
+            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
+            if not np.isnan(r.T_optimal_dep):
+                print(f"  T_optimal_dep = {r.T_optimal_dep:.2f} C")
+            else:
+                print(f"  T_optimal_dep = N/A")
+            if not np.isnan(r.T_optimal_trend):
+                print(f"  T_optimal_trend = {r.T_optimal_trend:.2f} C")
+            else:
+                print(f"  T_optimal_trend = N/A")
         # Special handling for Approach 8a (total/trend with shared T_opt)
         elif hasattr(r, 'h2_total') and hasattr(r, 'h2_trend') and hasattr(r, 'T_opt'):
             print(f"  h2_total = {r.h2_total:.6f}  (SE: {r.h2_total_se:.6f})")
@@ -223,6 +241,9 @@ def main():
             print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
         else:
+            # Print h0 for Approach 8b (modulated response)
+            if hasattr(r, 'h0') and r.h0 is not None:
+                print(f"  h0 = {r.h0:12.6f}  (SE: {r.h0_se:.6f})")
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             # Print beta for Approach 7

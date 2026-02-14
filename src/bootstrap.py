@@ -94,6 +94,18 @@ class BootstrapResult:
     h2_trend_point: float = None     # Curvature for trend response (Ttrend)
     h2_trend_samples: np.ndarray = None  # Bootstrap samples for h2_trend
 
+    # Approach 8b (modulated response) specific (optional)
+    h0_point: float = None           # Modulation coefficient
+    h0_samples: np.ndarray = None    # Bootstrap samples for h0
+
+    # Approach 6c (departure/trend decomposition) specific (optional)
+    h1_dep_point: float = None       # Linear coef for departure (T - Ttrend)
+    h1_dep_samples: np.ndarray = None
+    h2_dep_point: float = None       # Quadratic coef for departure
+    h2_dep_samples: np.ndarray = None
+    T_optimal_dep_point: float = None  # Optimal departure from trend
+    T_optimal_dep_samples: np.ndarray = None
+
     # Variance decomposition
     var_decomp_point: dict = None   # From original fit
     var_decomp_samples: dict = None  # Dict mapping key -> np.ndarray of bootstrap samples
@@ -236,6 +248,12 @@ def run_bootstrap(
     # For Approach 8a (shared T_opt, total/trend)
     h2_total_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
     h2_trend_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    # For Approach 8b (modulated response)
+    h0_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    # For Approach 6c (departure/trend decomposition)
+    h1_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    h2_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    T_optimal_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -328,6 +346,16 @@ def run_bootstrap(
                     h2_total_samples[name][b] = r.h2_total
                 if hasattr(r, 'h2_trend'):
                     h2_trend_samples[name][b] = r.h2_trend
+                # Store h0 for Approach 8b (modulated response)
+                if hasattr(r, 'h0') and r.h0 is not None:
+                    h0_samples[name][b] = r.h0
+                # Store h1_dep, h2_dep, T_optimal_dep for Approach 6c
+                if hasattr(r, 'h1_dep'):
+                    h1_dep_samples[name][b] = r.h1_dep
+                if hasattr(r, 'h2_dep'):
+                    h2_dep_samples[name][b] = r.h2_dep
+                if hasattr(r, 'T_optimal_dep'):
+                    T_optimal_dep_samples[name][b] = r.T_optimal_dep
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -368,6 +396,10 @@ def run_bootstrap(
                 T_optimal_trend_samples[name][b] = np.nan
                 h2_total_samples[name][b] = np.nan
                 h2_trend_samples[name][b] = np.nan
+                h0_samples[name][b] = np.nan
+                h1_dep_samples[name][b] = np.nan
+                h2_dep_samples[name][b] = np.nan
+                T_optimal_dep_samples[name][b] = np.nan
 
         # Progress reporting
         if verbose and (b + 1) % 10 == 0:
@@ -436,6 +468,12 @@ def run_bootstrap(
         # Get h2_total, h2_trend for Approach 8a
         h2_total_point = getattr(orig, 'h2_total', None)
         h2_trend_point = getattr(orig, 'h2_trend', None)
+        # Get h0 for Approach 8b
+        h0_point = getattr(orig, 'h0', None)
+        # Get h1_dep, h2_dep, T_optimal_dep for Approach 6c
+        h1_dep_point = getattr(orig, 'h1_dep', None)
+        h2_dep_point = getattr(orig, 'h2_dep', None)
+        T_optimal_dep_point = getattr(orig, 'T_optimal_dep', None)
 
         # Use detrended k_point for approach0 and nocr0
         if name in k_point_detrended:
@@ -475,6 +513,14 @@ def run_bootstrap(
             h2_total_samples=h2_total_samples[name],
             h2_trend_point=h2_trend_point,
             h2_trend_samples=h2_trend_samples[name],
+            h0_point=h0_point,
+            h0_samples=h0_samples[name],
+            h1_dep_point=h1_dep_point,
+            h1_dep_samples=h1_dep_samples[name],
+            h2_dep_point=h2_dep_point,
+            h2_dep_samples=h2_dep_samples[name],
+            T_optimal_dep_point=T_optimal_dep_point,
+            T_optimal_dep_samples=T_optimal_dep_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
             var_attrib_point=getattr(orig, 'var_attrib', None),
@@ -555,6 +601,10 @@ def compute_bootstrap_statistics(
         stats['h2_total'] = get_percentile_stats(result.h2_total_samples, result.h2_total_point)
     if result.h2_trend_point is not None and result.h2_trend_samples is not None:
         stats['h2_trend'] = get_percentile_stats(result.h2_trend_samples, result.h2_trend_point)
+
+    # Add h0 statistics if present (Approach 8b)
+    if result.h0_point is not None and result.h0_samples is not None:
+        stats['h0'] = get_percentile_stats(result.h0_samples, result.h0_point)
 
     # Variance decomposition statistics
     if result.var_decomp_point is not None and result.var_decomp_samples is not None:

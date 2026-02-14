@@ -39,6 +39,8 @@ APPROACH_COEFFICIENTS = {
     'approach8': ['h2_low', 'h2_high', 'T_optimal'],
     # Approach 8a: total/trend (shared T_optimal)
     'approach8a': ['h2_total', 'h2_trend', 'T_optimal'],
+    # Approach 8b: modulated response
+    'approach8b': ['h0', 'h1', 'h2', 'T_optimal'],
 }
 
 

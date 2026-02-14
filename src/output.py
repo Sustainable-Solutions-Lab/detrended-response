@@ -48,7 +48,11 @@ APPROACH_COLORS = {
     'approach5c': 'red',
     'approach5d': 'purple',
     'approach6': 'orange',
+    'approach6a': 'darkorange',
+    'approach6b': 'coral',
     'approach8': 'magenta',
+    'approach8a': 'darkviolet',
+    'approach8b': 'mediumorchid',
     'nocr0': 'gray',
     'nocr5': 'gray',
 }
@@ -71,7 +75,11 @@ APPROACH_LINESTYLES = {
     'approach5c': '-.',
     'approach5d': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
+    'approach6a': (0, (5, 1)),  # densely dashed
+    'approach6b': (0, (5, 1)),  # densely dashed
     'approach8': (0, (5, 1)),   # densely dashed
+    'approach8a': (0, (5, 1)),  # densely dashed
+    'approach8b': (0, (5, 1)),  # densely dashed
     'nocr0': '--',
     'nocr5': ':',
 }
@@ -264,6 +272,18 @@ def save_summary_table(
             row['h2_trend_SE'] = result.h2_trend_se
             row['T_optimal_total'] = result.T_optimal_total
             row['T_optimal_trend'] = result.T_optimal_trend
+        # Add h1_dep, h2_dep, h1_trend, h2_trend for Approach 6c (departure/trend decomposition)
+        elif hasattr(result, 'h1_dep') and hasattr(result, 'h1_trend'):
+            row['h1_dep'] = result.h1_dep
+            row['h1_dep_SE'] = result.h1_dep_se
+            row['h2_dep'] = result.h2_dep
+            row['h2_dep_SE'] = result.h2_dep_se
+            row['h1_trend'] = result.h1_trend
+            row['h1_trend_SE'] = result.h1_trend_se
+            row['h2_trend'] = result.h2_trend
+            row['h2_trend_SE'] = result.h2_trend_se
+            row['T_optimal_dep'] = result.T_optimal_dep
+            row['T_optimal_trend'] = result.T_optimal_trend
         # Add T_opt, h2_total, h2_trend for Approach 8a (shared T_opt, total/trend)
         elif hasattr(result, 'T_opt') and hasattr(result, 'h2_total'):
             row['T_opt'] = result.T_opt
@@ -280,6 +300,10 @@ def save_summary_table(
             row['h2_low_SE'] = result.h2_low_se
             row['h2_high'] = result.h2_high
             row['h2_high_SE'] = result.h2_high_se
+        # Add h0 for Approach 8b (modulated response)
+        if hasattr(result, 'h0') and result.h0 is not None:
+            row['h0'] = result.h0
+            row['h0_SE'] = result.h0_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -368,6 +392,20 @@ def save_summary_table(
                     f.write(f"  T_optimal_trend = {result.T_optimal_trend:.2f} C\n")
                 else:
                     f.write(f"  T_optimal_trend = N/A\n")
+            # Special handling for Approach 6c (departure/trend decomposition)
+            elif hasattr(result, 'h1_dep') and hasattr(result, 'h1_trend'):
+                f.write(f"  h1_dep = {result.h1_dep:.6f}  (SE: {result.h1_dep_se:.6f})\n")
+                f.write(f"  h2_dep = {result.h2_dep:.6f}  (SE: {result.h2_dep_se:.6f})\n")
+                f.write(f"  h1_trend = {result.h1_trend:.6f}  (SE: {result.h1_trend_se:.6f})\n")
+                f.write(f"  h2_trend = {result.h2_trend:.6f}  (SE: {result.h2_trend_se:.6f})\n")
+                if not np.isnan(result.T_optimal_dep):
+                    f.write(f"  T_optimal_dep = {result.T_optimal_dep:.2f} C\n")
+                else:
+                    f.write(f"  T_optimal_dep = N/A\n")
+                if not np.isnan(result.T_optimal_trend):
+                    f.write(f"  T_optimal_trend = {result.T_optimal_trend:.2f} C\n")
+                else:
+                    f.write(f"  T_optimal_trend = N/A\n")
             # Special handling for Approach 8a (shared T_opt, total/trend)
             elif hasattr(result, 'T_opt') and hasattr(result, 'h2_total'):
                 f.write(f"  h2_total = {result.h2_total:.6f}  (SE: {result.h2_total_se:.6f})\n")
@@ -381,6 +419,9 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
                 f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
             else:
+                # Add h0 for Approach 8b (modulated response)
+                if hasattr(result, 'h0') and result.h0 is not None:
+                    f.write(f"  h0 = {result.h0:12.6f}  (SE: {result.h0_se:.6f})\n")
                 f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
                 f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
                 # Add beta for GDP-dependent approaches (5d)
@@ -597,7 +638,7 @@ def plot_temperature_response(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -668,7 +709,7 @@ def plot_temperature_derivative(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -1051,6 +1092,9 @@ def save_bootstrap_coefficients_csv(
                 row['h2_total'] = result.h2_total_samples[i]
             if result.h2_trend_samples is not None and not np.isnan(result.h2_trend_samples[i]):
                 row['h2_trend'] = result.h2_trend_samples[i]
+            # Add h0 for Approach 8b (modulated response)
+            if result.h0_samples is not None and not np.isnan(result.h0_samples[i]):
+                row['h0'] = result.h0_samples[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1196,6 +1240,15 @@ def save_bootstrap_summary_txt(
                         f.write(f"    Bootstrap median:{stats['T_optimal_trend']['p50']:10.2f}\n")
                         f.write(f"    90% CI:          [{stats['T_optimal_trend']['p5']:8.2f}, {stats['T_optimal_trend']['p95']:8.2f}]\n")
                         f.write(f"    Std:             {stats['T_optimal_trend']['std']:10.4f}\n")
+
+            # h0 (for Approach 8b modulated response)
+            if result.h0_point is not None and 'h0' in stats:
+                f.write(f"  h0 (Modulation coefficient):\n")
+                f.write(f"    Point estimate:  {result.h0_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{stats['h0']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{stats['h0']['p5']:10.6f}, {stats['h0']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{stats['h0']['p25']:10.6f}, {stats['h0']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {stats['h0']['std']:10.6f}\n")
 
             # Key variance ratios with bootstrap CIs
             if result.var_decomp_point is not None:
@@ -3058,8 +3111,12 @@ def plot_bootstrap_temperature_response(
         n_rows, n_cols = 3, 3
     elif n_panels <= 12:
         n_rows, n_cols = 4, 3
-    else:
+    elif n_panels <= 16:
         n_rows, n_cols = 4, 4
+    elif n_panels <= 20:
+        n_rows, n_cols = 5, 4
+    else:
+        n_rows, n_cols = 6, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     if n_panels == 1:
@@ -3516,8 +3573,12 @@ def plot_bootstrap_temperature_derivative(
         n_rows, n_cols = 3, 3
     elif n_panels <= 12:
         n_rows, n_cols = 4, 3
-    else:
+    elif n_panels <= 16:
         n_rows, n_cols = 4, 4
+    elif n_panels <= 20:
+        n_rows, n_cols = 5, 4
+    else:
+        n_rows, n_cols = 6, 4
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
     if n_panels == 1:
@@ -4016,7 +4077,7 @@ def save_all_bootstrap_plots(
     # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 8, 8a)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
+        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4029,7 +4090,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a'],
+                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

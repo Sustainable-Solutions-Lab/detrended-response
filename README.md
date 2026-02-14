@@ -190,11 +190,11 @@ A restricted version of Approach 6a that sets the total temperature response to 
 
 where:
 - `h_total(T) = 0` (no response to total temperature)
-- `h_trend(T_trend) = h₁_low·T_trend + h₂_low·T_trend²`
+- `h_trend(T_trend) = h₁_trend·T_trend + h₂_trend·T_trend²`
 
 **Interpretation:** Tests the hypothesis that only trend temperature affects economic growth, while deviations from the trend have no systematic effect.
 
-**Degrees of freedom:** 2 for h(T) (h₁_low, h₂_low)
+**Degrees of freedom:** 2 for h(T) (h₁_trend, h₂_trend)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 
@@ -232,17 +232,17 @@ h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
 Combines the total/trend separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for total temperature (T) and trend temperature (T_trend), but with a shared optimal temperature.
 
 ```
-Δy*(t) = h₂_high·(T - T_opt)² - h₂_low·(T_trend - T_opt)²
+Δy*(t) = h₂_total·(T - T_opt)² - h₂_trend·(T_trend - T_opt)²
 ```
 
 where:
-- `h₂_high`: Curvature for total (actual) temperature response
-- `h₂_low`: Curvature for trend temperature response
+- `h₂_total`: Curvature for total (actual) temperature response
+- `h₂_trend`: Curvature for trend temperature response
 - `T_opt`: Shared optimal temperature for both components
 
 **Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
 ```
-(h₂_high - h₂_low)·(T - T_opt)²
+(h₂_total - h₂_trend)·(T - T_opt)²
 ```
 
 **Key features:**
@@ -252,7 +252,33 @@ where:
 
 **Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between total temperature and trend temperature, while maintaining a common optimal temperature.
 
-**Degrees of freedom:** 3 (T_opt, h₂_high, h₂_low)
+**Degrees of freedom:** 3 (T_opt, h₂_total, h₂_trend)
+
+### Approach 8b: Squared-Deviation Modulated Temperature Response
+
+Uses a symmetric modulation where the temperature response is scaled by the squared deviation from trend temperature. This captures effects that depend on the magnitude of deviation from trend, regardless of sign.
+
+**Model:**
+```
+Δy*(t) = (1 + h₀ · (T - T_trend)²) · (h₁ · T + h₂ · T²)
+```
+
+**Parameters:**
+- `h₀`: Squared-deviation modulation coefficient
+- `h₁, h₂`: Standard quadratic temperature response coefficients
+- `T_optimal`: Optimal temperature = -h₁/(2·h₂)
+
+**Interpretation:**
+- When T = T_trend, the multiplier is 1 (standard quadratic response)
+- Any deviation from trend (warmer or cooler) scales the response by (1 + h₀·T_delta²)
+- If h₀ > 0: deviations from trend amplify the temperature response
+- If h₀ < 0: deviations from trend dampen the temperature response
+
+**Fitting Strategy:**
+- Outer optimization: Search for h₀ using L-BFGS-B
+- Inner OLS: For each h₀, solve for h₁ and h₂ via 2-column OLS
+
+**Degrees of freedom:** 3 (h₀, h₁, h₂)
 
 ### Null Models (No Climate Response)
 
