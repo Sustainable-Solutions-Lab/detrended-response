@@ -153,41 +153,46 @@ Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
-### Approach 6a: Separate High/Low Frequency Response
+### Approach 6a: Separate Total/Trend Response
 
-Extends Approach 6 by allowing different temperature response functions for high-frequency (year-to-year deviations) vs low-frequency (trend) temperature variations.
+Extends Approach 6 by allowing different temperature response functions for the total temperature (T) vs trend temperature (T_trend) components.
 
 ```
-Δy*(t) = h_high(T) - h_low(T_trend)
+Δy*(t) = h_total(T) - h_trend(T_trend)
 ```
 
 where:
-- `h_high(T) = h₁_high·T + h₂_high·T²` — response to actual temperature
-- `h_low(T_trend) = h₁_low·T_trend + h₂_low·T_trend²` — response to trend temperature
+- `h_total(T) = h₁_high·T + h₂_high·T²` — response to actual (total) temperature
+- `h_trend(T_trend) = h₁_low·T_trend + h₂_low·T_trend²` — response to trend temperature
 - `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
 
 **Parameters:**
-- `h₁_high, h₂_high`: High-frequency temperature response coefficients
-- `h₁_low, h₂_low`: Low-frequency (trend) temperature response coefficients
-- `T_optimal_high, T_optimal_low`: Optimal temperatures for each frequency band
+- `h₁_high, h₂_high`: Total temperature response coefficients (response to actual T)
+- `h₁_low, h₂_low`: Trend temperature response coefficients (response to T_trend)
+- `T_optimal_high, T_optimal_low`: Optimal temperatures for total and trend components
 
-**Interpretation:** If climate adaptation occurs over time, the response to slow (trend) temperature changes may differ from the response to fast (year-to-year) temperature variations. Approach 6a tests whether economies respond differently to these two timescales.
+**Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
+```
+h_total(T) - h_trend(T) = (h₁_high - h₁_low)·T + (h₂_high - h₂_low)·T²
+```
+
+**Interpretation:** If climate adaptation occurs over time, the response to trend temperature changes may differ from the response to total temperature. Approach 6a tests whether economies respond differently to these two components.
 
 **Degrees of freedom:** 4 for h(T) (h₁_high, h₂_high, h₁_low, h₂_low)
 
-### Approach 6b: Low-Frequency Response Only
+### Approach 6b: Trend Response Only
 
-A restricted version of Approach 6a that sets the high-frequency response to zero, attributing all temperature effects to the trend component.
+A restricted version of Approach 6a that sets the total temperature response to zero, attributing all temperature effects to the trend component only.
 
 ```
-Δy*(t) = 0 - h_low(T_trend)
+Δy*(t) = 0 - h_trend(T_trend)
 ```
 
 where:
-- `h_high(T) = 0` (no response to high-frequency temperature deviations)
-- `h_low(T_trend) = h₁_low·T_trend + h₂_low·T_trend²`
+- `h_total(T) = 0` (no response to total temperature)
+- `h_trend(T_trend) = h₁_low·T_trend + h₂_low·T_trend²`
 
-**Interpretation:** Tests the hypothesis that only long-term climate trends affect economic growth, while year-to-year temperature fluctuations have no systematic effect.
+**Interpretation:** Tests the hypothesis that only trend temperature affects economic growth, while deviations from the trend have no systematic effect.
 
 **Degrees of freedom:** 2 for h(T) (h₁_low, h₂_low)
 
@@ -222,25 +227,30 @@ h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
 
 **Degrees of freedom:** 3 (T_opt, h₂_low, h₂_high)
 
-### Approach 8a: Piecewise High/Low Frequency Response
+### Approach 8a: Separate Total/Trend Response with Shared T_opt
 
-Combines the frequency separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for high-frequency and low-frequency temperature variations, but with a shared optimal temperature.
+Combines the total/trend separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for total temperature (T) and trend temperature (T_trend), but with a shared optimal temperature.
 
 ```
 Δy*(t) = h₂_high·(T - T_opt)² - h₂_low·(T_trend - T_opt)²
 ```
 
 where:
-- `h₂_high`: Curvature for high-frequency (actual) temperature deviations
-- `h₂_low`: Curvature for low-frequency (trend) temperature deviations
-- `T_opt`: Shared optimal temperature for both frequency bands
+- `h₂_high`: Curvature for total (actual) temperature response
+- `h₂_low`: Curvature for trend temperature response
+- `T_opt`: Shared optimal temperature for both components
+
+**Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
+```
+(h₂_high - h₂_low)·(T - T_opt)²
+```
 
 **Key features:**
 - Both functions share the same optimal temperature
 - Linear terms (h₁) are implicitly zero (piecewise quadratic centered at T_opt)
-- Allows different sensitivities to fast vs slow temperature changes
+- Allows different sensitivities to total vs trend temperature
 
-**Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between short-term fluctuations and long-term trends, while maintaining a common optimal temperature.
+**Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between total temperature and trend temperature, while maintaining a common optimal temperature.
 
 **Degrees of freedom:** 3 (T_opt, h₂_high, h₂_low)
 

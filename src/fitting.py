@@ -406,23 +406,25 @@ class FitResultApproach8Piecewise:
 
 @dataclass
 class FitResultApproach6ab:
-    """Container for Approach 6a/6b results with separate high/low frequency responses.
+    """Container for Approach 6a/6b results with separate total/trend responses.
 
-    Model 6a: delta-y*(t) = h_high(T) - h_low(Ttrend)
-    Model 6b: delta-y*(t) = 0 - h_low(Ttrend)  (h_high terms are zero)
+    Model 6a: delta-y*(t) = h_total(T) - h_trend(Ttrend)
+    Model 6b: delta-y*(t) = 0 - h_trend(Ttrend)  (h_total terms are zero)
 
     Where:
         - delta-y*(t) = dy(t) - k(t) - f_trend(dy(t) - k(t)) (same as approach 6)
-        - h_high(T) = h1_high * T + h2_high * T^2
-        - h_low(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2
+        - h_total(T) = h1_high * T + h2_high * T^2 (response to actual temperature)
+        - h_trend(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2 (response to trend)
+
+    Total Response (when T = Ttrend): (h1_high - h1_low)*T + (h2_high - h2_low)*T^2
     """
     approach: str
-    # High-frequency coefficients (zero for 6b)
+    # Total (actual T) coefficients (zero for 6b)
     h1_high: float
     h2_high: float
     h1_high_se: float
     h2_high_se: float
-    # Low-frequency coefficients
+    # Trend (Ttrend) coefficients
     h1_low: float
     h2_low: float
     h1_low_se: float
@@ -456,11 +458,16 @@ class FitResultApproach6ab:
 
 @dataclass
 class FitResultApproach8a:
-    """Container for Approach 8a results with shared T_opt for high/low frequency.
+    """Container for Approach 8a results with separate total/trend and shared T_opt.
 
     Model: delta-y*(t) = h2_high * (T - T_opt)^2 - h2_low * (Ttrend - T_opt)^2
 
-    Both functions share a common optimal temperature T_opt.
+    Where:
+        - h2_high: curvature for total (actual T) response
+        - h2_low: curvature for trend (Ttrend) response
+        - T_opt: shared optimal temperature
+
+    Total Response (when T = Ttrend): (h2_high - h2_low) * (T - T_opt)^2
     """
     approach: str
     # Curvature coefficients
@@ -1976,15 +1983,17 @@ def fit_approach6_precomputed_k_loess(
 def fit_approach6a_separate_high_low_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6ab:
-    """Approach 6a: Separate high/low frequency temperature responses with LOESS detrending.
+    """Approach 6a: Separate total/trend temperature responses with LOESS detrending.
 
-    Model: delta-y*(t) = h_high(T) - h_low(Ttrend)
+    Model: delta-y*(t) = h_total(T) - h_trend(Ttrend)
 
     Where:
         - delta-y*(t) = dy(t) - k(t) - y_loess (same as approach 6)
-        - h_high(T) = h1_high * T + h2_high * T^2
-        - h_low(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2
+        - h_total(T) = h1_high * T + h2_high * T^2 (response to total/actual temperature)
+        - h_trend(Ttrend) = h1_low * Ttrend + h2_low * Ttrend^2 (response to trend temperature)
         - k(t) pre-computed (not in OLS)
+
+    Total Response: When T = Ttrend, the net effect is (h1_high-h1_low)*T + (h2_high-h2_low)*T^2
 
     4-parameter OLS with design matrix: [T, T^2, -Ttrend, -Ttrend^2]
 
@@ -2101,11 +2110,11 @@ def fit_approach6a_separate_high_low_loess(
 def fit_approach6b_low_only_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6ab:
-    """Approach 6b: Low frequency only temperature response with LOESS detrending.
+    """Approach 6b: Trend-only temperature response with LOESS detrending.
 
-    Model: delta-y*(t) = 0 - h_low(Ttrend)
+    Model: delta-y*(t) = 0 - h_trend(Ttrend)
 
-    Same as 6a but h_high terms are zero.
+    Same as 6a but total response (h_high) terms are zero.
 
     2-parameter OLS with design matrix: [-Ttrend, -Ttrend^2]
 
@@ -2115,7 +2124,7 @@ def fit_approach6b_low_only_loess(
         year_means: Pre-computed k[t] = mean(dy_i[t])
 
     Returns:
-        FitResultApproach6ab with h_high coefficients set to zero
+        FitResultApproach6ab with h_high (total) coefficients set to zero
     """
     # Get temperature and trend temperature
     T = data.temp
@@ -2221,15 +2230,17 @@ def fit_approach8a_shared_Topt_loess(
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
 ) -> FitResultApproach8a:
-    """Approach 8a: Shared T_opt for high/low frequency with LOESS detrending.
+    """Approach 8a: Separate total/trend response with shared T_opt and LOESS detrending.
 
     Model: delta-y*(t) = h2_high * (T - T_opt)^2 - h2_low * (Ttrend - T_opt)^2
 
-    Both high-frequency and low-frequency responses share a common optimal temperature T_opt.
+    Both total (actual T) and trend (Ttrend) responses share a common optimal temperature T_opt.
+
+    Total Response: When T = Ttrend, the net effect is (h2_high - h2_low) * (T - T_opt)^2
 
     Nonlinear optimization:
         - Outer: L-BFGS-B over T_opt
-        - Inner: 2-parameter OLS for h2_high, h2_low
+        - Inner: 2-parameter OLS for h2_high (total), h2_low (trend)
 
     Args:
         data: AnalysisData object
@@ -2238,7 +2249,7 @@ def fit_approach8a_shared_Topt_loess(
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
 
     Returns:
-        FitResultApproach8a with T_opt, h2_high, h2_low, and standard errors
+        FitResultApproach8a with T_opt, h2_high (total), h2_low (trend), and standard errors
     """
     # Get temperature and trend temperature
     T = data.temp

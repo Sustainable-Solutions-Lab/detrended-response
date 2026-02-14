@@ -18,6 +18,8 @@ from src.output import (
     plot_T_optimal_histograms,
     plot_h2_histograms,
     plot_year_effects_bootstrap,
+    plot_combined_temp_response_and_year_effects,
+    plot_climate_response_contours,
 )
 
 
@@ -650,18 +652,23 @@ def generate_figures(
     # 2-panel layout: [col0: 6, col1: 8]
     approaches_2panel = ['approach6', 'approach8']
 
-    # Figure 1: Temperature response (h(T) - h(T*)) - 4 panels
-    print("      [Figures] Generating temperature response figure (4 panels)...")
-    plot_bootstrap_temperature_response(
-        results,
-        output_dir,
-        approaches=approaches_4panel,
-        filename='fig_temperature_response_4panel.pdf',
-        T_range=(0, 30),
-        data=data,  # Include temperature histogram
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_temperature_response_4panel.pdf")
+    # Figure 1: Combined temperature response (top row) + year effects (bottom row)
+    # Replaces previous fig_temperature_response_4panel.pdf and fig_year_effects_2panel.pdf
+    if data is not None:
+        print("      [Figures] Generating combined temp response + year effects figure...")
+        plot_combined_temp_response_and_year_effects(
+            results,
+            data,
+            output_dir,
+            temp_response_approaches=['approach0', 'approach5c'],
+            year_effects_approaches=['approach0', 'approach6'],
+            filename='fig_combined_temp_year_4panel.pdf',
+            T_range=(0, 30),
+            input_file=None,
+        )
+        print("      [Figures] Saved fig_combined_temp_year_4panel.pdf")
+    else:
+        print("      [Figures] Skipping combined figure (data not loaded)")
 
     # Figure 2: Temperature response (h(T) - h(T*)) - 2 panels
     print("      [Figures] Generating temperature response figure (2 panels)...")
@@ -787,18 +794,17 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_3panel_variants.pdf")
 
-    # Figure 12: Year effects k(t) - 2 panels (approach0 and approach6)
-    if data is not None:
-        print("      [Figures] Generating year effects figure (2 panels)...")
-        plot_year_effects_bootstrap(
-            results,
-            data,
-            output_dir,
-            approaches_to_plot=['approach0', 'approach6'],
-            filename='fig_year_effects_2panel.pdf',
-            show_title=False,
-            input_file=None,
-        )
-        print("      [Figures] Saved fig_year_effects_2panel.pdf")
-    else:
-        print("      [Figures] Skipping year effects figure (data not loaded)")
+    # Figure 12: Climate response contours for approaches 6a and 8a
+    print("      [Figures] Generating climate response contour figure (6a, 8a)...")
+    plot_climate_response_contours(
+        results,
+        output_dir,
+        approaches=['approach6a', 'approach8a'],
+        filename='fig_climate_response_contours.pdf',
+        Ttrend_range=(0, 30),
+        deltaT_range=(-5, 5),
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_climate_response_contours.pdf")
+
+    # Note: Year effects figure is now part of fig_combined_temp_year_4panel.pdf (Figure 1)
