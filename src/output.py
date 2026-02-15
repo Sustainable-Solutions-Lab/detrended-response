@@ -2032,6 +2032,247 @@ def plot_combined_temp_response_and_year_effects(
     print(f"  Saved {filename}")
 
 
+def plot_temperature_response_2panel(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    approaches: list = None,
+    filename: str = 'fig_temperature_response_2panel.pdf',
+    T_range: tuple = (0, 30),
+    input_file: str = None,
+) -> None:
+    """Plot 2-panel temperature response figure (h(T) - h(T_opt)).
+
+    Creates a 1x2 figure with temperature response curves and uncertainty bands.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for temperature histogram
+        output_dir: Directory to save the plot
+        approaches: List of 2 approach keys for panels
+        filename: Output filename
+        T_range: Temperature range for x-axis (default: (0, 30))
+        input_file: Optional input file path for annotation
+    """
+    if approaches is None:
+        approaches = ['approach0', 'approach5c']
+
+    # Validate approaches exist
+    valid_approaches = [a for a in approaches if a in results]
+    if len(valid_approaches) < 2:
+        print("  WARNING: Not enough valid approaches for temperature response figure")
+        return
+
+    # Create 1x2 figure
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    # Temperature array for response plots
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Get temperature data from most recent year for histogram
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+
+    # First pass: compute y-axis range
+    y_min, y_max = np.inf, -np.inf
+    plot_data = {}
+
+    for name in valid_approaches[:2]:
+        result = results[name]
+        h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+            result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+        )
+        h_point, T_opt = _compute_point_estimate_response(result, T, name, None)
+
+        plot_data[name] = {
+            'h_p5': h_p5, 'h_p25': h_p25, 'h_p75': h_p75, 'h_p95': h_p95,
+            'h_point': h_point, 'T_opt': T_opt
+        }
+
+        if not np.all(np.isnan(h_p5)):
+            y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
+        if not np.all(np.isnan(h_p95)):
+            y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
+
+    if np.isinf(y_min) or np.isinf(y_max):
+        y_min, y_max = -0.05, 0.05
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    # Plot panels
+    for col, name in enumerate(valid_approaches[:2]):
+        ax = axes[col]
+        result = results[name]
+        color = APPROACH_COLORS.get(name, 'steelblue')
+        pdata = plot_data[name]
+
+        # Add temperature histogram on secondary y-axis
+        if temp_recent is not None:
+            ax2 = ax.twinx()
+            bins = np.linspace(T_range[0], T_range[1], 30)
+            ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax2.set_ylabel('Data density', fontsize=8, color='gray')
+            ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+            ax2.set_ylim(bottom=0)
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.set_zorder(ax2.get_zorder() + 1)
+            ax.patch.set_visible(False)
+
+        # Plot 90% CI band
+        ax.fill_between(T, pdata['h_p5'], pdata['h_p95'], alpha=0.2, color=color, label='90% CI')
+        # Plot IQR band
+        ax.fill_between(T, pdata['h_p25'], pdata['h_p75'], alpha=0.3, color=color, label='IQR')
+        # Plot point estimate
+        ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+        # Mark optimal temperature
+        T_opt = pdata['T_opt']
+        if T_opt is not None and not np.isnan(T_opt):
+            ax.axvline(T_opt, color=color, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt:.1f}°C')
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_xlabel('Temperature (°C)', fontsize=10)
+        ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+        ax.set_title(result.approach, fontsize=11)
+        ax.set_xlim(T_range)
+        ax.set_ylim(y_min, y_max)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, loc='lower right')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_year_effects_2panel(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    approaches: list = None,
+    filename: str = 'fig_year_effects_2panel.pdf',
+    input_file: str = None,
+) -> None:
+    """Plot 2-panel year effects figure (k(t)).
+
+    Creates a 1x2 figure with year fixed effects and uncertainty bands.
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for getting year range
+        output_dir: Directory to save the plot
+        approaches: List of 2 approach keys for panels
+        filename: Output filename
+        input_file: Optional input file path for annotation
+    """
+    if approaches is None:
+        approaches = ['approach0', 'approach6']
+
+    # Validate approaches exist and have k_samples
+    valid_approaches = [a for a in approaches if a in results and results[a].k_samples is not None]
+    if len(valid_approaches) < 2:
+        print("  WARNING: Not enough valid approaches for year effects figure")
+        return
+
+    # Create 1x2 figure
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    # Get years
+    unique_years = sorted(set(data.year))
+    years_array = np.array(unique_years)
+
+    # First pass: compute y-axis range
+    all_k_values = []
+    for name in valid_approaches[:2]:
+        result = results[name]
+        if result.k_point is not None:
+            all_k_values.extend([result.k_point[yr] for yr in unique_years if yr in result.k_point])
+        if result.k_samples is not None:
+            for yr in unique_years:
+                if yr in result.k_samples:
+                    valid = result.k_samples[yr][~np.isnan(result.k_samples[yr])]
+                    if len(valid) > 0:
+                        all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
+
+    if all_k_values:
+        y_min = min(all_k_values)
+        y_max = max(all_k_values)
+        y_margin = (y_max - y_min) * 0.1
+        y_range = (y_min - y_margin, y_max + y_margin)
+    else:
+        y_range = (-0.05, 0.05)
+
+    # Plot panels
+    for col, name in enumerate(valid_approaches[:2]):
+        ax = axes[col]
+        result = results[name]
+
+        # Extract point estimates and bootstrap percentiles
+        k_point = []
+        k_p5 = []
+        k_p25 = []
+        k_p75 = []
+        k_p95 = []
+
+        for yr in unique_years:
+            if result.k_point is not None and yr in result.k_point:
+                k_point.append(result.k_point[yr])
+            else:
+                k_point.append(np.nan)
+
+            if result.k_samples is not None and yr in result.k_samples:
+                samples = result.k_samples[yr]
+                valid = samples[~np.isnan(samples)]
+                if len(valid) > 0:
+                    k_p5.append(np.percentile(valid, 5))
+                    k_p25.append(np.percentile(valid, 25))
+                    k_p75.append(np.percentile(valid, 75))
+                    k_p95.append(np.percentile(valid, 95))
+                else:
+                    k_p5.append(np.nan)
+                    k_p25.append(np.nan)
+                    k_p75.append(np.nan)
+                    k_p95.append(np.nan)
+            else:
+                k_p5.append(np.nan)
+                k_p25.append(np.nan)
+                k_p75.append(np.nan)
+                k_p95.append(np.nan)
+
+        k_point = np.array(k_point)
+        k_p5 = np.array(k_p5)
+        k_p25 = np.array(k_p25)
+        k_p75 = np.array(k_p75)
+        k_p95 = np.array(k_p95)
+
+        color = APPROACH_COLORS.get(name, 'blue')
+
+        # Plot 90% CI band
+        ax.fill_between(years_array, k_p5, k_p95, alpha=0.2, color=color, linewidth=0)
+        # Plot IQR band
+        ax.fill_between(years_array, k_p25, k_p75, alpha=0.3, color=color, linewidth=0)
+        # Plot point estimate
+        ax.plot(years_array, k_point, color=color, linewidth=1.5)
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_title(result.approach, fontsize=10)
+        ax.set_ylim(y_range)
+        ax.grid(True, alpha=0.3)
+        ax.set_xlabel('Year')
+        ax.set_ylabel('k(t)')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
 def plot_climate_response_contours(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,

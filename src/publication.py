@@ -20,6 +20,8 @@ from src.output import (
     plot_year_effects_bootstrap,
     plot_combined_temp_response_and_year_effects,
     plot_climate_response_contours,
+    plot_temperature_response_2panel,
+    plot_year_effects_2panel,
 )
 
 
@@ -672,23 +674,33 @@ def generate_figures(
     # 2-panel layout: [col0: 6, col1: 8]
     approaches_2panel = ['approach6', 'approach8']
 
-    # Figure 1: Combined temperature response (top row) + year effects (bottom row)
-    # Replaces previous fig_temperature_response_4panel.pdf and fig_year_effects_2panel.pdf
+    # Figure 1a: Temperature response (2 panels)
     if data is not None:
-        print("      [Figures] Generating combined temp response + year effects figure...")
-        plot_combined_temp_response_and_year_effects(
+        print("      [Figures] Generating temperature response figure...")
+        plot_temperature_response_2panel(
             results,
             data,
             output_dir,
-            temp_response_approaches=['approach0', 'approach5c'],
-            year_effects_approaches=['approach0', 'approach6'],
-            filename='fig_combined_temp_year_4panel.pdf',
+            approaches=['approach0', 'approach5c'],
+            filename='fig_temperature_response_main.pdf',
             T_range=(0, 30),
             input_file=None,
         )
-        print("      [Figures] Saved fig_combined_temp_year_4panel.pdf")
+        print("      [Figures] Saved fig_temperature_response_main.pdf")
+
+        # Figure 1b: Year effects (2 panels)
+        print("      [Figures] Generating year effects figure...")
+        plot_year_effects_2panel(
+            results,
+            data,
+            output_dir,
+            approaches=['approach0', 'approach6'],
+            filename='fig_year_effects_main.pdf',
+            input_file=None,
+        )
+        print("      [Figures] Saved fig_year_effects_main.pdf")
     else:
-        print("      [Figures] Skipping combined figure (data not loaded)")
+        print("      [Figures] Skipping main figures (data not loaded)")
 
     # Figure 2: Temperature response (h(T) - h(T*)) - 2 panels
     print("      [Figures] Generating temperature response figure (2 panels)...")
@@ -827,4 +839,4 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_climate_response_contours.pdf")
 
-    # Note: Year effects figure is now part of fig_combined_temp_year_4panel.pdf (Figure 1)
+    # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)
