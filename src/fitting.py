@@ -2732,7 +2732,7 @@ def fit_approach8b_modulated_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
-    f_bounds: tuple = ((-2.0, 2.0), (-2.0, 2.0)),
+    f_bounds: tuple = ((-5.0, 5.0), (-5.0, 5.0)),
 ) -> FitResultApproach8b:
     """Approach 8b: Modulated actual temperature response with LOESS detrending.
 
@@ -2754,7 +2754,7 @@ def fit_approach8b_modulated_loess(
         data: AnalysisData object
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
-        f_bounds: Bounds for (f₁, f₂) as tuple of tuples (default [(-2, 2), (-2, 2)])
+        f_bounds: Bounds for (f₁, f₂) as tuple of tuples (default [(-5, 5), (-5, 5)])
 
     Returns:
         FitResultApproach8b with f₁, f₂, h₁, h₂, and standard errors

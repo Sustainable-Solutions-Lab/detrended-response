@@ -98,13 +98,14 @@ All approaches use a consistent naming scheme for output coefficients:
 | h4 | Curvature for trend T response |
 | T_opt | Shared optimal temperature |
 
-**Approach 8b** (modulated trend response):
+**Approach 8b** (modulated actual temperature response):
 
 | Parameter | Meaning |
 |-----------|---------|
-| f1 | Squared-deviation modulation coefficient |
-| h1, h2 | Response to trend temperature |
-| T_opt | Optimal trend temperature |
+| f1 | Linear departure modulation coefficient |
+| f2 | Quadratic departure modulation coefficient |
+| h1, h2 | Response to actual temperature T |
+| T_opt | Optimal actual temperature |
 
 ### Standard Error Convention
 
@@ -273,6 +274,34 @@ where:
 **Interpretation:** Tests the hypothesis that only actual temperature affects economic growth, with no additional effect from temperature anomalies relative to trend.
 
 **Degrees of freedom:** 2 for h(T) (h₁, h₂)
+
+### Approach 6c: Departure/Trend Decomposition
+
+Extends Approach 6 by decomposing the temperature response into separate responses to the departure from trend (T - T_trend) and to the trend temperature itself (T_trend).
+
+```
+h(T, T_trend) = h₁·(T - T_trend) + h₂·(T - T_trend)² + h₃·T_trend + h₄·T_trend²
+```
+
+where:
+- `h₁·(T - T_trend) + h₂·(T - T_trend)²` — response to departure from trend
+- `h₃·T_trend + h₄·T_trend²` — response to trend temperature
+- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+
+**Parameters:**
+- `h₁, h₂`: Departure response coefficients (response to T - T_trend)
+- `h₃, h₄`: Trend response coefficients (response to T_trend)
+- `f₁`: Optimal departure from trend = -h₁/(2h₂)
+- `f₂`: Optimal trend temperature = -h₃/(2h₄)
+
+**At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
+```
+h(T, T) = h₃·T_trend + h₄·T_trend²
+```
+
+**Interpretation:** This decomposition separates how economies respond to year-to-year temperature fluctuations (departures from trend) versus the underlying temperature level (trend). Unlike Approach 6a which uses actual temperature T and departure, Approach 6c cleanly separates the trend and fluctuation components.
+
+**Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 

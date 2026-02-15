@@ -244,6 +244,17 @@ def save_summary_table(
             'h2': result.h2,
             'h2_SE': result.h2_se,
             'T_opt': getattr(result, 'T_opt', None),  # Not all approaches have T_opt (e.g., 6c)
+            'T_opt_SE': getattr(result, 'T_opt_se', None),  # SE for T_opt (approaches 8, 8a, 8b)
+            # Extended coefficients - define in order to ensure consistent column placement
+            'h3': None,  # For 6a/6b/6c
+            'h3_SE': None,
+            'h4': None,  # For 6a/6b/6c/8/8a
+            'h4_SE': None,
+            'f1': None,  # For 5d/6a/6b/6c/8b
+            'f1_SE': None,
+            'f2': None,  # For 6c/8b
+            'f2_SE': None,
+            'Y_ref': None,  # For 5d
             'R_squared': result.r_squared,
             'Total_R_squared': result.total_r_squared,
             'Adj_R_squared': result.adj_r_squared,
@@ -281,13 +292,11 @@ def save_summary_table(
         # Add h4 for Approach 8a (shared T_opt, total/trend)
         # h2 = curvature for actual T; h4 = curvature for trend T
         elif hasattr(result, 'h4') and hasattr(result, 'T_opt_se') and result.h1 == 0.0:
-            row['T_opt_SE'] = result.T_opt_se
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
         # Add h4 for Approach 8 (piecewise quadratic)
         # h2 = curvature below T_opt; h4 = curvature above T_opt
         elif is_piecewise_result(result):
-            row['T_opt_SE'] = result.T_opt_se
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
         # Add f1, f2 for Approach 8b (modulated response) - modulation coefficients
