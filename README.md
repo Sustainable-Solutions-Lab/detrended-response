@@ -264,7 +264,7 @@ Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 ### Approach 6a: LOESS Detrending (T + Departure Response)
 
-Combines both actual temperature and departure effects, nesting Approaches 6 and 6b as special cases.
+Combines actual temperature and quadratic departure effects.
 
 **GDP detrending** (same as Approach 6):
 ```
@@ -278,25 +278,24 @@ h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend) + h₄·(T - T_trend)�
 
 **Regression model:**
 ```
-Δy*(t) = h(T, T_trend)
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
+       = (h₁+h₃)·(T - T_trend) + h₂·(T² - T_trend²) + h₄·(T - T_trend)²
 ```
 
-The regression is performed on the design matrix `[T, T², (T - T_trend), (T - T_trend)²]`.
+The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²), (T - T_trend)²]`.
+
+**Note:** h₁ and h₃ are confounded—only their sum is identifiable. We report h₁ = h₁+h₃ and set h₃ = 0.
 
 **Parameters:**
-- `h₁, h₂`: Actual temperature response coefficients (response to T)
-- `h₃, h₄`: Departure response coefficients (response to T - T_trend)
-- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
-- `T_dep_opt`: Optimal departure = -h₃/(2h₄)
+- `h₁`: Combined linear coefficient (original h₁ + h₃)
+- `h₂`: Quadratic T² - T_trend² coefficient
+- `h₄`: Quadratic departure coefficient
+- `T_opt`: Optimal temperature = -h₁/(2h₂)
+- `T_dep_opt`: Optimal departure = 0 (since h₃=0)
 
-**At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
-```
-h(T, T) = h₁·T + h₂·T²
-```
+**Key insight:** This is mathematically equivalent to Approach 6e. Both have the same 3-parameter design matrix.
 
-**Key insight:** This approach allows GDP to respond to both the absolute temperature level (via h₁, h₂) and to temperature anomalies (via h₃, h₄). If h₃ = h₄ = 0, this reduces to Approach 6b. If h₁ = h₃ and h₂ = h₄, this is equivalent to Approach 6.
-
-**Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
 ### Approach 6b: LOESS Detrending (Actual T Response)
 
@@ -332,7 +331,7 @@ The regression is performed on the design matrix `[T, T²]` using actual tempera
 
 ### Approach 6c: Departure/Trend Decomposition
 
-Decomposes the temperature response into separate responses to the departure from trend and to the trend temperature itself.
+Originally intended to decompose the response into departure and trend components, but with the h(T,T_trend) - h(T_trend,T_trend) formulation, the trend terms cancel.
 
 **GDP detrending** (same as Approach 6):
 ```
@@ -346,29 +345,27 @@ h(T, T_trend) = h₁·(T - T_trend) + h₂·(T - T_trend)² + h₃·T_trend + h�
 
 **Regression model:**
 ```
-Δy*(t) = h(T, T_trend)
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
+       = h₁·(T - T_trend) + h₂·(T - T_trend)²
 ```
 
-The regression is performed on the design matrix `[(T - T_trend), (T - T_trend)², T_trend, T_trend²]`.
+The trend terms (h₃·T_trend + h₄·T_trend²) completely cancel out.
+
+The regression is performed on the design matrix `[(T - T_trend), (T - T_trend)²]`.
+
+**Note:** h₃ and h₄ are not identifiable (they cancel). Only departure response (h₁, h₂) is estimated.
 
 **Parameters:**
 - `h₁, h₂`: Departure response coefficients (response to T - T_trend)
-- `h₃, h₄`: Trend response coefficients (response to T_trend)
 - `T_dep_opt`: Optimal departure from trend = -h₁/(2h₂)
-- `f₂`: Optimal trend temperature = -h₃/(2h₄)
 
-**At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
-```
-h(T, T) = h₃·T_trend + h₄·T_trend²
-```
+**Key insight:** With the h(T) - h(T_trend) formulation, Approach 6c becomes equivalent to Approach 6 (departure response only). The trend terms cancel out because h(T_trend, T_trend) includes those same terms.
 
-**Key insight:** Unlike Approach 6a which uses actual temperature T and departure, Approach 6c cleanly separates the trend and fluctuation components. This allows testing whether economies respond differently to year-to-year fluctuations versus the underlying temperature level.
-
-**Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
+**Degrees of freedom:** 2 for h(T) (h₁, h₂)
 
 ### Approach 6d: T Response with Linear Departure Only
 
-A restricted version of Approach 6a with only the linear departure term, testing whether temperature fluctuations have a directional effect.
+Restricted version with only linear departure term.
 
 **GDP detrending** (same as Approach 6):
 ```
@@ -382,23 +379,26 @@ h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend)
 
 **Regression model:**
 ```
-Δy*(t) = h(T, T_trend)
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
+       = (h₁+h₃)·(T - T_trend) + h₂·(T² - T_trend²)
 ```
 
-The regression is performed on the design matrix `[T, T², (T - T_trend)]`.
+The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²)]`.
+
+**Note:** h₁ and h₃ are confounded—only their sum is identifiable. We report h₁ = h₁+h₃ and set h₃ = 0.
 
 **Parameters:**
-- `h₁, h₂`: Actual temperature response coefficients (response to T)
-- `h₃`: Linear departure coefficient
-- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
+- `h₁`: Combined linear coefficient (original h₁ + h₃)
+- `h₂`: Quadratic T² - T_trend² coefficient
+- `T_opt`: Optimal temperature = -h₁/(2h₂)
 
-**Key insight:** Tests whether warmer-than-trend and cooler-than-trend years have asymmetric effects on growth. A positive h₃ means warmer-than-trend years boost growth; a negative h₃ means the opposite.
+**Key insight:** This is mathematically equivalent to Approach 6 (departure response). Both have the same 2-parameter design matrix.
 
-**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₃)
+**Degrees of freedom:** 2 for h(T) (h₁, h₂)
 
 ### Approach 6e: T Response with Quadratic Departure Only
 
-A restricted version of Approach 6a with only the quadratic departure term, testing whether temperature volatility matters regardless of direction.
+Quadratic departure term only (no linear departure), testing whether temperature volatility matters regardless of direction.
 
 **GDP detrending** (same as Approach 6):
 ```
@@ -412,18 +412,20 @@ h(T, T_trend) = h₁·T + h₂·T² + h₄·(T - T_trend)²
 
 **Regression model:**
 ```
-Δy*(t) = h(T, T_trend)
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
+       = h₁·(T - T_trend) + h₂·(T² - T_trend²) + h₄·(T - T_trend)²
 ```
 
-The regression is performed on the design matrix `[T, T², (T - T_trend)²]`.
+The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²), (T - T_trend)²]`.
 
 **Parameters:**
-- `h₁, h₂`: Actual temperature response coefficients (response to T)
+- `h₁`: Linear departure coefficient
+- `h₂`: Quadratic T² - T_trend² coefficient
 - `h₄`: Quadratic departure coefficient
-- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
+- `T_opt`: Optimal temperature = -h₁/(2h₂)
 - `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
 
-**Key insight:** Tests whether any deviation from trend—warmer or cooler—affects growth symmetrically. A negative h₄ means larger fluctuations reduce growth (volatility is harmful); a positive h₄ means larger fluctuations boost growth.
+**Key insight:** This is mathematically equivalent to Approach 6a. Both have the same 3-parameter design matrix. A negative h₄ means larger fluctuations reduce growth (volatility is harmful).
 
 **Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
@@ -462,7 +464,7 @@ h(T) = h₄ · (T - T_opt)²   if T > T_opt
 
 ### Approach 8a: Separate Total/Trend Response with Shared T_opt
 
-Combines total/trend separation with shared optimal temperature. Uses separate curvature parameters for actual temperature (T) and trend temperature (T_trend).
+Originally intended to use separate curvature parameters for actual and trend temperature, but with h(T,T_trend) - h(T_trend,T_trend), the h₄ term cancels.
 
 **GDP detrending** (same as Approach 6):
 ```
@@ -476,22 +478,23 @@ h(T, T_trend) = h₂·(T - T_opt)² - h₄·(T_trend - T_opt)²
 
 **Regression model:**
 ```
-Δy*(t) = h(T, T_trend)
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
+       = h₂·[(T - T_opt)² - (T_trend - T_opt)²]
 ```
+
+The h₄ term cancels completely: h(T_trend, T_trend) = (h₂ - h₄)·(T_trend - T_opt)².
+
+The regression is performed on the design matrix `[(T - T_opt)² - (T_trend - T_opt)²]` (1 column).
+
+**Note:** h₄ is not identifiable (it cancels). Only h₂ and T_opt are estimated.
 
 **Parameters:**
-- `h₂`: Curvature for actual temperature response
-- `h₄`: Curvature for trend temperature response
-- `T_opt`: Shared optimal temperature for both components
+- `h₂`: Curvature coefficient
+- `T_opt`: Optimal temperature
 
-**At Trend:** When T = T_trend, the climate effect is:
-```
-(h₂ - h₄)·(T - T_opt)²
-```
+**Key insight:** With the h(T) - h(T_trend) formulation, h₄ cancels and this becomes a 2-parameter model (h₂, T_opt) with nonlinear optimization for T_opt.
 
-**Key insight:** Tests whether the curvature differs between actual temperature and trend temperature, while maintaining a common optimal temperature. Linear terms (h₁) are implicitly zero.
-
-**Degrees of freedom:** 3 (T_opt, h₂, h₄)
+**Degrees of freedom:** 2 (T_opt, h₂)
 
 ### Approach 8b: Modulated Actual Temperature Response
 
