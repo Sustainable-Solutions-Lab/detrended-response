@@ -37,7 +37,7 @@ def reconstruct_bootstrap_results(
     ----------
     coefficients_df : pd.DataFrame
         DataFrame from bootstrap_coefficients.csv with columns:
-        iteration, approach, approach_name, h1, h2, T_optimal, r_squared, etc.
+        iteration, approach, approach_name, h1, h2, T_opt, r_squared, etc.
     summary_df : pd.DataFrame
         DataFrame from bootstrap_summary_table.csv with point estimates and percentiles
     k_samples_df : pd.DataFrame, optional
@@ -68,79 +68,45 @@ def reconstruct_bootstrap_results(
         # Extract samples as numpy arrays
         h1_samples = samples['h1'].values
         h2_samples = samples['h2'].values
-        T_optimal_samples = samples['T_optimal'].values
+        T_opt_samples = samples['T_opt'].values
         r_squared_samples = samples['r_squared'].values
         total_r_squared_samples = samples['total_r_squared'].values
 
         # Get point estimates from summary
         h1_point = summary_row['h1_point']
         h2_point = summary_row['h2_point']
-        T_optimal_point = summary_row['T_optimal_point']
+        T_opt_point = summary_row['T_opt_point']
         r_squared_point = summary_row['r_squared_point']
         total_r_squared_point = summary_row['total_r_squared_point']
 
         # Get approach name
         approach_name = summary_row['approach_name']
 
-        # Handle optional fields (beta for GDP-dependent approaches, h2_low/h2_high for approach8)
-        beta_point = None
-        beta_samples = None
-        h2_low_point = None
-        h2_low_samples = None
-        h2_high_point = None
-        h2_high_samples = None
+        # Handle optional fields (f1 for GDP-dependent and 6a/6b, h3/h4 for trend coefficients)
+        f1_point = None
+        f1_samples = None
+        h3_point = None
+        h3_samples = None
+        h4_point = None
+        h4_samples = None
+        f2_point = None
+        f2_samples = None
 
-        if 'beta' in samples.columns and not samples['beta'].isna().all():
-            beta_samples = samples['beta'].values
-            beta_point = summary_row.get('beta_point', None)
+        if 'f1' in samples.columns and not samples['f1'].isna().all():
+            f1_samples = samples['f1'].values
+            f1_point = summary_row.get('f1_point', None)
 
-        if 'h2_low' in samples.columns and not samples['h2_low'].isna().all():
-            h2_low_samples = samples['h2_low'].values
-            h2_low_point = summary_row.get('h2_low_point', None)
+        if 'h3' in samples.columns and not samples['h3'].isna().all():
+            h3_samples = samples['h3'].values
+            h3_point = summary_row.get('h3_point', None)
 
-        if 'h2_high' in samples.columns and not samples['h2_high'].isna().all():
-            h2_high_samples = samples['h2_high'].values
-            h2_high_point = summary_row.get('h2_high_point', None)
+        if 'h4' in samples.columns and not samples['h4'].isna().all():
+            h4_samples = samples['h4'].values
+            h4_point = summary_row.get('h4_point', None)
 
-        # Handle 6a/6b-specific fields (h1_total, h1_trend, T_optimal_total, T_optimal_trend)
-        h1_total_point = None
-        h1_total_samples = None
-        h1_trend_point = None
-        h1_trend_samples = None
-        T_optimal_total_point = None
-        T_optimal_total_samples = None
-        T_optimal_trend_point = None
-        T_optimal_trend_samples = None
-
-        if 'h1_total' in samples.columns and not samples['h1_total'].isna().all():
-            h1_total_samples = samples['h1_total'].values
-            h1_total_point = summary_row.get('h1_total_point', None)
-
-        if 'h1_trend' in samples.columns and not samples['h1_trend'].isna().all():
-            h1_trend_samples = samples['h1_trend'].values
-            h1_trend_point = summary_row.get('h1_trend_point', None)
-
-        if 'T_optimal_total' in samples.columns and not samples['T_optimal_total'].isna().all():
-            T_optimal_total_samples = samples['T_optimal_total'].values
-            T_optimal_total_point = summary_row.get('T_optimal_total_point', None)
-
-        if 'T_optimal_trend' in samples.columns and not samples['T_optimal_trend'].isna().all():
-            T_optimal_trend_samples = samples['T_optimal_trend'].values
-            T_optimal_trend_point = summary_row.get('T_optimal_trend_point', None)
-
-        # Handle 8a-specific fields (h2_total, h2_trend)
-        h2_total_point = None
-        h2_total_samples = None
-        h2_trend_point = None
-        h2_trend_samples = None
-
-        if 'h2_total' in samples.columns and not samples['h2_total'].isna().all():
-            h2_total_samples = samples['h2_total'].values
-            h2_total_point = summary_row.get('h2_total_point', None)
-
-        if 'h2_trend' in samples.columns and not samples['h2_trend'].isna().all():
-            h2_trend_samples = samples['h2_trend'].values
-            h2_trend_point = summary_row.get('h2_trend_point', None)
+        if 'f2' in samples.columns and not samples['f2'].isna().all():
+            f2_samples = samples['f2'].values
+            f2_point = summary_row.get('f2_point', None)
 
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
@@ -173,34 +139,24 @@ def reconstruct_bootstrap_results(
             approach=approach_name,
             h1_point=h1_point,
             h2_point=h2_point,
-            T_optimal_point=T_optimal_point,
+            T_opt_point=T_opt_point,
             r_squared_point=r_squared_point,
             total_r_squared_point=total_r_squared_point,
             h1_samples=h1_samples,
             h2_samples=h2_samples,
-            T_optimal_samples=T_optimal_samples,
+            T_opt_samples=T_opt_samples,
             r_squared_samples=r_squared_samples,
             total_r_squared_samples=total_r_squared_samples,
             n_bootstrap=int(summary_row['n_bootstrap']),
             n_successful=int(summary_row['n_successful']),
-            beta_point=beta_point,
-            beta_samples=beta_samples,
-            h2_low_point=h2_low_point,
-            h2_low_samples=h2_low_samples,
-            h2_high_point=h2_high_point,
-            h2_high_samples=h2_high_samples,
-            h1_total_point=h1_total_point,
-            h1_total_samples=h1_total_samples,
-            h1_trend_point=h1_trend_point,
-            h1_trend_samples=h1_trend_samples,
-            T_optimal_total_point=T_optimal_total_point,
-            T_optimal_total_samples=T_optimal_total_samples,
-            T_optimal_trend_point=T_optimal_trend_point,
-            T_optimal_trend_samples=T_optimal_trend_samples,
-            h2_total_point=h2_total_point,
-            h2_total_samples=h2_total_samples,
-            h2_trend_point=h2_trend_point,
-            h2_trend_samples=h2_trend_samples,
+            f1_point=f1_point,
+            f1_samples=f1_samples,
+            h3_point=h3_point,
+            h3_samples=h3_samples,
+            h4_point=h4_point,
+            h4_samples=h4_samples,
+            f2_point=f2_point,
+            f2_samples=f2_samples,
             k_point=k_point,
             k_samples=k_samples,
         )
@@ -478,7 +434,7 @@ def generate_bootstrap_comparison_table(
 
     Table Structure
     ---------------
-    Approach | h1_point | h1_p5 | h1_p25 | h1_p50 | h1_p75 | h1_p95 | h2_point | ... | T_opt_point | h2_low_point | ...
+    Approach | h1_point | h1_p5 | h1_p25 | h1_p50 | h1_p75 | h1_p95 | h2_point | ... | T_opt_point | h3_point | h4_point | ...
     """
     summary_df = bootstrap_results.get('bootstrap_summary')
 
@@ -498,13 +454,11 @@ def generate_bootstrap_comparison_table(
 
     # Parameters to include
     # Standard parameters for all approaches
-    standard_params = ['h1', 'h2', 'T_optimal', 'total_r_squared']
-    # Additional parameters for piecewise approach8
-    piecewise_params = ['h2_low', 'h2_high']
-    # Additional parameters for approach 6a/6b (separate total/trend frequency)
-    freq_split_params = ['h1_total', 'h1_trend', 'h2_total', 'h2_trend', 'T_optimal_total', 'T_optimal_trend']
-    # Additional parameters for approach 8a (shared T_opt, total/trend)
-    approach8a_params = ['h2_total', 'h2_trend']
+    standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
+    # Additional parameters for approach 6a/6b/6c (trend coefficients: h3, h4)
+    trend_params = ['h3', 'h4', 'f1', 'f2']
+    # Note: For piecewise approach8, h2 = curvature below T_opt, h4 = curvature above T_opt
+    # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
 
     # Percentiles to include
     percentiles = ['p5', 'p25', 'p50', 'p75', 'p95']
@@ -543,29 +497,8 @@ def generate_bootstrap_comparison_table(
                 else:
                     row[f'{param}_{pct}'] = np.nan
 
-        # Add piecewise parameters (only populated for approach8/8a)
-        for param in piecewise_params:
-            # Point estimate
-            point_col = f'{param}_point'
-            if point_col in row_data.index and not pd.isna(row_data[point_col]):
-                row[f'{param}_point'] = row_data[point_col]
-            else:
-                row[f'{param}_point'] = np.nan
-
-            # Percentiles
-            for pct in percentiles:
-                if pct == 'p50':
-                    pct_col = f'{param}_median'
-                else:
-                    pct_col = f'{param}_{pct}'
-
-                if pct_col in row_data.index and not pd.isna(row_data.get(pct_col)):
-                    row[f'{param}_{pct}'] = row_data[pct_col]
-                else:
-                    row[f'{param}_{pct}'] = np.nan
-
-        # Add frequency-split parameters (only populated for approach 6a/6b)
-        for param in freq_split_params:
+        # Add trend parameters (h3, h4, f1, f2 - populated for 6a/6b/6c/8/8a)
+        for param in trend_params:
             # Point estimate
             point_col = f'{param}_point'
             if point_col in row_data.index and not pd.isna(row_data[point_col]):

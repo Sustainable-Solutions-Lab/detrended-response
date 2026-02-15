@@ -309,7 +309,42 @@ class FitResult:
     n_obs: int             # Number of observations
     n_params: int          # Number of parameters
     residuals: np.ndarray  # Residuals
-    T_optimal: float       # Optimal temperature = -h1 / (2*h2)
+    T_opt: float           # Optimal temperature = -h1 / (2*h2)
+    total_r_squared: float # Variance explained in original dy
+    rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
+    rms_h: float = None          # RMS of h(T) - climate response magnitude
+    imbalance_ratio: float = None  # rms_imbalance / rms_h
+
+    # Variance decomposition (replaces old var_frac/cov_frac fields)
+    var_decomp: dict = None
+
+    # Variance attribution (4-component decomposition with covariance allocation)
+    var_attrib: dict = None
+
+
+@dataclass
+class FitResultApproach5d:
+    """Container for GDP-dependent response results.
+
+    Model: h(Y,T) = (Y/Y_ref)^(-f1) * (h1*T + h2*T^2)
+    Used by approach 5d (GDP-only response).
+    """
+    approach: str           # Name of the approach
+    h1: float              # Linear temperature coefficient
+    h2: float              # Quadratic temperature coefficient
+    h1_se: float           # Standard error of h1
+    h2_se: float           # Standard error of h2
+    f1: float              # GDP scaling exponent (formerly beta)
+    f1_se: float           # Standard error of f1
+    Y_ref: float           # Reference GDP used
+    k: Dict[int, float]    # Year fixed effects (year -> value)
+    r_squared: float       # R-squared
+    adj_r_squared: float   # Adjusted R-squared
+    rmse: float            # Root mean squared error
+    n_obs: int             # Number of observations
+    n_params: int          # Number of parameters (3: h1, h2, f1)
+    residuals: np.ndarray  # Residuals
+    T_opt: float           # Optimal temperature = -h1 / (2*h2)
     total_r_squared: float # Variance explained in original dy
     rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
     rms_h: float = None          # RMS of h(T) - climate response magnitude
@@ -324,56 +359,27 @@ class FitResult:
 
 @dataclass
 class FitResultApproach8:
-    """Container for GDP-dependent response results.
-
-    Model: h(Y,T) = (Y/Y_ref)^(-beta) * (h1*T + h2*T^2)
-    Used by approach 5d (GDP-only response).
-    """
-    approach: str           # Name of the approach
-    h1: float              # Linear temperature coefficient
-    h2: float              # Quadratic temperature coefficient
-    h1_se: float           # Standard error of h1
-    h2_se: float           # Standard error of h2
-    beta: float            # GDP scaling exponent
-    beta_se: float         # Standard error of beta
-    Y_ref: float           # Reference GDP used
-    k: Dict[int, float]    # Year fixed effects (year -> value)
-    r_squared: float       # R-squared
-    adj_r_squared: float   # Adjusted R-squared
-    rmse: float            # Root mean squared error
-    n_obs: int             # Number of observations
-    n_params: int          # Number of parameters (3: h1, h2, beta)
-    residuals: np.ndarray  # Residuals
-    T_optimal: float       # Optimal temperature = -h1 / (2*h2)
-    total_r_squared: float # Variance explained in original dy
-    rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
-    rms_h: float = None          # RMS of h(T) - climate response magnitude
-    imbalance_ratio: float = None  # rms_imbalance / rms_h
-
-    # Variance decomposition (replaces old var_frac/cov_frac fields)
-    var_decomp: dict = None
-
-    # Variance attribution (4-component decomposition with covariance allocation)
-    var_attrib: dict = None
-
-
-@dataclass
-class FitResultApproach8Piecewise:
     """Container for piecewise quadratic temperature response results.
 
-    Model: h(T) = h2_high * (T - T_opt)²  if T > T_opt
-           h(T) = h2_low * (T - T_opt)²   if T ≤ T_opt
+    Model: h(T) = h4 * (T - T_opt)²  if T > T_opt
+           h(T) = h2 * (T - T_opt)²   if T ≤ T_opt
 
     This model:
     - Has an optimum at T_opt where h(T_opt) = 0
     - Allows different curvatures above vs below T_opt
     - Is simple, interpretable, and requires nonlinear optimization for T_opt
+
+    Parameters:
+    - h1: Linear term (always 0 for piecewise model)
+    - h2: Curvature for T ≤ T_opt (cold side)
+    - h4: Curvature for T > T_opt (hot side)
+    - T_opt: Optimal temperature (breakpoint)
     """
     approach: str
-    h2_low: float          # Curvature for T ≤ T_opt
-    h2_low_se: float       # SE from inner OLS
-    h2_high: float         # Curvature for T > T_opt
-    h2_high_se: float      # SE from inner OLS
+    h2: float              # Curvature for T ≤ T_opt (formerly h2_low)
+    h2_se: float           # SE from inner OLS
+    h4: float              # Curvature for T > T_opt (formerly h2_high)
+    h4_se: float           # SE from inner OLS
     T_opt: float           # Optimal temperature (breakpoint)
     T_opt_se: float        # SE from numerical Hessian
     k: Dict[int, float]    # Year fixed effects
@@ -381,27 +387,17 @@ class FitResultApproach8Piecewise:
     adj_r_squared: float
     rmse: float
     n_obs: int
-    n_params: int          # = 3 (h2_low, h2_high, T_opt)
+    n_params: int          # = 3 (h2, h4, T_opt)
     residuals: np.ndarray
-    T_optimal: float       # = T_opt (for compatibility)
     total_r_squared: float
     rms_imbalance: float = None
     rms_h: float = None
     imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
-    # Compatibility fields for plotting/bootstrap that expect h1, h2
-    h1: float = 0.0        # Not used in piecewise model
-    h1_se: float = 0.0     # Not used in piecewise model
-    h2: float = 0.0        # Not directly used (use h2_low/h2_high)
-    h2_se: float = 0.0     # Not directly used
-    # For bootstrap compatibility
-    beta: float = None     # Not used, kept for compatibility
-    beta_se: float = None  # Not used, kept for compatibility
-    sigma: float = None    # Not used, kept for compatibility
-    sigma_se: float = None # Not used, kept for compatibility
-    alpha: float = None    # Not used, kept for compatibility
-    alpha_se: float = None # Not used, kept for compatibility
+    # Compatibility field for plotting that expects h1
+    h1: float = 0.0        # Linear term (always 0 for piecewise model)
+    h1_se: float = 0.0     # SE for h1 (always 0)
 
 
 @dataclass
@@ -413,22 +409,28 @@ class FitResultApproach6ab:
 
     Where:
         - delta-y*(t) = dy(t) - k(t) - f_trend(dy(t) - k(t)) (same as approach 6)
-        - h_total(T) = h1_total * T + h2_total * T^2 (response to actual temperature)
-        - h_trend(Ttrend) = h1_trend * Ttrend + h2_trend * Ttrend^2 (response to trend)
+        - h_total(T) = h1 * T + h2 * T^2 (response to actual temperature)
+        - h_trend(Ttrend) = h3 * Ttrend + h4 * Ttrend^2 (response to trend)
 
-    Total Response (when T = Ttrend): (h1_total - h1_trend)*T + (h2_total - h2_trend)*T^2
+    Total Response (when T = Ttrend): (h1 - h3)*T + (h2 - h4)*T^2
+
+    Parameters:
+    - h1, h2: Response to actual temperature T (zero for 6b)
+    - h3, h4: Response to trend temperature T_trend
+    - T_opt: Optimal actual temperature = -h1/(2*h2)
+    - f1: Optimal trend temperature = -h3/(2*h4)
     """
     approach: str
     # Total (actual T) coefficients (zero for 6b)
-    h1_total: float
-    h2_total: float
-    h1_total_se: float
-    h2_total_se: float
+    h1: float              # Linear coef for actual T (formerly h1_total)
+    h2: float              # Quadratic coef for actual T (formerly h2_total)
+    h1_se: float
+    h2_se: float
     # Trend (Ttrend) coefficients
-    h1_trend: float
-    h2_trend: float
-    h1_trend_se: float
-    h2_trend_se: float
+    h3: float              # Linear coef for trend T (formerly h1_trend)
+    h4: float              # Quadratic coef for trend T (formerly h2_trend)
+    h3_se: float
+    h4_se: float
     # Year effects
     k: Dict[int, float]
     # Fit stats
@@ -439,8 +441,8 @@ class FitResultApproach6ab:
     n_params: int
     residuals: np.ndarray
     # Derived
-    T_optimal_total: float  # -h1_total/(2*h2_total)
-    T_optimal_trend: float  # -h1_trend/(2*h2_trend)
+    T_opt: float           # -h1/(2*h2) - optimal actual T (formerly T_optimal_total)
+    f1: float              # -h3/(2*h4) - optimal trend T (formerly T_optimal_trend)
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -448,37 +450,37 @@ class FitResultApproach6ab:
     imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
-    # Compatibility fields for unified output
-    h1: float = 0.0
-    h2: float = 0.0
-    h1_se: float = 0.0
-    h2_se: float = 0.0
-    T_optimal: float = np.nan
 
 
 @dataclass
 class FitResultApproach6c:
     """Container for Approach 6c results with departure/trend decomposition.
 
-    Model: h(T, Ttrend) = h1_dep*(T-Ttrend) + h2_dep*(T-Ttrend)² + h1_trend*Ttrend + h2_trend*Ttrend²
+    Model: h(T, Ttrend) = h1*(T-Ttrend) + h2*(T-Ttrend)² + h3*Ttrend + h4*Ttrend²
 
     Where:
-        - h1_dep, h2_dep: response to departure from trend (T - Ttrend)
-        - h1_trend, h2_trend: response to trend temperature (Ttrend)
+        - h1, h2: response to departure from trend (T - Ttrend)
+        - h3, h4: response to trend temperature (Ttrend)
 
-    When T = Ttrend: h = h1_trend*Ttrend + h2_trend*Ttrend² (pure trend response)
+    When T = Ttrend: h = h3*Ttrend + h4*Ttrend² (pure trend response)
+
+    Parameters:
+    - h1, h2: Response to departure (T - T_trend)
+    - h3, h4: Response to trend temperature T_trend
+    - f1: Optimal departure = -h1/(2*h2)
+    - f2: Optimal trend temperature = -h3/(2*h4)
     """
     approach: str
     # Departure (T - Ttrend) coefficients
-    h1_dep: float
-    h2_dep: float
-    h1_dep_se: float
-    h2_dep_se: float
+    h1: float              # Linear departure coef (formerly h1_dep)
+    h2: float              # Quadratic departure coef (formerly h2_dep)
+    h1_se: float
+    h2_se: float
     # Trend (Ttrend) coefficients
-    h1_trend: float
-    h2_trend: float
-    h1_trend_se: float
-    h2_trend_se: float
+    h3: float              # Linear trend coef (formerly h1_trend)
+    h4: float              # Quadratic trend coef (formerly h2_trend)
+    h3_se: float
+    h4_se: float
     # Year effects
     k: Dict[int, float]
     # Fit stats
@@ -489,8 +491,8 @@ class FitResultApproach6c:
     n_params: int
     residuals: np.ndarray
     # Derived
-    T_optimal_dep: float  # -h1_dep/(2*h2_dep) - optimal departure
-    T_optimal_trend: float  # -h1_trend/(2*h2_trend)
+    f1: float              # -h1/(2*h2) - optimal departure (formerly T_optimal_dep)
+    f2: float              # -h3/(2*h4) - optimal trend T (formerly T_optimal_trend)
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -498,33 +500,32 @@ class FitResultApproach6c:
     imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
-    # Compatibility fields for unified output
-    h1: float = 0.0
-    h2: float = 0.0
-    h1_se: float = 0.0
-    h2_se: float = 0.0
-    T_optimal: float = np.nan
 
 
 @dataclass
 class FitResultApproach8a:
     """Container for Approach 8a results with separate total/trend and shared T_opt.
 
-    Model: delta-y*(t) = h2_total * (T - T_opt)^2 - h2_trend * (Ttrend - T_opt)^2
+    Model: delta-y*(t) = h2 * (T - T_opt)^2 - h4 * (Ttrend - T_opt)^2
 
     Where:
-        - h2_total: curvature for total (actual T) response
-        - h2_trend: curvature for trend (Ttrend) response
+        - h2: curvature for total (actual T) response
+        - h4: curvature for trend (Ttrend) response
         - T_opt: shared optimal temperature
 
-    Total Response (when T = Ttrend): (h2_total - h2_trend) * (T - T_opt)^2
+    Total Response (when T = Ttrend): (h2 - h4) * (T - T_opt)^2
+
+    Parameters:
+    - h2: Curvature for actual T response (formerly h2_total)
+    - h4: Curvature for trend T response (formerly h2_trend)
+    - T_opt: Shared optimal temperature
     """
     approach: str
     # Curvature coefficients
-    h2_total: float
-    h2_total_se: float
-    h2_trend: float
-    h2_trend_se: float
+    h2: float              # Curvature for actual T (formerly h2_total)
+    h2_se: float
+    h4: float              # Curvature for trend T (formerly h2_trend)
+    h4_se: float
     # Shared optimal temperature
     T_opt: float
     T_opt_se: float
@@ -537,7 +538,6 @@ class FitResultApproach8a:
     n_obs: int
     n_params: int  # = 3
     residuals: np.ndarray
-    T_optimal: float  # = T_opt
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -545,43 +545,41 @@ class FitResultApproach8a:
     imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
-    # Compatibility fields
-    h1: float = 0.0
-    h2: float = 0.0
-    h1_se: float = 0.0
-    h2_se: float = 0.0
+    # Compatibility field for plotting that expects h1
+    h1: float = 0.0        # Linear term (always 0 for piecewise model)
+    h1_se: float = 0.0     # SE for h1 (always 0)
 
 
 @dataclass
 class FitResultApproach8b:
     """Container for Approach 8b: Squared-deviation modulated trend response.
 
-    Model: Δy*(t) = (1 + h₀·(T - T_trend)²) · (h₁·T_trend + h₂·T_trend²)
+    Model: Δy*(t) = (1 + f1·(T - T_trend)²) · (h1·T_trend + h2·T_trend²)
 
-    The quadratic response h₁·T_trend + h₂·T_trend² is evaluated at the trend
-    temperature, then modulated by a factor (1 + h₀·T_delta²) where T_delta = T - T_trend.
+    The quadratic response h1·T_trend + h2·T_trend² is evaluated at the trend
+    temperature, then modulated by a factor (1 + f1·T_delta²) where T_delta = T - T_trend.
     When temperature equals the trend, the multiplier is 1. Larger deviations
-    (positive or negative) enhance or diminish the response depending on h₀'s sign.
+    (positive or negative) enhance or diminish the response depending on f1's sign.
 
     Parameters:
-        h0: Squared-deviation modulation coefficient (nonlinear parameter)
+        f1: Squared-deviation modulation coefficient (nonlinear parameter, formerly h0)
         h1, h2: Trend temperature response coefficients (linear parameters)
-        T_optimal: Optimal trend temperature = -h1/(2*h2)
+        T_opt: Optimal trend temperature = -h1/(2*h2)
     """
     approach: str
-    h0: float
-    h0_se: float
+    f1: float              # Modulation coefficient (formerly h0)
+    f1_se: float
     h1: float
     h1_se: float
     h2: float
     h2_se: float
-    T_optimal: float
+    T_opt: float           # Optimal temperature (formerly T_optimal)
     k: Dict[int, float]
     r_squared: float
     adj_r_squared: float
     rmse: float
     n_obs: int
-    n_params: int  # = 3 (a0, h1, h2)
+    n_params: int  # = 3 (f1, h1, h2)
     residuals: np.ndarray
     total_r_squared: float
     rms_imbalance: float = None
@@ -753,7 +751,7 @@ def fit_approach2_temperature_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 2: T_trend = T0 + T1*t (linear), j_trend = 0
@@ -806,7 +804,7 @@ def fit_approach2_temperature_detrending(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -852,7 +850,7 @@ def fit_approach3_growth_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 3: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
@@ -906,7 +904,7 @@ def fit_approach3_growth_detrending(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -954,7 +952,7 @@ def fit_approach1_combined_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 1: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -1008,7 +1006,7 @@ def fit_approach1_combined_detrending(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1059,7 +1057,7 @@ def fit_approach4_combined_quadratic_detrending(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 4: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -1113,7 +1111,7 @@ def fit_approach4_combined_quadratic_detrending(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1174,7 +1172,7 @@ def fit_approach5_precomputed_k_quadratic(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5: T_trend = T0_quad + T1_quad*t + T2_quad*t² (quadratic), j_trend = y0 + y1*t + y2*t² (quadratic)
@@ -1228,7 +1226,7 @@ def fit_approach5_precomputed_k_quadratic(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1284,7 +1282,7 @@ def fit_approach5a_precomputed_k_linear_temp(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5a: T_trend = T0 + T1*t (linear), j_trend = 0 (no GDP detrending)
@@ -1337,7 +1335,7 @@ def fit_approach5a_precomputed_k_linear_temp(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1398,7 +1396,7 @@ def fit_approach5b_precomputed_k_gdp_only(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5b: T_trend = 0 (no T detrending), j_trend = y0 + y1*t + y2*t²
@@ -1452,7 +1450,7 @@ def fit_approach5b_precomputed_k_gdp_only(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1513,7 +1511,7 @@ def fit_approach5c_precomputed_k_combined(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5c: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t²
@@ -1567,7 +1565,7 @@ def fit_approach5c_precomputed_k_combined(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -1674,7 +1672,7 @@ def fit_approach5d_precomputed_k_gdp_response(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # No optimal temperature (no temperature dependence)
-    T_optimal = np.nan
+    T_opt = np.nan
 
     # Compute RMS imbalance: h0 * g_trend + j_trend + k
     # g_trend uses trend GDP values (we need to compute what GDP would be along the trend)
@@ -1701,14 +1699,14 @@ def fit_approach5d_precomputed_k_gdp_response(
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
-    return FitResultApproach8(
+    return FitResultApproach5d(
         approach="5d: Precomputed k GDP Response",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
         h2_se=h2_se,
-        beta=beta_opt,
-        beta_se=beta_se,
+        f1=beta_opt,
+        f1_se=beta_se,
         Y_ref=Y_ref,
         k=k,
         r_squared=r_sq,
@@ -1717,7 +1715,7 @@ def fit_approach5d_precomputed_k_gdp_response(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2012,7 +2010,7 @@ def fit_approach6_precomputed_k_loess(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 6: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
@@ -2059,7 +2057,7 @@ def fit_approach6_precomputed_k_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2170,14 +2168,14 @@ def fit_approach6a_separate_high_low_loess(
 
     return FitResultApproach6ab(
         approach="6a: Separate Total/Trend Freq LOESS",
-        h1_total=h1_total,
-        h2_total=h2_total,
-        h1_total_se=h1_total_se,
-        h2_total_se=h2_total_se,
-        h1_trend=h1_trend,
-        h2_trend=h2_trend,
-        h1_trend_se=h1_trend_se,
-        h2_trend_se=h2_trend_se,
+        h1=h1_total,
+        h2=h2_total,
+        h1_se=h1_total_se,
+        h2_se=h2_total_se,
+        h3=h1_trend,
+        h4=h2_trend,
+        h3_se=h1_trend_se,
+        h4_se=h2_trend_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2185,8 +2183,8 @@ def fit_approach6a_separate_high_low_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal_total=T_optimal_total,
-        T_optimal_trend=T_optimal_trend,
+        T_opt=T_optimal_total,
+        f1=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2287,14 +2285,14 @@ def fit_approach6b_low_only_loess(
 
     return FitResultApproach6ab(
         approach="6b: Trend Freq Only LOESS",
-        h1_total=h1_total,
-        h2_total=h2_total,
-        h1_total_se=h1_total_se,
-        h2_total_se=h2_total_se,
-        h1_trend=h1_trend,
-        h2_trend=h2_trend,
-        h1_trend_se=h1_trend_se,
-        h2_trend_se=h2_trend_se,
+        h1=h1_total,
+        h2=h2_total,
+        h1_se=h1_total_se,
+        h2_se=h2_total_se,
+        h3=h1_trend,
+        h4=h2_trend,
+        h3_se=h1_trend_se,
+        h4_se=h2_trend_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2302,8 +2300,8 @@ def fit_approach6b_low_only_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal_total=T_optimal_total,
-        T_optimal_trend=T_optimal_trend,
+        T_opt=T_optimal_total,
+        f1=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2415,14 +2413,14 @@ def fit_approach6c_departure_trend_loess(
 
     return FitResultApproach6c(
         approach="6c: Departure/Trend LOESS",
-        h1_dep=h1_dep,
-        h2_dep=h2_dep,
-        h1_dep_se=h1_dep_se,
-        h2_dep_se=h2_dep_se,
-        h1_trend=h1_trend,
-        h2_trend=h2_trend,
-        h1_trend_se=h1_trend_se,
-        h2_trend_se=h2_trend_se,
+        h1=h1_dep,
+        h2=h2_dep,
+        h1_se=h1_dep_se,
+        h2_se=h2_dep_se,
+        h3=h1_trend,
+        h4=h2_trend,
+        h3_se=h1_trend_se,
+        h4_se=h2_trend_se,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2430,8 +2428,8 @@ def fit_approach6c_departure_trend_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal_dep=T_optimal_dep,
-        T_optimal_trend=T_optimal_trend,
+        f1=T_optimal_dep,
+        f2=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2573,10 +2571,10 @@ def fit_approach8a_shared_Topt_loess(
 
     return FitResultApproach8a(
         approach="8a: Shared T_opt Total/Trend LOESS",
-        h2_total=h2_total,
-        h2_total_se=h2_total_se,
-        h2_trend=h2_trend,
-        h2_trend_se=h2_trend_se,
+        h2=h2_total,
+        h2_se=h2_total_se,
+        h4=h2_trend,
+        h4_se=h2_trend_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
         k=k,
@@ -2586,7 +2584,6 @@ def fit_approach8a_shared_Topt_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_opt_opt,  # For compatibility
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2744,7 +2741,7 @@ def fit_approach8b_modulated_loess(
     )
 
     # Compute T_optimal from h₁ and h₂ (applies to trend temperature)
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Year effects are pre-computed year means
     k = dict(year_means)
@@ -2792,13 +2789,13 @@ def fit_approach8b_modulated_loess(
 
     return FitResultApproach8b(
         approach="8b: Modulated Response LOESS",
-        h0=h0_opt,
-        h0_se=h0_se,
+        f1=h0_opt,
+        f1_se=h0_se,
         h1=h1,
         h1_se=h1_se,
         h2=h2,
         h2_se=h2_se,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2820,7 +2817,7 @@ def fit_approach8_piecewise_loess(
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
-) -> FitResultApproach8Piecewise:
+) -> FitResultApproach8:
     """Approach 8: Piecewise quadratic temperature response with LOESS detrending.
 
     Model: h(T) = h2_high * (T - T_opt)²  if T > T_opt
@@ -2957,12 +2954,12 @@ def fit_approach8_piecewise_loess(
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
-    return FitResultApproach8Piecewise(
+    return FitResultApproach8(
         approach="8: Piecewise Quadratic LOESS",
-        h2_low=h2_low,
-        h2_low_se=h2_low_se,
-        h2_high=h2_high,
-        h2_high_se=h2_high_se,
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
         k=k,
@@ -2972,7 +2969,6 @@ def fit_approach8_piecewise_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_opt_opt,  # For compatibility
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -3061,7 +3057,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature
-    T_optimal = compute_T_optimal(h1, h2)
+    T_opt = compute_T_optimal(h1, h2)
 
     # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 0: T_trend = T (raw), j_trend from fitted coefficients
@@ -3118,7 +3114,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
         n_obs=n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -3193,7 +3189,7 @@ def fit_nocr0_joint(data: AnalysisData) -> FitResult:
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature undefined (h1=h2=0)
-    T_optimal = np.nan
+    T_opt = np.nan
 
     # Build j_trend and k_values arrays
     j_trend = np.zeros(n_obs)
@@ -3233,7 +3229,7 @@ def fit_nocr0_joint(data: AnalysisData) -> FitResult:
         n_obs=n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=None,
         rms_h=None,
@@ -3289,7 +3285,7 @@ def fit_nocr5_precomputed_k(
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     # Optimal temperature undefined
-    T_optimal = np.nan
+    T_opt = np.nan
 
     # Variance decomposition (no h components)
     components = {'j': j_trend, 'k': k_values}
@@ -3314,7 +3310,7 @@ def fit_nocr5_precomputed_k(
         n_obs=n_obs,
         n_params=n_params,
         residuals=residuals,
-        T_optimal=T_optimal,
+        T_opt=T_opt,
         total_r_squared=total_r_sq,
         rms_imbalance=None,
         rms_h=None,

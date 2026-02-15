@@ -202,58 +202,63 @@ def main():
     for name, r in results.items():
         print(f"\n{r.approach}")
         print("-" * 50)
-        # Special handling for Approach 6a/6b (separate total/trend frequency)
-        if hasattr(r, 'h1_total') and hasattr(r, 'h1_trend'):
-            print(f"  h1_total = {r.h1_total:.6f}  (SE: {r.h1_total_se:.6f})")
-            print(f"  h2_total = {r.h2_total:.6f}  (SE: {r.h2_total_se:.6f})")
-            print(f"  h1_trend = {r.h1_trend:.6f}  (SE: {r.h1_trend_se:.6f})")
-            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
-            if not np.isnan(r.T_optimal_total):
-                print(f"  T_optimal_total = {r.T_optimal_total:.2f} C")
+
+        # Approach 6a/6b: h1,h2 (total), h3,h4 (trend), T_opt, f1
+        if name in ['approach6a', 'approach6b'] and hasattr(r, 'h3'):
+            print(f"  h1 (total) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 (total) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
+            print(f"  h4 (trend) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            if not np.isnan(r.T_opt):
+                print(f"  T_opt (total) = {r.T_opt:.2f} C")
             else:
-                print(f"  T_optimal_total = N/A")
-            if not np.isnan(r.T_optimal_trend):
-                print(f"  T_optimal_trend = {r.T_optimal_trend:.2f} C")
+                print(f"  T_opt (total) = N/A")
+            if not np.isnan(r.f1):
+                print(f"  f1 (trend T_opt) = {r.f1:.2f} C")
             else:
-                print(f"  T_optimal_trend = N/A")
-        # Special handling for Approach 6c (departure/trend decomposition)
-        elif hasattr(r, 'h1_dep') and hasattr(r, 'h1_trend'):
-            print(f"  h1_dep = {r.h1_dep:.6f}  (SE: {r.h1_dep_se:.6f})")
-            print(f"  h2_dep = {r.h2_dep:.6f}  (SE: {r.h2_dep_se:.6f})")
-            print(f"  h1_trend = {r.h1_trend:.6f}  (SE: {r.h1_trend_se:.6f})")
-            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
-            if not np.isnan(r.T_optimal_dep):
-                print(f"  T_optimal_dep = {r.T_optimal_dep:.2f} C")
+                print(f"  f1 (trend T_opt) = N/A")
+
+        # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1, f2
+        elif name == 'approach6c' and hasattr(r, 'f1') and hasattr(r, 'f2'):
+            print(f"  h1 (departure) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 (departure) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
+            print(f"  h4 (trend) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            if not np.isnan(r.f1):
+                print(f"  f1 (departure T_opt) = {r.f1:.2f} C")
             else:
-                print(f"  T_optimal_dep = N/A")
-            if not np.isnan(r.T_optimal_trend):
-                print(f"  T_optimal_trend = {r.T_optimal_trend:.2f} C")
+                print(f"  f1 (departure T_opt) = N/A")
+            if not np.isnan(r.f2):
+                print(f"  f2 (trend T_opt) = {r.f2:.2f} C")
             else:
-                print(f"  T_optimal_trend = N/A")
-        # Special handling for Approach 8a (total/trend with shared T_opt)
-        elif hasattr(r, 'h2_total') and hasattr(r, 'h2_trend') and hasattr(r, 'T_opt'):
-            print(f"  h2_total = {r.h2_total:.6f}  (SE: {r.h2_total_se:.6f})")
-            print(f"  h2_trend = {r.h2_trend:.6f}  (SE: {r.h2_trend_se:.6f})")
+                print(f"  f2 (trend T_opt) = N/A")
+
+        # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
+        elif name == 'approach8a' and hasattr(r, 'h4') and not hasattr(r, 'h3'):
+            print(f"  h2 (total curvature) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (trend curvature) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
-        # Special handling for Approach 8 (Piecewise Quadratic, temperature regions)
-        elif hasattr(r, 'h2_low') and hasattr(r, 'h2_high') and hasattr(r, 'T_opt'):
-            print(f"  h2_low = {r.h2_low:.6f}  (SE: {r.h2_low_se:.6f})")
-            print(f"  h2_high = {r.h2_high:.6f}  (SE: {r.h2_high_se:.6f})")
+
+        # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
+        elif name == 'approach8' and hasattr(r, 'h4'):
+            print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+
         else:
-            # Print h0 for Approach 8b (modulated response)
-            if hasattr(r, 'h0') and r.h0 is not None:
-                print(f"  h0 = {r.h0:12.6f}  (SE: {r.h0_se:.6f})")
+            # Standard approaches (0-5, 5a-c, 5d, 6, 8b, etc.)
+            # Print f1 for Approach 8b (modulation coef) or 5d (GDP scaling exponent)
+            if hasattr(r, 'f1') and r.f1 is not None:
+                print(f"  f1 = {r.f1:12.6f}  (SE: {r.f1_se:.6f})")
+            # Print f2 for Approach 5d (Y_ref)
+            if hasattr(r, 'f2') and r.f2 is not None:
+                print(f"  f2 (Y_ref) = {r.f2:.2f}")
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
-            # Print beta for Approach 7
-            if hasattr(r, 'beta') and r.beta is not None:
-                print(f"  beta = {r.beta:10.4f}  (SE: {r.beta_se:.4f})")
-                print(f"  Y_ref = {r.Y_ref:.2f}")
-            if np.isnan(r.T_optimal):
-                print(f"  T_optimal = N/A")
+            if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):
+                print(f"  T_opt = {r.T_opt:.2f} C")
             else:
-                print(f"  T_optimal = {r.T_optimal:.2f} C")
+                print(f"  T_opt = N/A")
         print(f"  R² = {r.r_squared:.4f}")
         print(f"  Total R² = {r.total_r_squared:.4f}")
         print(f"  Adjusted R² = {r.adj_r_squared:.4f}")

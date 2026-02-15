@@ -1,0 +1,916 @@
+Bootstrap Uncertainty Analysis - Summary
+======================================================================
+Input data: Maddison_CRU_dataset.csv
+======================================================================
+
+Bootstrap iterations: 10
+Successful iterations: 10
+
+0: Conjoined OLS Fit
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       16.36
+    Bootstrap median:     16.88
+    90% CI:          [   14.25,    21.91]
+    IQR:             [   14.75,    20.27]
+    Std:                 2.9386
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014202
+    Bootstrap median:  0.014937
+    90% CI:          [  0.009861,   0.018524]
+    IQR:             [  0.011650,   0.017096]
+    Std:               0.003192
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000434
+    Bootstrap median: -0.000424
+    90% CI:          [ -0.000509,  -0.000283]
+    IQR:             [ -0.000491,  -0.000390]
+    Std:               0.000080
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1752  [ 0.1274,  0.5068]
+    h(T*) detrend          0.1752  [ 0.1274,  0.5068]
+    j (trends)             0.3151  [ 0.2687,  0.7023]
+    k (year FE)            0.1219  [ 0.1100,  0.3095]
+    cross terms           -0.4159  [-1.1889, -0.3322]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_T                          0.1752  [ 0.1274,  0.5068]
+    var_j                            0.3151  [ 0.2687,  0.7023]
+    var_k                            0.1219  [ 0.1100,  0.3095]
+    var_epsilon                      0.8038  [ 0.7784,  0.8164]
+    cov_h_T_j                       -0.3384  [-1.0459, -0.2486]
+    cov_h_T_k                       -0.0046  [-0.0185,  0.0071]
+    cov_h_T_epsilon                 -0.0000  [-0.0000,  0.0000]
+    cov_j_k                         -0.0729  [-0.4465, -0.0236]
+    cov_j_epsilon                    0.0000  [-0.0000,  0.0000]
+    cov_k_epsilon                    0.0000  [-0.0000,  0.0000]
+    sum_check                      1.000000
+
+1: Combined Detrending (Mixed)
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       17.07
+    Bootstrap median:     17.54
+    90% CI:          [   14.96,    22.66]
+    IQR:             [   15.34,    21.02]
+    Std:                 2.9752
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.013943
+    Bootstrap median:  0.014541
+    90% CI:          [  0.009682,   0.018086]
+    IQR:             [  0.011392,   0.016786]
+    Std:               0.003106
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000409
+    Bootstrap median: -0.000395
+    90% CI:          [ -0.000479,  -0.000265]
+    IQR:             [ -0.000460,  -0.000367]
+    Std:               0.000075
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1670  [ 0.1258,  0.5423]
+    h(T*) detrend          0.0077  [ 0.0043,  0.0134]
+    j (trends)             0.1069  [ 0.0885,  0.1222]
+    k (year FE)            0.0868  [ 0.0824,  0.1013]
+    cross terms           -0.1669  [-0.5412, -0.1258]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0077  [ 0.0043,  0.0134]
+    var_h_Ttrend                     0.1645  [ 0.1241,  0.5381]
+    var_h_cross                      0.0069  [ 0.0031,  0.0093]
+    var_j                            0.1069  [ 0.0885,  0.1222]
+    var_k                            0.0868  [ 0.0824,  0.1013]
+    var_epsilon                      0.9718  [ 0.9062,  1.3512]
+    cov_h_Tstar_h_Ttrend             0.0002  [-0.0000,  0.0007]
+    cov_h_Tstar_h_cross             -0.0123  [-0.0180, -0.0059]
+    cov_h_Tstar_j                    0.0013  [ 0.0010,  0.0022]
+    cov_h_Tstar_k                    0.0006  [-0.0008,  0.0023]
+    cov_h_Tstar_epsilon             -0.0003  [-0.0008, -0.0001]
+    cov_h_Ttrend_h_cross             0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                  -0.0002  [-0.0412,  0.0245]
+    cov_h_Ttrend_k                   0.0009  [-0.0001,  0.0030]
+    cov_h_Ttrend_epsilon            -0.3301  [-1.0799, -0.2492]
+    cov_h_cross_j                   -0.0006  [-0.0013, -0.0003]
+    cov_h_cross_k                   -0.0028  [-0.0052, -0.0014]
+    cov_h_cross_epsilon              0.0001  [ 0.0000,  0.0001]
+    cov_j_k                          0.0031  [ 0.0026,  0.0050]
+    cov_j_epsilon                   -0.0035  [-0.0289,  0.0370]
+    cov_k_epsilon                   -0.0009  [-0.0030,  0.0001]
+    sum_check                      1.000000
+
+2: Linear Temperature Detrending
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       17.13
+    Bootstrap median:     17.43
+    90% CI:          [   15.18,    23.94]
+    IQR:             [   15.67,    21.11]
+    Std:                 3.2928
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.015525
+    Bootstrap median:  0.016728
+    90% CI:          [  0.010262,   0.019644]
+    IQR:             [  0.012292,   0.018662]
+    Std:               0.003553
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000453
+    Bootstrap median: -0.000451
+    90% CI:          [ -0.000532,  -0.000266]
+    IQR:             [ -0.000506,  -0.000384]
+    Std:               0.000095
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.2075  [ 0.1539,  0.6564]
+    h(T*) detrend          0.0095  [ 0.0048,  0.0158]
+    j (trends)             0.0000  [ 0.0000,  0.0000]
+    k (year FE)            0.0921  [ 0.0889,  0.1096]
+    cross terms           -0.2069  [-0.6544, -0.1541]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0095  [ 0.0048,  0.0158]
+    var_h_Ttrend                     0.2044  [ 0.1516,  0.6515]
+    var_h_cross                      0.0085  [ 0.0032,  0.0115]
+    var_j                            0.0000  [ 0.0000,  0.0000]
+    var_k                            0.0921  [ 0.0889,  0.1096]
+    var_epsilon                      1.1145  [ 1.0324,  1.5965]
+    cov_h_Tstar_h_Ttrend             0.0002  [-0.0000,  0.0009]
+    cov_h_Tstar_h_cross             -0.0152  [-0.0219, -0.0063]
+    cov_h_Tstar_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_k                    0.0017  [ 0.0003,  0.0041]
+    cov_h_Tstar_epsilon             -0.0003  [-0.0009, -0.0002]
+    cov_h_Ttrend_h_cross             0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_k                   0.0018  [-0.0004,  0.0062]
+    cov_h_Ttrend_epsilon            -0.4116  [-1.3534, -0.2842]
+    cov_h_cross_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_k                   -0.0039  [-0.0070, -0.0020]
+    cov_h_cross_epsilon              0.0001  [ 0.0001,  0.0002]
+    cov_j_k                          0.0000  [ 0.0000,  0.0000]
+    cov_j_epsilon                    0.0000  [ 0.0000,  0.0000]
+    cov_k_epsilon                   -0.0018  [-0.0062,  0.0004]
+    sum_check                      1.000000
+
+3: Quadratic GDP Growth Detrending
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       14.85
+    Bootstrap median:     15.01
+    90% CI:          [   14.00,    16.07]
+    IQR:             [   14.80,    15.47]
+    Std:                 0.6927
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000135
+    Bootstrap median:  0.000146
+    90% CI:          [  0.000104,   0.000218]
+    IQR:             [  0.000128,   0.000159]
+    Std:               0.000041
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000005
+    Bootstrap median: -0.000005
+    90% CI:          [ -0.000007,  -0.000004]
+    IQR:             [ -0.000005,  -0.000004]
+    Std:               0.000001
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0000  [ 0.0000,  0.0000]
+    h(T*) detrend          0.0000  [ 0.0000,  0.0000]
+    j (trends)             0.1069  [ 0.0885,  0.1222]
+    k (year FE)            0.0849  [ 0.0798,  0.0995]
+    cross terms           -0.0000  [-0.0000, -0.0000]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0000  [ 0.0000,  0.0000]
+    var_h_Ttrend                     0.0000  [ 0.0000,  0.0000]
+    var_h_cross                      0.0000  [ 0.0000,  0.0000]
+    var_j                            0.1069  [ 0.0885,  0.1222]
+    var_k                            0.0849  [ 0.0798,  0.0995]
+    var_epsilon                      0.8082  [ 0.7822,  0.8211]
+    cov_h_Tstar_h_Ttrend             0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_h_cross              0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_j                    0.0002  [-0.0001,  0.0004]
+    cov_h_Tstar_k                   -0.0000  [-0.0000, -0.0000]
+    cov_h_Tstar_epsilon              0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_h_cross             0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_j                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_k                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_epsilon             0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_k                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_epsilon              0.0000  [ 0.0000,  0.0000]
+    cov_j_k                          0.0033  [ 0.0029,  0.0051]
+    cov_j_epsilon                   -0.0035  [-0.0051, -0.0031]
+    cov_k_epsilon                    0.0000  [-0.0000,  0.0000]
+    sum_check                      1.000000
+
+4: Combined Quadratic Detrending
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       16.72
+    Bootstrap median:     17.22
+    90% CI:          [   14.62,    22.63]
+    IQR:             [   15.09,    20.83]
+    Std:                 3.0783
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014177
+    Bootstrap median:  0.014853
+    90% CI:          [  0.009911,   0.018491]
+    IQR:             [  0.011636,   0.017060]
+    Std:               0.003162
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000424
+    Bootstrap median: -0.000410
+    90% CI:          [ -0.000500,  -0.000276]
+    IQR:             [ -0.000478,  -0.000378]
+    Std:               0.000079
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1722  [ 0.1335,  0.5484]
+    h(T*) detrend          0.0074  [ 0.0042,  0.0131]
+    j (trends)             0.1069  [ 0.0885,  0.1222]
+    k (year FE)            0.0869  [ 0.0825,  0.1013]
+    cross terms           -0.1722  [-0.5473, -0.1336]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0074  [ 0.0042,  0.0131]
+    var_h_Ttrend                     0.1698  [ 0.1318,  0.5443]
+    var_h_cross                      0.0068  [ 0.0031,  0.0093]
+    var_j                            0.1069  [ 0.0885,  0.1222]
+    var_k                            0.0869  [ 0.0825,  0.1013]
+    var_epsilon                      0.9768  [ 0.9157,  1.3575]
+    cov_h_Tstar_h_Ttrend             0.0002  [-0.0000,  0.0008]
+    cov_h_Tstar_h_cross             -0.0119  [-0.0178, -0.0058]
+    cov_h_Tstar_j                    0.0000  [-0.0000,  0.0000]
+    cov_h_Tstar_k                    0.0009  [-0.0006,  0.0027]
+    cov_h_Tstar_epsilon             -0.0003  [-0.0008, -0.0001]
+    cov_h_Ttrend_h_cross            -0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                   0.0026  [-0.0402,  0.0285]
+    cov_h_Ttrend_k                   0.0007  [-0.0001,  0.0031]
+    cov_h_Ttrend_epsilon            -0.3403  [-1.0922, -0.2645]
+    cov_h_cross_j                    0.0000  [-0.0000,  0.0000]
+    cov_h_cross_k                   -0.0032  [-0.0057, -0.0016]
+    cov_h_cross_epsilon              0.0001  [ 0.0000,  0.0002]
+    cov_j_k                          0.0032  [ 0.0029,  0.0050]
+    cov_j_epsilon                   -0.0058  [-0.0324,  0.0366]
+    cov_k_epsilon                   -0.0007  [-0.0031,  0.0001]
+    sum_check                      1.000000
+
+nocr0: No Climate Response (Joint)
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:         nan
+    Bootstrap median:       nan
+    90% CI:          [     nan,      nan]
+    IQR:             [     nan,      nan]
+    Std:                    nan
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0000  [ 0.0000,  0.0000]
+    j (trends)             0.1566  [ 0.1115,  0.3042]
+    k (year FE)            0.1263  [ 0.1033,  0.2652]
+    cross terms           -0.0886  [-0.3789, -0.0236]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_j                            0.1566  [ 0.1115,  0.3042]
+    var_k                            0.1263  [ 0.1033,  0.2652]
+    var_epsilon                      0.8058  [ 0.7802,  0.8186]
+    cov_j_k                         -0.0886  [-0.3789, -0.0236]
+    cov_j_epsilon                   -0.0000  [-0.0000,  0.0000]
+    cov_k_epsilon                    0.0000  [-0.0000,  0.0000]
+    sum_check                      1.000000
+
+5: Precomputed k Quadratic
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       17.37
+    Bootstrap median:     17.88
+    90% CI:          [   14.99,    23.29]
+    IQR:             [   15.43,    21.42]
+    Std:                 3.1984
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.012241
+    Bootstrap median:  0.012817
+    90% CI:          [  0.008324,   0.015950]
+    IQR:             [  0.010088,   0.015278]
+    Std:               0.002886
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000352
+    Bootstrap median: -0.000354
+    90% CI:          [ -0.000421,  -0.000225]
+    IQR:             [ -0.000398,  -0.000321]
+    Std:               0.000068
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1304  [ 0.0975,  0.4473]
+    h(T*) detrend          0.0055  [ 0.0029,  0.0097]
+    j (trends)             0.1039  [ 0.0842,  0.1171]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms           -0.1288  [-0.4447, -0.0962]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0055  [ 0.0029,  0.0097]
+    var_h_Ttrend                     0.1286  [ 0.0962,  0.4441]
+    var_h_cross                      0.0047  [ 0.0021,  0.0066]
+    var_j                            0.1039  [ 0.0842,  0.1171]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.9329  [ 0.8794,  1.2515]
+    cov_h_Tstar_h_Ttrend             0.0002  [ 0.0000,  0.0006]
+    cov_h_Tstar_h_cross             -0.0085  [-0.0131, -0.0040]
+    cov_h_Tstar_j                   -0.0000  [-0.0000, -0.0000]
+    cov_h_Tstar_k                    0.0008  [ 0.0001,  0.0024]
+    cov_h_Tstar_epsilon             -0.0002  [-0.0006, -0.0001]
+    cov_h_Ttrend_h_cross            -0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                  -0.0028  [-0.0428,  0.0211]
+    cov_h_Ttrend_k                   0.0017  [-0.0002,  0.0059]
+    cov_h_Ttrend_epsilon            -0.2573  [-0.8887, -0.1923]
+    cov_h_cross_j                   -0.0000  [-0.0000, -0.0000]
+    cov_h_cross_k                   -0.0020  [-0.0040, -0.0011]
+    cov_h_cross_epsilon              0.0000  [ 0.0000,  0.0001]
+    cov_j_k                         -0.0014  [-0.0032,  0.0007]
+    cov_j_epsilon                    0.0028  [-0.0210,  0.0428]
+    cov_k_epsilon                    0.0010  [-0.0031,  0.0034]
+    sum_check                      1.000000
+
+5a: Precomputed k Linear Temp
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       17.62
+    Bootstrap median:     18.01
+    90% CI:          [   15.56,    24.38]
+    IQR:             [   16.06,    21.34]
+    Std:                 3.2877
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.013627
+    Bootstrap median:  0.014725
+    90% CI:          [  0.008825,   0.017266]
+    IQR:             [  0.010779,   0.016458]
+    Std:               0.003204
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000387
+    Bootstrap median: -0.000387
+    90% CI:          [ -0.000455,  -0.000224]
+    IQR:             [ -0.000433,  -0.000335]
+    Std:               0.000082
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1646  [ 0.1045,  0.5284]
+    h(T*) detrend          0.0073  [ 0.0035,  0.0119]
+    j (trends)             0.0000  [ 0.0000,  0.0000]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms           -0.1624  [-0.5252, -0.1028]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0073  [ 0.0035,  0.0119]
+    var_h_Ttrend                     0.1622  [ 0.1028,  0.5245]
+    var_h_cross                      0.0062  [ 0.0023,  0.0084]
+    var_j                            0.0000  [ 0.0000,  0.0000]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      1.0754  [ 0.9908,  1.4651]
+    cov_h_Tstar_h_Ttrend             0.0002  [ 0.0000,  0.0007]
+    cov_h_Tstar_h_cross             -0.0114  [-0.0164, -0.0045]
+    cov_h_Tstar_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_k                    0.0016  [ 0.0008,  0.0037]
+    cov_h_Tstar_epsilon             -0.0003  [-0.0007, -0.0002]
+    cov_h_Ttrend_h_cross             0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_k                   0.0019  [-0.0001,  0.0058]
+    cov_h_Ttrend_epsilon            -0.3300  [-1.0945, -0.1927]
+    cov_h_cross_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_k                   -0.0028  [-0.0051, -0.0016]
+    cov_h_cross_epsilon              0.0001  [ 0.0000,  0.0002]
+    cov_j_k                          0.0000  [ 0.0000,  0.0000]
+    cov_j_epsilon                    0.0000  [ 0.0000,  0.0000]
+    cov_k_epsilon                   -0.0007  [-0.0049,  0.0014]
+    sum_check                      1.000000
+
+5b: Precomputed k GDP Only
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       12.21
+    Bootstrap median:     12.13
+    90% CI:          [   11.98,    12.81]
+    IQR:             [   12.00,    12.58]
+    Std:                 0.3280
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000043
+    Bootstrap median:  0.000045
+    90% CI:          [  0.000028,   0.000053]
+    IQR:             [  0.000040,   0.000049]
+    Std:               0.000009
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000002
+    Bootstrap median: -0.000002
+    90% CI:          [ -0.000002,  -0.000001]
+    IQR:             [ -0.000002,  -0.000002]
+    Std:               0.000000
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0000  [ 0.0000,  0.0000]
+    h(T*) detrend          0.0000  [ 0.0000,  0.0000]
+    j (trends)             0.1039  [ 0.0842,  0.1171]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0000  [ 0.0000,  0.0000]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0000  [ 0.0000,  0.0000]
+    var_h_Ttrend                     0.0000  [ 0.0000,  0.0000]
+    var_h_cross                      0.0000  [ 0.0000,  0.0000]
+    var_j                            0.1039  [ 0.0842,  0.1171]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.8058  [ 0.7802,  0.8187]
+    cov_h_Tstar_h_Ttrend             0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_h_cross              0.0000  [ 0.0000,  0.0000]
+    cov_h_Tstar_j                    0.0001  [ 0.0001,  0.0003]
+    cov_h_Tstar_k                   -0.0000  [-0.0000, -0.0000]
+    cov_h_Tstar_epsilon              0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_h_cross             0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_j                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_k                   0.0000  [ 0.0000,  0.0000]
+    cov_h_Ttrend_epsilon             0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_j                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_k                    0.0000  [ 0.0000,  0.0000]
+    cov_h_cross_epsilon              0.0000  [ 0.0000,  0.0000]
+    cov_j_k                         -0.0014  [-0.0032,  0.0007]
+    cov_j_epsilon                   -0.0001  [-0.0003, -0.0001]
+    cov_k_epsilon                    0.0015  [-0.0006,  0.0032]
+    sum_check                      1.000000
+
+5c: Precomputed k Combined
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       17.42
+    Bootstrap median:     17.90
+    90% CI:          [   15.09,    23.05]
+    IQR:             [   15.50,    21.28]
+    Std:                 3.0703
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.011727
+    Bootstrap median:  0.012257
+    90% CI:          [  0.007967,   0.015245]
+    IQR:             [  0.009719,   0.014554]
+    Std:               0.002730
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000337
+    Bootstrap median: -0.000337
+    90% CI:          [ -0.000400,  -0.000215]
+    IQR:             [ -0.000381,  -0.000309]
+    Std:               0.000065
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.1201  [ 0.0874,  0.3983]
+    h(T*) detrend          0.0054  [ 0.0029,  0.0095]
+    j (trends)             0.1039  [ 0.0842,  0.1171]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms           -0.1185  [-0.3958, -0.0861]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0054  [ 0.0029,  0.0095]
+    var_h_Ttrend                     0.1183  [ 0.0861,  0.3953]
+    var_h_cross                      0.0047  [ 0.0021,  0.0065]
+    var_j                            0.1039  [ 0.0842,  0.1171]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.9227  [ 0.8690,  1.2027]
+    cov_h_Tstar_h_Ttrend             0.0002  [-0.0000,  0.0005]
+    cov_h_Tstar_h_cross             -0.0085  [-0.0129, -0.0039]
+    cov_h_Tstar_j                    0.0005  [ 0.0002,  0.0012]
+    cov_h_Tstar_k                    0.0013  [ 0.0007,  0.0032]
+    cov_h_Tstar_epsilon             -0.0002  [-0.0006, -0.0001]
+    cov_h_Ttrend_h_cross             0.0000  [-0.0000,  0.0000]
+    cov_h_Ttrend_j                  -0.0035  [-0.0406,  0.0191]
+    cov_h_Ttrend_k                   0.0016  [-0.0003,  0.0051]
+    cov_h_Ttrend_epsilon            -0.2368  [-0.7911, -0.1723]
+    cov_h_cross_j                    0.0000  [-0.0005,  0.0003]
+    cov_h_cross_k                   -0.0024  [-0.0045, -0.0015]
+    cov_h_cross_epsilon              0.0000  [ 0.0000,  0.0001]
+    cov_j_k                         -0.0014  [-0.0032,  0.0007]
+    cov_j_epsilon                    0.0030  [-0.0196,  0.0399]
+    cov_k_epsilon                    0.0010  [-0.0028,  0.0033]
+    sum_check                      1.000000
+
+5d: Precomputed k GDP Response
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:         nan
+    Bootstrap median:       nan
+    90% CI:          [     nan,      nan]
+    IQR:             [     nan,      nan]
+    Std:                    nan
+  h1 (Linear temperature coefficient):
+    Point estimate:   -0.000000
+    Bootstrap median: -0.000000
+    90% CI:          [ -0.000000,  -0.000000]
+    IQR:             [ -0.000000,  -0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  f1 (GDP scaling exponent / optimal trend T):
+    Point estimate:      3.8421
+    Bootstrap median:    4.0672
+    90% CI:          [    3.2666,     6.3952]
+    IQR:             [    3.4853,     4.4948]
+    Std:                 1.1046
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0030  [ 0.0015,  0.0081]
+    j (trends)             0.1039  [ 0.0842,  0.1171]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0001  [ 0.0001,  0.0002]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_g_h                          0.0030  [ 0.0015,  0.0081]
+    var_j                            0.1039  [ 0.0842,  0.1171]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.8026  [ 0.7765,  0.8161]
+    cov_g_h_j                        0.0054  [ 0.0013,  0.0074]
+    cov_g_h_k                       -0.0004  [-0.0009, -0.0001]
+    cov_g_h_epsilon                  0.0003  [ 0.0001,  0.0004]
+    cov_j_k                         -0.0014  [-0.0032,  0.0007]
+    cov_j_epsilon                   -0.0054  [-0.0074, -0.0013]
+    cov_k_epsilon                    0.0019  [-0.0002,  0.0035]
+    sum_check                      1.000000
+
+nocr5: No Climate Response (Precomputed k)
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:         nan
+    Bootstrap median:       nan
+    90% CI:          [     nan,      nan]
+    IQR:             [     nan,      nan]
+    Std:                    nan
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0000  [ 0.0000,  0.0000]
+    j (trends)             0.1039  [ 0.0842,  0.1171]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0000  [-0.0000,  0.0000]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_j                            0.1039  [ 0.0842,  0.1171]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.8058  [ 0.7802,  0.8187]
+    cov_j_k                         -0.0014  [-0.0032,  0.0007]
+    cov_j_epsilon                   -0.0000  [-0.0000,  0.0000]
+    cov_k_epsilon                    0.0014  [-0.0007,  0.0032]
+    sum_check                      1.000000
+
+6: Precomputed k LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       15.97
+    Bootstrap median:     16.11
+    90% CI:          [   13.80,    19.36]
+    IQR:             [   14.58,    17.09]
+    Std:                 1.9451
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014978
+    Bootstrap median:  0.015620
+    90% CI:          [  0.011084,   0.019448]
+    IQR:             [  0.013048,   0.017670]
+    Std:               0.002994
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000469
+    Bootstrap median: -0.000476
+    90% CI:          [ -0.000570,  -0.000389]
+    IQR:             [ -0.000502,  -0.000420]
+    Std:               0.000062
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.2019  [ 0.1474,  0.3894]
+    h(T*) detrend          0.0078  [ 0.0054,  0.0132]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms           -0.1916  [-0.3842, -0.1401]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_Tstar                      0.0078  [ 0.0054,  0.0132]
+    var_h_Ttrend                     0.1993  [ 0.1455,  0.3844]
+    var_h_cross                      0.0077  [ 0.0054,  0.0107]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.9739  [ 0.8983,  1.1501]
+    cov_h_Tstar_h_Ttrend            -0.0007  [-0.0017,  0.0018]
+    cov_h_Tstar_h_cross             -0.0129  [-0.0193, -0.0088]
+    cov_h_Tstar_j                   -0.0003  [-0.0005,  0.0004]
+    cov_h_Tstar_k                   -0.0010  [-0.0023,  0.0002]
+    cov_h_Tstar_epsilon              0.0006  [-0.0020,  0.0016]
+    cov_h_Ttrend_h_cross             0.0008  [-0.0001,  0.0014]
+    cov_h_Ttrend_j                   0.0147  [-0.0460,  0.0585]
+    cov_h_Ttrend_k                   0.0005  [-0.0015,  0.0044]
+    cov_h_Ttrend_epsilon            -0.4069  [-0.7537, -0.2920]
+    cov_h_cross_j                    0.0001  [-0.0004,  0.0004]
+    cov_h_cross_k                   -0.0001  [-0.0018,  0.0007]
+    cov_h_cross_epsilon             -0.0009  [-0.0014,  0.0001]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                   -0.0048  [-0.0584,  0.0522]
+    cov_k_epsilon                    0.0127  [ 0.0110,  0.0175]
+    sum_check                      1.000000
+
+6a: Separate Total/Trend Freq LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       15.77
+    Bootstrap median:     15.91
+    90% CI:          [   13.60,    19.26]
+    IQR:             [   14.40,    17.00]
+    Std:                 1.9853
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.014344
+    Bootstrap median:  0.015030
+    90% CI:          [  0.010755,   0.018713]
+    IQR:             [  0.012416,   0.017119]
+    Std:               0.002896
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000455
+    Bootstrap median: -0.000461
+    90% CI:          [ -0.000554,  -0.000379]
+    IQR:             [ -0.000486,  -0.000412]
+    Std:               0.000060
+  f1 (GDP scaling exponent / optimal trend T):
+    Point estimate:     15.6569
+    Bootstrap median:   15.8310
+    90% CI:          [   13.6118,    19.0089]
+    IQR:             [   14.3742,    16.8417]
+    Std:                 1.8910
+  h3 (Linear coef for trend response T_trend):
+    Point estimate:    0.015054
+    Bootstrap median:  0.015687
+    90% CI:          [  0.011292,   0.019538]
+    Std:               0.002963
+  h4 (Quadratic coef for trend response T_trend):
+    Point estimate:   -0.000481
+    Bootstrap median: -0.000486
+    90% CI:          [ -0.000581,  -0.000398]
+    Std:               0.000063
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0032  [ 0.0023,  0.0049]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0094  [-0.0054,  0.0214]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_total_T                    0.1902  [ 0.1385,  0.3559]
+    var_h_trend_Ttrend               0.2104  [ 0.1490,  0.3659]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7658  [ 0.7304,  0.7853]
+    cov_h_total_T_h_trend_Ttrend    -0.3974  [-0.7179, -0.2852]
+    cov_h_total_T_j                  0.0169  [-0.0433,  0.0599]
+    cov_h_total_T_k                 -0.0009  [-0.0029,  0.0024]
+    cov_h_total_T_epsilon            0.0125  [ 0.0062,  0.0278]
+    cov_h_trend_Ttrend_j            -0.0196  [-0.0636,  0.0415]
+    cov_h_trend_Ttrend_k            -0.0002  [-0.0041,  0.0017]
+    cov_h_trend_Ttrend_epsilon      -0.0130  [-0.0284, -0.0065]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0125  [-0.0005,  0.0232]
+    cov_k_epsilon                    0.0130  [ 0.0114,  0.0175]
+    sum_check                      1.000000
+
+6b: Trend Freq Only LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:         nan
+    Bootstrap median:       nan
+    90% CI:          [     nan,      nan]
+    IQR:             [     nan,      nan]
+    Std:                    nan
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  f1 (GDP scaling exponent / optimal trend T):
+    Point estimate:     13.7131
+    Bootstrap median:   13.9889
+    90% CI:          [   13.1627,    14.5692]
+    IQR:             [   13.7515,    14.3454]
+    Std:                 0.4958
+  h3 (Linear coef for trend response T_trend):
+    Point estimate:    0.000739
+    Bootstrap median:  0.000663
+    90% CI:          [  0.000551,   0.000878]
+    Std:               0.000113
+  h4 (Quadratic coef for trend response T_trend):
+    Point estimate:   -0.000027
+    Bootstrap median: -0.000023
+    90% CI:          [ -0.000033,  -0.000019]
+    Std:               0.000005
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0009  [ 0.0004,  0.0013]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0094  [-0.0055,  0.0214]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_trend_Ttrend               0.0009  [ 0.0004,  0.0013]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7682  [ 0.7324,  0.7880]
+    cov_h_trend_Ttrend_j            -0.0027  [-0.0049, -0.0006]
+    cov_h_trend_Ttrend_k             0.0001  [ 0.0000,  0.0002]
+    cov_h_trend_Ttrend_epsilon      -0.0004  [-0.0007, -0.0003]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0125  [-0.0005,  0.0231]
+    cov_k_epsilon                    0.0119  [ 0.0100,  0.0159]
+    sum_check                      1.000000
+
+6c: Departure/Trend LOESS
+--------------------------------------------------
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.001941
+    Bootstrap median:  0.002043
+    90% CI:          [  0.001367,   0.005109]
+    IQR:             [  0.001628,   0.003761]
+    Std:               0.001433
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.002412
+    Bootstrap median: -0.002568
+    90% CI:          [ -0.004445,   0.002056]
+    IQR:             [ -0.004058,  -0.001030]
+    Std:               0.002502
+  f1 (GDP scaling exponent / optimal trend T):
+    Point estimate:      0.4025
+    Bootstrap median:    0.5087
+    90% CI:          [    0.0210,     1.8713]
+    IQR:             [    0.3071,     0.7380]
+    Std:                 0.6431
+  h3 (Linear coef for trend response T_trend):
+    Point estimate:   -0.000660
+    Bootstrap median: -0.000599
+    90% CI:          [ -0.000832,  -0.000445]
+    Std:               0.000129
+  h4 (Quadratic coef for trend response T_trend):
+    Point estimate:    0.000024
+    Bootstrap median:  0.000021
+    90% CI:          [  0.000015,   0.000031]
+    Std:               0.000005
+  f2 (Optimal trend temperature, C):
+    Point estimate:       13.69
+    Bootstrap median:     14.01
+    90% CI:          [   13.11,    14.81]
+    IQR:             [   13.72,    14.41]
+    Std:                 0.6032
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0011  [ 0.0006,  0.0025]
+    h(T*) detrend          0.0011  [ 0.0006,  0.0025]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0094  [-0.0054,  0.0215]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_T                          0.0011  [ 0.0006,  0.0025]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7679  [ 0.7320,  0.7877]
+    cov_h_T_j                       -0.0030  [-0.0048, -0.0010]
+    cov_h_T_k                        0.0002  [-0.0002,  0.0005]
+    cov_h_T_epsilon                 -0.0004  [-0.0006, -0.0002]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0128  [-0.0003,  0.0234]
+    cov_k_epsilon                    0.0118  [ 0.0101,  0.0158]
+    sum_check                      1.000000
+
+8: Piecewise Quadratic LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       22.73
+    Bootstrap median:     21.54
+    90% CI:          [   17.44,    23.59]
+    IQR:             [   18.31,    23.32]
+    Std:                 2.5261
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000262
+    Bootstrap median: -0.000323
+    90% CI:          [ -0.000398,  -0.000204]
+    IQR:             [ -0.000354,  -0.000266]
+    Std:               0.000067
+  h4 (Curvature for T > T_opt):
+    Point estimate:   -0.001713
+    Bootstrap median: -0.001487
+    90% CI:          [ -0.002266,  -0.000719]
+    IQR:             [ -0.001990,  -0.000944]
+    Std:               0.000584
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0027  [ 0.0025,  0.0043]
+    h(T*) detrend          0.0027  [ 0.0025,  0.0043]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0078  [-0.0070,  0.0197]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_T                          0.0027  [ 0.0025,  0.0043]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7661  [ 0.7301,  0.7851]
+    cov_h_T_j                       -0.0001  [-0.0002,  0.0001]
+    cov_h_T_k                       -0.0013  [-0.0020, -0.0013]
+    cov_h_T_epsilon                 -0.0002  [-0.0003, -0.0001]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0099  [-0.0051,  0.0220]
+    cov_k_epsilon                    0.0133  [ 0.0117,  0.0178]
+    sum_check                      1.000000
+
+8a: Shared T_opt Total/Trend LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       19.06
+    Bootstrap median:     18.19
+    90% CI:          [   16.29,    25.67]
+    IQR:             [   16.90,    19.69]
+    Std:                 3.8333
+  h1 (Linear temperature coefficient):
+    Point estimate:    0.000000
+    Bootstrap median:  0.000000
+    90% CI:          [  0.000000,   0.000000]
+    IQR:             [  0.000000,   0.000000]
+    Std:               0.000000
+  h2 (Quadratic temperature coefficient):
+    Point estimate:   -0.000381
+    Bootstrap median: -0.000391
+    90% CI:          [ -0.000497,  -0.000269]
+    IQR:             [ -0.000454,  -0.000331]
+    Std:               0.000084
+  h4 (Curvature for T > T_opt):
+    Point estimate:   -0.000359
+    Bootstrap median: -0.000371
+    90% CI:          [ -0.000477,  -0.000251]
+    IQR:             [ -0.000432,  -0.000312]
+    Std:               0.000083
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0030  [ 0.0022,  0.0047]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0084  [-0.0062,  0.0203]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_total_T                    0.2230  [ 0.1039,  0.5869]
+    var_h_trend_Ttrend               0.1953  [ 0.0860,  0.5268]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7667  [ 0.7309,  0.7860]
+    cov_h_total_T_h_trend_Ttrend    -0.4153  [-1.1093, -0.1876]
+    cov_h_total_T_j                 -0.0240  [-0.0782,  0.0167]
+    cov_h_total_T_k                  0.0018  [-0.0017,  0.0051]
+    cov_h_total_T_epsilon           -0.0165  [-0.0262, -0.0095]
+    cov_h_trend_Ttrend_j             0.0225  [-0.0164,  0.0742]
+    cov_h_trend_Ttrend_k            -0.0028  [-0.0062,  0.0002]
+    cov_h_trend_Ttrend_epsilon       0.0154  [ 0.0087,  0.0251]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0113  [-0.0033,  0.0226]
+    cov_k_epsilon                    0.0129  [ 0.0111,  0.0173]
+    sum_check                      1.000000
+
+8b: Modulated Response LOESS
+--------------------------------------------------
+  T_opt (Optimal Temperature, C):
+    Point estimate:       13.27
+    Bootstrap median:     13.16
+    90% CI:          [   11.80,    14.10]
+    IQR:             [   12.13,    13.63]
+    Std:                 0.8654
+  h1 (Linear temperature coefficient):
+    Point estimate:   -0.000564
+    Bootstrap median: -0.000445
+    90% CI:          [ -0.000709,  -0.000349]
+    IQR:             [ -0.000560,  -0.000394]
+    Std:               0.000131
+  h2 (Quadratic temperature coefficient):
+    Point estimate:    0.000021
+    Bootstrap median:  0.000019
+    90% CI:          [  0.000014,   0.000026]
+    IQR:             [  0.000015,   0.000021]
+    Std:               0.000005
+  f1 (GDP scaling exponent / optimal trend T):
+    Point estimate:      1.9446
+    Bootstrap median:    2.9683
+    90% CI:          [    0.0935,     5.0000]
+    IQR:             [    1.8626,     5.0000]
+    Std:                 1.8718
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total             0.0019  [ 0.0009,  0.0050]
+    h(T*) detrend          0.0019  [ 0.0009,  0.0050]
+    j (trends)             0.1313  [ 0.1108,  0.1543]
+    k (year FE)            0.0902  [ 0.0861,  0.1081]
+    cross terms            0.0090  [-0.0062,  0.0205]
+  Detailed Variance Decomposition (sum = 1.0 by construction):
+    var_h_T                          0.0019  [ 0.0009,  0.0050]
+    var_j                            0.1313  [ 0.1108,  0.1543]
+    var_k                            0.0902  [ 0.0861,  0.1081]
+    var_epsilon                      0.7675  [ 0.7312,  0.7870]
+    cov_h_T_j                       -0.0038  [-0.0066, -0.0021]
+    cov_h_T_k                        0.0005  [ 0.0001,  0.0011]
+    cov_h_T_epsilon                 -0.0007  [-0.0012, -0.0002]
+    cov_j_k                         -0.0120  [-0.0160, -0.0101]
+    cov_j_epsilon                    0.0136  [ 0.0005,  0.0258]
+    cov_k_epsilon                    0.0114  [ 0.0098,  0.0152]
+    sum_check                      1.000000
+

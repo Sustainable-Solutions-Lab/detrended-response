@@ -37,6 +37,83 @@ This can be collapsed into:
 
 **Optimal temperature** (where growth is maximized): `T_opt = -h₁ / (2·h₂)`
 
+## Parameter Naming Convention
+
+All approaches use a consistent naming scheme for output coefficients:
+
+### Universal Parameters
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1 | Linear temperature response coefficient |
+| h2 | Quadratic temperature response coefficient |
+| T_opt | Optimal temperature (where h(T) is maximized) |
+| k(t) | Year fixed effects |
+| r_squared | R² on detrended residuals |
+| total_r_squared | R² on original Δy |
+
+### Approach-Specific Parameters
+
+**Approaches 0, 5, 5a-c, 7a-c** (standard quadratic): h1, h2, T_opt only
+
+**Approach 5d** (GDP-dependent response):
+
+| Parameter | Meaning |
+|-----------|---------|
+| f1 | GDP scaling exponent |
+| f2 | Reference GDP level |
+
+**Approaches 6a/6b** (separate total/trend responses):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1, h2 | Response to actual temperature T |
+| h3, h4 | Response to trend temperature T_trend |
+| T_opt | Optimal actual temperature |
+| f1 | Optimal trend temperature |
+
+**Approach 6c** (departure/trend decomposition):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1, h2 | Response to departure from trend (T - T_trend) |
+| h3, h4 | Response to trend temperature T_trend |
+| f1 | Optimal departure from trend |
+| f2 | Optimal trend temperature |
+
+**Approach 8** (piecewise quadratic):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1 | Linear term (fixed at 0) |
+| h2 | Curvature below T_opt |
+| h4 | Curvature above T_opt |
+| T_opt | Breakpoint temperature |
+
+**Approach 8a** (shared T_opt, separate curvatures):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h2 | Curvature for actual T response |
+| h4 | Curvature for trend T response |
+| T_opt | Shared optimal temperature |
+
+**Approach 8b** (modulated trend response):
+
+| Parameter | Meaning |
+|-----------|---------|
+| f1 | Squared-deviation modulation coefficient |
+| h1, h2 | Response to trend temperature |
+| T_opt | Optimal trend temperature |
+
+### Standard Error Convention
+
+All coefficients follow the pattern:
+- Point estimate: `{name}` (e.g., h1, h2, T_opt, f1)
+- Standard error: `{name}_se` in Python, `{name}_SE` in CSV
+- Bootstrap samples: `{name}_samples`
+- Bootstrap statistics: `{name}_point`, `{name}_median`, `{name}_p5`, etc.
+
 ## Interpreting the Time Trend Function jᵢ(t)
 
 The time trend function `jᵢ(t)` can be interpreted as:
@@ -135,9 +212,9 @@ Several variants explore different detrending combinations:
 
 **Approach 5d** introduces GDP-dependent scaling:
 ```
-h(Y,T) = (Y/Y_ref)^(-β) · (h₁·T* + h₂·T*²)
+h(Y,T) = (Y/f₂)^(-f₁) · (h₁·T* + h₂·T*²)
 ```
-where β is the GDP scaling exponent (larger β = stronger income-based adaptation).
+where f₁ is the GDP scaling exponent (larger f₁ = stronger income-based adaptation) and f₂ is the reference GDP level.
 
 ### Approach 6: LOESS Detrending
 
@@ -162,23 +239,23 @@ Extends Approach 6 by allowing different temperature response functions for the 
 ```
 
 where:
-- `h_total(T) = h₁_total·T + h₂_total·T²` — response to actual (total) temperature
-- `h_trend(T_trend) = h₁_trend·T_trend + h₂_trend·T_trend²` — response to trend temperature
+- `h_total(T) = h₁·T + h₂·T²` — response to actual (total) temperature
+- `h_trend(T_trend) = h₃·T_trend + h₄·T_trend²` — response to trend temperature
 - `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
 
 **Parameters:**
-- `h₁_total, h₂_total`: Total temperature response coefficients (response to actual T)
-- `h₁_trend, h₂_trend`: Trend temperature response coefficients (response to T_trend)
-- `T_optimal_total, T_optimal_trend`: Optimal temperatures for total and trend components
+- `h₁, h₂`: Total temperature response coefficients (response to actual T)
+- `h₃, h₄`: Trend temperature response coefficients (response to T_trend)
+- `T_opt, f1`: Optimal temperatures for total and trend components
 
 **Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
 ```
-h_total(T) - h_trend(T) = (h₁_total - h₁_trend)·T + (h₂_total - h₂_trend)·T²
+h_total(T) - h_trend(T) = (h₁ - h₃)·T + (h₂ - h₄)·T²
 ```
 
 **Interpretation:** If climate adaptation occurs over time, the response to trend temperature changes may differ from the response to total temperature. Approach 6a tests whether economies respond differently to these two components.
 
-**Degrees of freedom:** 4 for h(T) (h₁_total, h₂_total, h₁_trend, h₂_trend)
+**Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
 
 ### Approach 6b: Trend Response Only
 
@@ -190,11 +267,11 @@ A restricted version of Approach 6a that sets the total temperature response to 
 
 where:
 - `h_total(T) = 0` (no response to total temperature)
-- `h_trend(T_trend) = h₁_trend·T_trend + h₂_trend·T_trend²`
+- `h_trend(T_trend) = h₃·T_trend + h₄·T_trend²`
 
 **Interpretation:** Tests the hypothesis that only trend temperature affects economic growth, while deviations from the trend have no systematic effect.
 
-**Degrees of freedom:** 2 for h(T) (h₁_trend, h₂_trend)
+**Degrees of freedom:** 2 for h(T) (h₃, h₄)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 
@@ -202,14 +279,14 @@ Uses a piecewise quadratic temperature response that allows different curvatures
 
 **Model:**
 ```
-h(T) = h₂_high · (T - T_opt)²   if T > T_opt
-h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
+h(T) = h₄ · (T - T_opt)²   if T > T_opt
+h(T) = h₂ · (T - T_opt)²   if T ≤ T_opt
 ```
 
 **Parameters:**
 - `T_opt`: Optimal temperature (breakpoint where h(T) = 0)
-- `h₂_low`: Curvature for cold countries (T ≤ T_opt)
-- `h₂_high`: Curvature for hot countries (T > T_opt)
+- `h₂`: Curvature for cold countries (T ≤ T_opt)
+- `h₄`: Curvature for hot countries (T > T_opt)
 
 **Fitting uses the detrended formulation:**
 ```
@@ -218,31 +295,31 @@ h(T) = h₂_low · (T - T_opt)²    if T ≤ T_opt
 
 **Optimization strategy:**
 1. Outer optimization: Search for T_opt using L-BFGS-B
-2. Inner OLS: For each T_opt, solve for h₂_low and h₂_high via 2-column OLS
+2. Inner OLS: For each T_opt, solve for h₂ and h₄ via 2-column OLS
 
 **Interpretation:**
-- Both h₂_low and h₂_high should be negative (growth decreases away from optimum)
-- If h₂_low ≈ h₂_high, model reduces to symmetric quadratic
-- If |h₂_high| > |h₂_low|, warming hurts hot countries more than cooling hurts cold countries
+- Both h₂ and h₄ should be negative (growth decreases away from optimum)
+- If h₂ ≈ h₄, model reduces to symmetric quadratic
+- If |h₄| > |h₂|, warming hurts hot countries more than cooling hurts cold countries
 
-**Degrees of freedom:** 3 (T_opt, h₂_low, h₂_high)
+**Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
 ### Approach 8a: Separate Total/Trend Response with Shared T_opt
 
 Combines the total/trend separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for total temperature (T) and trend temperature (T_trend), but with a shared optimal temperature.
 
 ```
-Δy*(t) = h₂_total·(T - T_opt)² - h₂_trend·(T_trend - T_opt)²
+Δy*(t) = h₂·(T - T_opt)² - h₄·(T_trend - T_opt)²
 ```
 
 where:
-- `h₂_total`: Curvature for total (actual) temperature response
-- `h₂_trend`: Curvature for trend temperature response
+- `h₂`: Curvature for total (actual) temperature response
+- `h₄`: Curvature for trend temperature response
 - `T_opt`: Shared optimal temperature for both components
 
 **Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
 ```
-(h₂_total - h₂_trend)·(T - T_opt)²
+(h₂ - h₄)·(T - T_opt)²
 ```
 
 **Key features:**
@@ -252,7 +329,7 @@ where:
 
 **Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between total temperature and trend temperature, while maintaining a common optimal temperature.
 
-**Degrees of freedom:** 3 (T_opt, h₂_total, h₂_trend)
+**Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
 ### Approach 8b: Squared-Deviation Modulated Temperature Response
 
@@ -260,25 +337,25 @@ Uses a symmetric modulation where the temperature response is scaled by the squa
 
 **Model:**
 ```
-Δy*(t) = (1 + h₀ · (T - T_trend)²) · (h₁ · T + h₂ · T²)
+Δy*(t) = (1 + f₁ · (T - T_trend)²) · (h₁ · T_trend + h₂ · T_trend²)
 ```
 
 **Parameters:**
-- `h₀`: Squared-deviation modulation coefficient
-- `h₁, h₂`: Standard quadratic temperature response coefficients
-- `T_optimal`: Optimal temperature = -h₁/(2·h₂)
+- `f₁`: Squared-deviation modulation coefficient
+- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to trend temperature)
+- `T_opt`: Optimal temperature = -h₁/(2·h₂)
 
 **Interpretation:**
 - When T = T_trend, the multiplier is 1 (standard quadratic response)
-- Any deviation from trend (warmer or cooler) scales the response by (1 + h₀·T_delta²)
-- If h₀ > 0: deviations from trend amplify the temperature response
-- If h₀ < 0: deviations from trend dampen the temperature response
+- Any deviation from trend (warmer or cooler) scales the response by (1 + f₁·T_delta²)
+- If f₁ > 0: deviations from trend amplify the temperature response
+- If f₁ < 0: deviations from trend dampen the temperature response
 
 **Fitting Strategy:**
-- Outer optimization: Search for h₀ using L-BFGS-B
-- Inner OLS: For each h₀, solve for h₁ and h₂ via 2-column OLS
+- Outer optimization: Search for f₁ using L-BFGS-B
+- Inner OLS: For each f₁, solve for h₁ and h₂ via 2-column OLS
 
-**Degrees of freedom:** 3 (h₀, h₁, h₂)
+**Degrees of freedom:** 3 (f₁, h₁, h₂)
 
 ### Null Models (No Climate Response)
 
@@ -482,10 +559,10 @@ python scripts/run_influence_analysis.py
 **Default coefficients by approach:**
 | Approach | Coefficients |
 |----------|--------------|
-| Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_optimal |
-| Approach 6a/6b | h₁_total, h₂_total, h₁_trend, h₂_trend, T_optimal_total, T_optimal_trend |
-| Approach 8 | h₂_low, h₂_high, T_optimal |
-| Approach 8a | h₂_total, h₂_trend, T_optimal |
+| Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_opt |
+| Approach 6a/6b | h₁, h₂, h₃, h₄, T_opt, f₁ |
+| Approach 8 | h₂, h₄, T_opt |
+| Approach 8a | h₂, h₄, T_opt |
 
 **Example:**
 ```bash
@@ -548,14 +625,14 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 
 | File | Description |
 |------|-------------|
-| `bootstrap_coefficients.csv` | All bootstrap samples (h₁, h₂, T_optimal, β, h₂_low, h₂_high) |
+| `bootstrap_coefficients.csv` | All bootstrap samples (h1, h2, T_opt, f1, h3, h4, etc.) |
 | `bootstrap_summary.txt` | Summary statistics and confidence intervals |
 | `bootstrap_summary_table.csv` | Tabular summary with percentiles |
 | `bootstrap_summary_table.xlsx` | Same as above in Excel format |
 | `bootstrap_distributions.pdf` | Histograms of coefficient distributions |
 | `bootstrap_temperature_response_*.pdf` | Temperature response curves with 90% uncertainty bands |
 | `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
-| `bootstrap_T_optimal_comparison.pdf` | Optimal temperature comparison with error bars |
+| `bootstrap_T_opt_comparison.pdf` | Optimal temperature comparison with error bars |
 
 ### Country Influence Outputs
 

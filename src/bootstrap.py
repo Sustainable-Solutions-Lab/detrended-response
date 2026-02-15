@@ -1,7 +1,7 @@
 """Country-level bootstrap resampling for uncertainty quantification.
 
 This module implements cluster bootstrap (resampling countries with replacement)
-for computing uncertainty estimates on h1, h2, and T_optimal for all 8 approaches.
+for computing uncertainty estimates on h1, h2, and T_opt for all approaches.
 
 The cluster bootstrap approach:
 1. Fit the original model to get point estimates
@@ -47,20 +47,30 @@ from .fitting import fit_all_approaches, FitResult
 
 @dataclass
 class BootstrapResult:
-    """Container for bootstrap results for a single approach."""
+    """Container for bootstrap results for a single approach.
+
+    Field naming convention follows the FitResult naming:
+    - Universal: h1, h2, T_opt (for standard quadratic approaches)
+    - Approach 5d: f1 = GDP scaling exponent
+    - Approach 6a/6b: h1,h2 = total T response; h3,h4 = trend T response; T_opt, f1 = optimal temps
+    - Approach 6c: h1,h2 = departure response; h3,h4 = trend response; f1,f2 = optimal temps
+    - Approach 8: h2 = curvature below T_opt; h4 = curvature above T_opt
+    - Approach 8a: h2 = curvature for actual T; h4 = curvature for trend T
+    - Approach 8b: f1 = modulation coef; h1,h2 = trend response
+    """
     approach: str
 
     # Point estimates (from original fit)
     h1_point: float
     h2_point: float
-    T_optimal_point: float
+    T_opt_point: float             # (formerly T_optimal_point)
     r_squared_point: float
     total_r_squared_point: float
 
     # Bootstrap samples - shape (n_bootstrap,)
     h1_samples: np.ndarray
     h2_samples: np.ndarray
-    T_optimal_samples: np.ndarray
+    T_opt_samples: np.ndarray      # (formerly T_optimal_samples)
     r_squared_samples: np.ndarray
     total_r_squared_samples: np.ndarray
 
@@ -69,42 +79,31 @@ class BootstrapResult:
     n_successful: int  # Number of successful fits
 
     # GDP-dependent approaches (5d) specific (optional)
-    beta_point: float = None       # GDP scaling exponent
-    beta_samples: np.ndarray = None  # Bootstrap samples for beta
+    f1_point: float = None         # GDP scaling exponent (formerly beta_point)
+    f1_samples: np.ndarray = None  # Bootstrap samples for f1 (formerly beta_samples)
 
     # Approach 8 (piecewise quadratic) specific (optional)
-    h2_low_point: float = None     # Curvature for T ≤ T_opt
-    h2_low_samples: np.ndarray = None  # Bootstrap samples for h2_low
-    h2_high_point: float = None    # Curvature for T > T_opt
-    h2_high_samples: np.ndarray = None  # Bootstrap samples for h2_high
+    # Note: h2 for approach 8 is stored in h2_point; h4 is the curvature above T_opt
+    h4_point: float = None         # Curvature for T > T_opt (formerly h2_high_point)
+    h4_samples: np.ndarray = None  # Bootstrap samples for h4 (formerly h2_high_samples)
 
     # Approach 6a/6b (separate total/trend frequency) specific (optional)
-    h1_total_point: float = None    # Linear coef for total response (actual T)
-    h1_total_samples: np.ndarray = None
-    h1_trend_point: float = None     # Linear coef for trend response (Ttrend)
-    h1_trend_samples: np.ndarray = None
-    T_optimal_total_point: float = None  # Optimal T for total response
-    T_optimal_total_samples: np.ndarray = None
-    T_optimal_trend_point: float = None   # Optimal T for trend response
-    T_optimal_trend_samples: np.ndarray = None
+    h3_point: float = None         # Linear coef for trend T (formerly h1_trend_point)
+    h3_samples: np.ndarray = None  # Bootstrap samples for h3
+    # Note: h4 reused from above for quadratic trend coef (formerly h2_trend)
+    # For 6a/6b, T_opt is the optimal actual T; f1 is optimal trend T
 
     # Approach 8a (shared T_opt, total/trend) specific (optional)
-    h2_total_point: float = None     # Curvature for total response (actual T)
-    h2_total_samples: np.ndarray = None  # Bootstrap samples for h2_total
-    h2_trend_point: float = None     # Curvature for trend response (Ttrend)
-    h2_trend_samples: np.ndarray = None  # Bootstrap samples for h2_trend
+    # Note: h2 is curvature for actual T; h4 is curvature for trend T (reuses h4_point)
 
     # Approach 8b (modulated response) specific (optional)
-    h0_point: float = None           # Modulation coefficient
-    h0_samples: np.ndarray = None    # Bootstrap samples for h0
+    # Note: f1 reused for modulation coefficient (formerly h0)
 
     # Approach 6c (departure/trend decomposition) specific (optional)
-    h1_dep_point: float = None       # Linear coef for departure (T - Ttrend)
-    h1_dep_samples: np.ndarray = None
-    h2_dep_point: float = None       # Quadratic coef for departure
-    h2_dep_samples: np.ndarray = None
-    T_optimal_dep_point: float = None  # Optimal departure from trend
-    T_optimal_dep_samples: np.ndarray = None
+    # Note: h1,h2 = departure coefficients; h3,h4 = trend coefficients (reuses h3/h4_point)
+    # f1 = optimal departure; f2 = optimal trend T
+    f2_point: float = None         # Optimal trend T for approach 6c (formerly T_optimal_trend for 6c)
+    f2_samples: np.ndarray = None  # Bootstrap samples for f2
 
     # Variance decomposition
     var_decomp_point: dict = None   # From original fit
@@ -199,7 +198,7 @@ def run_bootstrap(
     2. Create bootstrap dataset
     3. Recompute country trends for bootstrap sample
     4. Fit all approaches (including GDP-dependent if Y_ref provided)
-    5. Store h1, h2, T_optimal, R², Total R², and beta (for GDP-dependent approaches)
+    5. Store h1, h2, T_opt, R², Total R², and f1/h3/h4/f2 (for approach-specific coefficients)
 
     Args:
         data: Original AnalysisData
@@ -234,26 +233,14 @@ def run_bootstrap(
 
     h1_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     h2_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
-    T_optimal_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
+    T_opt_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
-    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 7
-    h2_low_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8 (piecewise)
-    h2_high_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # For Approach 8 (piecewise)
-    # For Approach 6a/6b (separate total/trend frequency)
-    h1_total_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    h1_trend_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    T_optimal_total_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    T_optimal_trend_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    # For Approach 8a (shared T_opt, total/trend)
-    h2_total_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    h2_trend_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    # For Approach 8b (modulated response)
-    h0_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    # For Approach 6c (departure/trend decomposition)
-    h1_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    h2_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    T_optimal_dep_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    # Approach-specific samples (f1, h3, h4, f2 have different meanings per approach)
+    f1_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 5d: beta; 6a/6b: T_opt_trend; 6c: f1; 8b: h0
+    h3_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6a/6b/6c: h3 (trend linear)
+    h4_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 8: h4; 6a/6b/6c/8a: h4 (trend quadratic)
+    f2_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6c: f2 (T_opt_trend)
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -321,41 +308,23 @@ def run_bootstrap(
             for name, r in boot_results.items():
                 h1_samples[name][b] = r.h1
                 h2_samples[name][b] = r.h2
-                T_optimal_samples[name][b] = r.T_optimal
+                # T_opt may not exist for all approaches (e.g., Approach 6c uses f1/f2)
+                T_opt_samples[name][b] = getattr(r, 'T_opt', np.nan)
                 r_squared_samples[name][b] = r.r_squared
                 total_r_squared_samples[name][b] = r.total_r_squared
-                # Store beta for GDP-dependent approaches (5d)
-                if hasattr(r, 'beta') and r.beta is not None:
-                    beta_samples[name][b] = r.beta
-                # Store h2_low and h2_high for Approach 8 (piecewise quadratic)
-                if hasattr(r, 'h2_low') and r.h2_low is not None:
-                    h2_low_samples[name][b] = r.h2_low
-                if hasattr(r, 'h2_high') and r.h2_high is not None:
-                    h2_high_samples[name][b] = r.h2_high
-                # Store h1_total, h1_trend, T_optimal_total, T_optimal_trend for Approach 6a/6b
-                if hasattr(r, 'h1_total'):
-                    h1_total_samples[name][b] = r.h1_total
-                if hasattr(r, 'h1_trend'):
-                    h1_trend_samples[name][b] = r.h1_trend
-                if hasattr(r, 'T_optimal_total'):
-                    T_optimal_total_samples[name][b] = r.T_optimal_total
-                if hasattr(r, 'T_optimal_trend'):
-                    T_optimal_trend_samples[name][b] = r.T_optimal_trend
-                # Store h2_total, h2_trend for Approach 8a (shared T_opt, total/trend)
-                if hasattr(r, 'h2_total'):
-                    h2_total_samples[name][b] = r.h2_total
-                if hasattr(r, 'h2_trend'):
-                    h2_trend_samples[name][b] = r.h2_trend
-                # Store h0 for Approach 8b (modulated response)
-                if hasattr(r, 'h0') and r.h0 is not None:
-                    h0_samples[name][b] = r.h0
-                # Store h1_dep, h2_dep, T_optimal_dep for Approach 6c
-                if hasattr(r, 'h1_dep'):
-                    h1_dep_samples[name][b] = r.h1_dep
-                if hasattr(r, 'h2_dep'):
-                    h2_dep_samples[name][b] = r.h2_dep
-                if hasattr(r, 'T_optimal_dep'):
-                    T_optimal_dep_samples[name][b] = r.T_optimal_dep
+                # Store approach-specific coefficients (f1, h3, h4, f2)
+                # f1: 5d beta, 6a/6b T_opt_trend, 6c T_opt_dep, 8b modulation coef
+                if hasattr(r, 'f1') and r.f1 is not None:
+                    f1_samples[name][b] = r.f1
+                # h3: 6a/6b/6c linear trend coefficient
+                if hasattr(r, 'h3') and r.h3 is not None:
+                    h3_samples[name][b] = r.h3
+                # h4: 8 curvature above T_opt, 6a/6b/6c/8a quadratic trend coef
+                if hasattr(r, 'h4') and r.h4 is not None:
+                    h4_samples[name][b] = r.h4
+                # f2: 6c T_opt_trend
+                if hasattr(r, 'f2') and r.f2 is not None:
+                    f2_samples[name][b] = r.f2
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -384,22 +353,13 @@ def run_bootstrap(
             for name in approach_names:
                 h1_samples[name][b] = np.nan
                 h2_samples[name][b] = np.nan
-                T_optimal_samples[name][b] = np.nan
+                T_opt_samples[name][b] = np.nan
                 r_squared_samples[name][b] = np.nan
                 total_r_squared_samples[name][b] = np.nan
-                beta_samples[name][b] = np.nan
-                h2_low_samples[name][b] = np.nan
-                h2_high_samples[name][b] = np.nan
-                h1_total_samples[name][b] = np.nan
-                h1_trend_samples[name][b] = np.nan
-                T_optimal_total_samples[name][b] = np.nan
-                T_optimal_trend_samples[name][b] = np.nan
-                h2_total_samples[name][b] = np.nan
-                h2_trend_samples[name][b] = np.nan
-                h0_samples[name][b] = np.nan
-                h1_dep_samples[name][b] = np.nan
-                h2_dep_samples[name][b] = np.nan
-                T_optimal_dep_samples[name][b] = np.nan
+                f1_samples[name][b] = np.nan
+                h3_samples[name][b] = np.nan
+                h4_samples[name][b] = np.nan
+                f2_samples[name][b] = np.nan
 
         # Progress reporting
         if verbose and (b + 1) % 10 == 0:
@@ -455,25 +415,11 @@ def run_bootstrap(
     results = {}
     for name in approach_names:
         orig = original_results[name]
-        # Get beta point estimate if available (GDP-dependent approaches like 5d)
-        beta_point = getattr(orig, 'beta', None)
-        # Get h2_low and h2_high point estimates if available (Approach 8 piecewise)
-        h2_low_point = getattr(orig, 'h2_low', None)
-        h2_high_point = getattr(orig, 'h2_high', None)
-        # Get h1_total, h1_trend, T_optimal_total, T_optimal_trend for Approach 6a/6b
-        h1_total_point = getattr(orig, 'h1_total', None)
-        h1_trend_point = getattr(orig, 'h1_trend', None)
-        T_optimal_total_point = getattr(orig, 'T_optimal_total', None)
-        T_optimal_trend_point = getattr(orig, 'T_optimal_trend', None)
-        # Get h2_total, h2_trend for Approach 8a
-        h2_total_point = getattr(orig, 'h2_total', None)
-        h2_trend_point = getattr(orig, 'h2_trend', None)
-        # Get h0 for Approach 8b
-        h0_point = getattr(orig, 'h0', None)
-        # Get h1_dep, h2_dep, T_optimal_dep for Approach 6c
-        h1_dep_point = getattr(orig, 'h1_dep', None)
-        h2_dep_point = getattr(orig, 'h2_dep', None)
-        T_optimal_dep_point = getattr(orig, 'T_optimal_dep', None)
+        # Get approach-specific point estimates (f1, h3, h4, f2 have different meanings per approach)
+        f1_point = getattr(orig, 'f1', None)
+        h3_point = getattr(orig, 'h3', None)
+        h4_point = getattr(orig, 'h4', None)
+        f2_point = getattr(orig, 'f2', None)
 
         # Use detrended k_point for approach0 and nocr0
         if name in k_point_detrended:
@@ -481,46 +427,31 @@ def run_bootstrap(
         else:
             k_point_to_use = orig.k
 
+        # T_opt may not exist for all approaches (e.g., Approach 6c uses f1/f2 instead)
+        T_opt_point = getattr(orig, 'T_opt', None)
+
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
             h2_point=orig.h2,
-            T_optimal_point=orig.T_optimal,
+            T_opt_point=T_opt_point,
             r_squared_point=orig.r_squared,
             total_r_squared_point=orig.total_r_squared,
             h1_samples=h1_samples[name],
             h2_samples=h2_samples[name],
-            T_optimal_samples=T_optimal_samples[name],
+            T_opt_samples=T_opt_samples[name],
             r_squared_samples=r_squared_samples[name],
             total_r_squared_samples=total_r_squared_samples[name],
             n_bootstrap=n_bootstrap,
             n_successful=n_successful,
-            beta_point=beta_point,
-            beta_samples=beta_samples[name],
-            h2_low_point=h2_low_point,
-            h2_low_samples=h2_low_samples[name],
-            h2_high_point=h2_high_point,
-            h2_high_samples=h2_high_samples[name],
-            h1_total_point=h1_total_point,
-            h1_total_samples=h1_total_samples[name],
-            h1_trend_point=h1_trend_point,
-            h1_trend_samples=h1_trend_samples[name],
-            T_optimal_total_point=T_optimal_total_point,
-            T_optimal_total_samples=T_optimal_total_samples[name],
-            T_optimal_trend_point=T_optimal_trend_point,
-            T_optimal_trend_samples=T_optimal_trend_samples[name],
-            h2_total_point=h2_total_point,
-            h2_total_samples=h2_total_samples[name],
-            h2_trend_point=h2_trend_point,
-            h2_trend_samples=h2_trend_samples[name],
-            h0_point=h0_point,
-            h0_samples=h0_samples[name],
-            h1_dep_point=h1_dep_point,
-            h1_dep_samples=h1_dep_samples[name],
-            h2_dep_point=h2_dep_point,
-            h2_dep_samples=h2_dep_samples[name],
-            T_optimal_dep_point=T_optimal_dep_point,
-            T_optimal_dep_samples=T_optimal_dep_samples[name],
+            f1_point=f1_point,
+            f1_samples=f1_samples[name],
+            h3_point=h3_point,
+            h3_samples=h3_samples[name],
+            h4_point=h4_point,
+            h4_samples=h4_samples[name],
+            f2_point=f2_point,
+            f2_samples=f2_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
             var_attrib_point=getattr(orig, 'var_attrib', None),
@@ -546,7 +477,7 @@ def compute_bootstrap_statistics(
         Dict with keys like:
         - 'h1': {'p5': ..., 'p25': ..., 'p50': ..., 'p75': ..., 'p95': ..., 'point': ...}
         - 'h2': {...}
-        - 'T_optimal': {...}
+        - 'T_opt': {...}
         - 'r_squared': {...}
         - 'total_r_squared': {...}
     """
@@ -572,47 +503,19 @@ def compute_bootstrap_statistics(
 
     stats['h1'] = get_percentile_stats(result.h1_samples, result.h1_point)
     stats['h2'] = get_percentile_stats(result.h2_samples, result.h2_point)
-    stats['T_optimal'] = get_percentile_stats(result.T_optimal_samples, result.T_optimal_point)
+    stats['T_opt'] = get_percentile_stats(result.T_opt_samples, result.T_opt_point)
     stats['r_squared'] = get_percentile_stats(result.r_squared_samples, result.r_squared_point)
     stats['total_r_squared'] = get_percentile_stats(result.total_r_squared_samples, result.total_r_squared_point)
 
-    # Add beta statistics if present (GDP-dependent approaches like 5d)
-    if result.beta_point is not None and result.beta_samples is not None:
-        stats['beta'] = get_percentile_stats(result.beta_samples, result.beta_point)
-
-    # Add h2_low and h2_high statistics if present (Approach 8 piecewise)
-    if result.h2_low_point is not None and result.h2_low_samples is not None:
-        stats['h2_low'] = get_percentile_stats(result.h2_low_samples, result.h2_low_point)
-    if result.h2_high_point is not None and result.h2_high_samples is not None:
-        stats['h2_high'] = get_percentile_stats(result.h2_high_samples, result.h2_high_point)
-
-    # Add h1_total, h1_trend, T_optimal_total, T_optimal_trend statistics if present (Approach 6a/6b)
-    if result.h1_total_point is not None and result.h1_total_samples is not None:
-        stats['h1_total'] = get_percentile_stats(result.h1_total_samples, result.h1_total_point)
-    if result.h1_trend_point is not None and result.h1_trend_samples is not None:
-        stats['h1_trend'] = get_percentile_stats(result.h1_trend_samples, result.h1_trend_point)
-    if result.T_optimal_total_point is not None and result.T_optimal_total_samples is not None:
-        stats['T_optimal_total'] = get_percentile_stats(result.T_optimal_total_samples, result.T_optimal_total_point)
-    if result.T_optimal_trend_point is not None and result.T_optimal_trend_samples is not None:
-        stats['T_optimal_trend'] = get_percentile_stats(result.T_optimal_trend_samples, result.T_optimal_trend_point)
-
-    # Add h2_total, h2_trend statistics if present (Approach 8a)
-    if result.h2_total_point is not None and result.h2_total_samples is not None:
-        stats['h2_total'] = get_percentile_stats(result.h2_total_samples, result.h2_total_point)
-    if result.h2_trend_point is not None and result.h2_trend_samples is not None:
-        stats['h2_trend'] = get_percentile_stats(result.h2_trend_samples, result.h2_trend_point)
-
-    # Add h0 statistics if present (Approach 8b)
-    if result.h0_point is not None and result.h0_samples is not None:
-        stats['h0'] = get_percentile_stats(result.h0_samples, result.h0_point)
-
-    # Add h1_dep, h2_dep, T_optimal_dep statistics if present (Approach 6c)
-    if result.h1_dep_point is not None and result.h1_dep_samples is not None:
-        stats['h1_dep'] = get_percentile_stats(result.h1_dep_samples, result.h1_dep_point)
-    if result.h2_dep_point is not None and result.h2_dep_samples is not None:
-        stats['h2_dep'] = get_percentile_stats(result.h2_dep_samples, result.h2_dep_point)
-    if result.T_optimal_dep_point is not None and result.T_optimal_dep_samples is not None:
-        stats['T_optimal_dep'] = get_percentile_stats(result.T_optimal_dep_samples, result.T_optimal_dep_point)
+    # Add approach-specific coefficient statistics (f1, h3, h4, f2 have different meanings per approach)
+    if result.f1_point is not None and result.f1_samples is not None:
+        stats['f1'] = get_percentile_stats(result.f1_samples, result.f1_point)
+    if result.h3_point is not None and result.h3_samples is not None:
+        stats['h3'] = get_percentile_stats(result.h3_samples, result.h3_point)
+    if result.h4_point is not None and result.h4_samples is not None:
+        stats['h4'] = get_percentile_stats(result.h4_samples, result.h4_point)
+    if result.f2_point is not None and result.f2_samples is not None:
+        stats['f2'] = get_percentile_stats(result.f2_samples, result.f2_point)
 
     # Variance decomposition statistics
     if result.var_decomp_point is not None and result.var_decomp_samples is not None:

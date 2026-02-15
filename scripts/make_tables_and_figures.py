@@ -57,7 +57,7 @@ def load_analysis_results(analysis_dir: Path) -> dict:
     -------
     dict
         Dictionary containing:
-        - 'comparison_table': DataFrame with main results (h1, h2, T_optimal, R-squared, etc.)
+        - 'comparison_table': DataFrame with main results (h1, h2, T_opt, R-squared, etc.)
         - 'country_trends': DataFrame with country-level trend estimates
     """
     results = {}

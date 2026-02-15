@@ -16,7 +16,7 @@ import pycountry
 
 
 # Default coefficients to analyze for each approach type
-STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_optimal']
+STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_opt']
 APPROACH_COEFFICIENTS = {
     # Standard approaches (0-5, 5a-5d, 6, nocr0, nocr5)
     'approach0': STANDARD_COEFFICIENTS,
@@ -32,15 +32,17 @@ APPROACH_COEFFICIENTS = {
     'approach6': STANDARD_COEFFICIENTS,
     'nocr0': STANDARD_COEFFICIENTS,
     'nocr5': STANDARD_COEFFICIENTS,
-    # Approach 6a/6b: total/trend variants
-    'approach6a': ['h1_total', 'h2_total', 'h1_trend', 'h2_trend', 'T_optimal_total', 'T_optimal_trend'],
-    'approach6b': ['h1_total', 'h2_total', 'h1_trend', 'h2_trend', 'T_optimal_total', 'T_optimal_trend'],
-    # Approach 8: piecewise quadratic
-    'approach8': ['h2_low', 'h2_high', 'T_optimal'],
-    # Approach 8a: total/trend (shared T_optimal)
-    'approach8a': ['h2_total', 'h2_trend', 'T_optimal'],
-    # Approach 8b: modulated response
-    'approach8b': ['h0', 'h1', 'h2', 'T_optimal'],
+    # Approach 6a/6b: h1,h2 (total), h3,h4 (trend), T_opt, f1 (trend T_opt)
+    'approach6a': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
+    'approach6b': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
+    # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1 (departure T_opt), f2 (trend T_opt)
+    'approach6c': ['h1', 'h2', 'h3', 'h4', 'f1', 'f2'],
+    # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
+    'approach8': ['h2', 'h4', 'T_opt'],
+    # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
+    'approach8a': ['h2', 'h4', 'T_opt'],
+    # Approach 8b: f1 (modulation), h1, h2, T_opt
+    'approach8b': ['f1', 'h1', 'h2', 'T_opt'],
 }
 
 
