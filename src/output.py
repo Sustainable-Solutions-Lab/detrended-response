@@ -48,10 +48,8 @@ APPROACH_COLORS = {
     'approach5c': 'red',
     'approach5d': 'purple',
     'approach6': 'orange',
-    'approach6a': 'darkorange',
     'approach6b': 'coral',
     'approach6c': 'tomato',
-    'approach6d': 'orangered',
     'approach6e': 'salmon',
     'approach8': 'magenta',
     'approach8a': 'darkviolet',
@@ -80,10 +78,8 @@ APPROACH_LINESTYLES = {
     'approach5c': '-.',
     'approach5d': '-.',
     'approach6': (0, (5, 1)),   # densely dashed
-    'approach6a': (0, (5, 1)),  # densely dashed
     'approach6b': (0, (5, 1)),  # densely dashed
     'approach6c': (0, (5, 1)),  # densely dashed
-    'approach6d': (0, (5, 1)),  # densely dashed
     'approach6e': (0, (5, 1)),  # densely dashed
     'approach8': (0, (5, 1)),   # densely dashed
     'approach8a': (0, (5, 1)),  # densely dashed
@@ -662,10 +658,10 @@ def plot_temperature_response(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6b, 6c, 6e, 8, 8a-8d)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach5', 'approach6', 'approach6b', 'approach6c', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -739,10 +735,10 @@ def plot_temperature_derivative(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a-6e, 8, 8a-8d)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6b, 6c, 6e, 8, 8a-8d)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach5', 'approach6', 'approach6b', 'approach6c', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -2226,205 +2222,6 @@ def plot_year_effects_2panel(
     print(f"  Saved {filename}")
 
 
-def plot_temperature_response_4panel_with_6a(
-    results: Dict[str, "BootstrapResult"],
-    data: AnalysisData,
-    output_dir: Path,
-    top_approaches: list = None,
-    filename: str = 'fig_temperature_response_4panel.pdf',
-    T_range: tuple = (0, 30),
-    input_file: str = None,
-) -> None:
-    """Plot 4-panel temperature response: top row = approach6/8, bottom row = 6a T/departure.
-
-    Creates a 2x2 figure:
-    - Top row: Temperature response for specified approaches (default: approach6, approach8)
-    - Bottom row: h(T) and h_dep(T-Ttrend) from approach 6a
-
-    Args:
-        results: Dict of BootstrapResult for each approach
-        data: AnalysisData for temperature histogram
-        output_dir: Directory to save the plot
-        top_approaches: List of 2 approach keys for top row (default: ['approach6', 'approach8'])
-        filename: Output filename
-        T_range: Temperature range for x-axis (default: (0, 30))
-        input_file: Optional input file path for annotation
-    """
-    if top_approaches is None:
-        top_approaches = ['approach6', 'approach8']
-
-    # Validate approaches exist
-    valid_top = [a for a in top_approaches if a in results]
-    if 'approach6a' not in results:
-        print("  WARNING: approach6a not found, cannot create 4-panel figure")
-        return
-    if len(valid_top) < 2:
-        print("  WARNING: Not enough valid approaches for top row")
-        return
-
-    # Create 2x2 figure
-    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
-
-    # Temperature array
-    T = np.linspace(T_range[0], T_range[1], 200)
-
-    # Get temperature data from most recent year for histogram
-    temp_recent = None
-    if data is not None:
-        max_year = data.year_range[1]
-        mask_recent = data.year == max_year
-        temp_recent = data.temp[mask_recent]
-
-    # Define all panels: (row, col, approach_key, variant, title)
-    panels = [
-        (0, 0, valid_top[0], None, results[valid_top[0]].approach),
-        (0, 1, valid_top[1], None, results[valid_top[1]].approach),
-        (1, 0, 'approach6a', 'total_only', '6a: h(T)'),
-        (1, 1, 'approach6a', 'trend_only', '6a: h_dep(T-Ttrend)'),
-    ]
-
-    # First pass: compute all data and find global y-axis range
-    plot_data = {}
-    y_min, y_max = np.inf, -np.inf
-
-    for row, col, approach_key, variant, title in panels:
-        result = results[approach_key]
-
-        # Compute point estimate
-        if variant == 'total_only':
-            # h(T) = h1*T + h2*T² - uses h1,h2 for actual T response
-            h1 = getattr(result, 'h1_point', 0) or 0
-            h2 = getattr(result, 'h2_point', 0) or 0
-            T_opt = getattr(result, 'T_opt_point', None)
-            h_T = h1 * T + h2 * T ** 2
-            if h2 != 0:
-                h_T_opt = -h1 ** 2 / (4 * h2)
-                if T_opt is None:
-                    T_opt = -h1 / (2 * h2)
-            else:
-                h_T_opt = 0
-                T_opt = T_opt or np.nan
-            h_point = h_T - h_T_opt
-        elif variant == 'trend_only':
-            # h_dep(T-Ttrend) = h3*(T-Ttrend) + h4*(T-Ttrend)² - uses h3,h4 for departure
-            h1 = getattr(result, 'h3_point', 0) or 0
-            h2 = getattr(result, 'h4_point', 0) or 0
-            T_opt = getattr(result, 'T_dep_opt_point', None)
-            h_T = h1 * T + h2 * T ** 2
-            if h2 != 0:
-                h_T_opt = -h1 ** 2 / (4 * h2)
-                if T_opt is None:
-                    T_opt = -h1 / (2 * h2)
-            else:
-                h_T_opt = 0
-                T_opt = T_opt or np.nan
-            h_point = h_T - h_T_opt
-        else:
-            # Standard approach
-            h_point, T_opt = _compute_point_estimate_response(result, T, approach_key, None)
-
-        # Compute uncertainty bands
-        if variant in ('total_only', 'trend_only'):
-            # For 6a components, compute bands from samples
-            h_samples = []
-            if variant == 'total_only':
-                h1_samples = getattr(result, 'h1_samples', None)
-                h2_samples = getattr(result, 'h2_samples', None)
-            else:
-                h1_samples = getattr(result, 'h3_samples', None)
-                h2_samples = getattr(result, 'h4_samples', None)
-
-            if h1_samples is not None and h2_samples is not None:
-                valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
-                h1_valid = h1_samples[valid_mask]
-                h2_valid = h2_samples[valid_mask]
-                for i in range(len(h1_valid)):
-                    h1_i, h2_i = h1_valid[i], h2_valid[i]
-                    h_T_i = h1_i * T + h2_i * T ** 2
-                    if h2_i != 0:
-                        h_T_opt_i = -h1_i ** 2 / (4 * h2_i)
-                    else:
-                        h_T_opt_i = 0
-                    h_samples.append(h_T_i - h_T_opt_i)
-                if h_samples:
-                    h_samples = np.array(h_samples)
-                    h_p5 = np.percentile(h_samples, 5, axis=0)
-                    h_p25 = np.percentile(h_samples, 25, axis=0)
-                    h_p75 = np.percentile(h_samples, 75, axis=0)
-                    h_p95 = np.percentile(h_samples, 95, axis=0)
-                else:
-                    h_p5 = h_p25 = h_p75 = h_p95 = np.full_like(T, np.nan)
-            else:
-                h_p5 = h_p25 = h_p75 = h_p95 = np.full_like(T, np.nan)
-        else:
-            h_p5, h_p25, _, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=approach_key
-            )
-
-        plot_data[(row, col)] = {
-            'h_p5': h_p5, 'h_p25': h_p25, 'h_p75': h_p75, 'h_p95': h_p95,
-            'h_point': h_point, 'T_opt': T_opt, 'title': title,
-            'approach_key': approach_key
-        }
-
-        # Update y range
-        if not np.all(np.isnan(h_p5)):
-            y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
-        if not np.all(np.isnan(h_p95)):
-            y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
-
-    if np.isinf(y_min) or np.isinf(y_max):
-        y_min, y_max = -0.05, 0.05
-    y_padding = (y_max - y_min) * 0.05
-    y_min -= y_padding
-    y_max += y_padding
-
-    # Plot all panels
-    for row, col, approach_key, variant, title in panels:
-        ax = axes[row, col]
-        pdata = plot_data[(row, col)]
-        color = APPROACH_COLORS.get(approach_key, 'steelblue')
-
-        # Add temperature histogram on secondary y-axis
-        if temp_recent is not None:
-            ax2 = ax.twinx()
-            bins = np.linspace(T_range[0], T_range[1], 30)
-            ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
-            ax2.set_ylabel('Data density', fontsize=8, color='gray')
-            ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
-            ax2.set_ylim(bottom=0)
-            ax2.set_zorder(ax.get_zorder() - 1)
-            ax.set_zorder(ax2.get_zorder() + 1)
-            ax.patch.set_visible(False)
-
-        # Plot 90% CI band
-        ax.fill_between(T, pdata['h_p5'], pdata['h_p95'], alpha=0.2, color=color, label='90% CI')
-        # Plot IQR band
-        ax.fill_between(T, pdata['h_p25'], pdata['h_p75'], alpha=0.3, color=color, label='IQR')
-        # Plot point estimate
-        ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
-
-        # Mark optimal temperature
-        T_opt = pdata['T_opt']
-        if T_opt is not None and not np.isnan(T_opt) and T_range[0] <= T_opt <= T_range[1]:
-            ax.axvline(T_opt, color=color, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt:.1f}°C')
-
-        ax.axhline(0, color='gray', linewidth=0.5)
-        ax.set_xlabel('Temperature (°C)', fontsize=10)
-        ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
-        ax.set_title(pdata['title'], fontsize=11)
-        ax.set_xlim(T_range)
-        ax.set_ylim(y_min, y_max)
-        ax.grid(True, alpha=0.3)
-        ax.legend(fontsize=7, loc='lower right')
-
-    plt.tight_layout()
-    add_input_file_annotation(fig, input_file)
-    plt.savefig(output_dir / filename, bbox_inches='tight')
-    plt.close()
-    print(f"  Saved {filename}")
-
-
 def plot_climate_response_contours(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
@@ -2453,7 +2250,7 @@ def plot_climate_response_contours(
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        approaches: List of approach keys to include (default: ['approach6a', 'approach8a'])
+        approaches: List of approach keys to include (default: ['approach6e', 'approach8a'])
         filename: Output filename
         Ttrend_range: Trend temperature range for x-axis (default: (0, 30))
         deltaT_range: Temperature deviation (T - Ttrend) range for y-axis (default: (-5, 5))
@@ -2463,7 +2260,7 @@ def plot_climate_response_contours(
     from matplotlib.backends.backend_pdf import PdfPages
 
     if approaches is None:
-        approaches = ['approach6a', 'approach8a']
+        approaches = ['approach6e', 'approach8a']
 
     # Filter to approaches that exist
     available = [a for a in approaches if a in results]
@@ -2492,46 +2289,37 @@ def plot_climate_response_contours(
     for approach in available:
         result = results[approach]
 
-        if approach == 'approach6a':
-            # h1,h2 for actual T response; h3,h4 for departure (T-Ttrend) response
-            # h(T, Ttrend) = h1*T + h2*T² + h3*(T-Ttrend) + h4*(T-Ttrend)²
-            h1_T = getattr(result, 'h1_point', 0) or 0
-            h2_T = getattr(result, 'h2_point', 0) or 0
-            h1_dep = getattr(result, 'h3_point', 0) or 0
-            h2_dep = getattr(result, 'h4_point', 0) or 0
+        if approach == 'approach6e':
+            # h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
+            # This models h(T) - h(Ttrend) directly
+            h1 = getattr(result, 'h1_point', 0) or 0
+            h2 = getattr(result, 'h2_point', 0) or 0
+            h4 = getattr(result, 'h4_point', 0) or 0
 
-            # Center at optima
-            h_T_opt = -h1_T**2 / (4 * h2_T) if h2_T != 0 else 0
-            h_dep_opt = -h1_dep**2 / (4 * h2_dep) if h2_dep != 0 else 0
+            # T_opt from standard quadratic interpretation
+            T_opt = getattr(result, 'T_opt_point', None)
 
-            # Response functions for rows 0-1 (Ttrend on x-axis)
-            # T_grid = Ttrend + deltaT, so T = Ttrend_grid + deltaT_grid
+            # Response: h(T,Ttrend) - h(Ttrend,Ttrend) = h1*deltaT + h2*(T²-Ttrend²) + h4*deltaT²
+            # For rows 0-1 (Ttrend on x-axis), T = Ttrend + deltaT
             T_actual_grid = Ttrend_grid + deltaT_grid
-            h_T_val = h1_T * T_actual_grid + h2_T * T_actual_grid**2
-            h_dep_val = h1_dep * deltaT_grid + h2_dep * deltaT_grid**2
-            response_total_only = h_T_val - h_T_opt  # Just T component centered (at T=Ttrend+deltaT)
-            response_full = (h_T_val - h_T_opt) + (h_dep_val - h_dep_opt)
+            response_full = (h1 * deltaT_grid + h2 * (T_actual_grid**2 - Ttrend_grid**2)
+                           + h4 * deltaT_grid**2)
+            response_total_only = response_full  # Same as full for this approach
 
-            # Response functions for row 2 (T on x-axis)
-            # T_grid_row2 is actual T, deltaT_grid_row2 = T - Ttrend
-            h_T_row2 = h1_T * T_grid_row2 + h2_T * T_grid_row2**2
-            h_dep_row2 = h1_dep * deltaT_grid_row2 + h2_dep * deltaT_grid_row2**2
-            response_full_row2 = (h_T_row2 - h_T_opt) + (h_dep_row2 - h_dep_opt)
+            # Response for row 2 (T on x-axis)
+            response_full_row2 = (h1 * deltaT_grid_row2
+                                + h2 * (T_grid_row2**2 - Ttrend_grid_row2**2)
+                                + h4 * deltaT_grid_row2**2)
 
-            # Derivatives for rows 0-1: dh/dT at fixed Ttrend
-            # dh/dT = (h1_T + 2*h2_T*T) + (h1_dep + 2*h2_dep*(T-Ttrend))
-            deriv_T_val = h1_T + 2 * h2_T * T_actual_grid
-            deriv_dep_val = h1_dep + 2 * h2_dep * deltaT_grid
-            deriv_total = deriv_T_val + deriv_dep_val  # Total dh/dT
-            deriv_trend = deriv_T_val  # Just T component derivative
+            # Derivatives: dh/dT = h1 + 2*h2*T + 2*h4*deltaT
+            deriv_total = h1 + 2 * h2 * T_actual_grid + 2 * h4 * deltaT_grid
+            deriv_trend = 2 * h2 * Ttrend_grid  # dh/dTtrend component
             deriv_full = deriv_total
 
-            # Derivatives for row 2 (T on x-axis)
-            deriv_T_row2 = h1_T + 2 * h2_T * T_grid_row2
-            deriv_dep_row2 = h1_dep + 2 * h2_dep * deltaT_grid_row2
-            deriv_full_row2 = deriv_T_row2 + deriv_dep_row2
+            # Derivatives for row 2
+            deriv_full_row2 = h1 + 2 * h2 * T_grid_row2 + 2 * h4 * deltaT_grid_row2
 
-            T_opt_trend = getattr(result, 'T_opt_point', None)
+            T_opt_trend = T_opt
 
         elif approach == 'approach8a':
             # h2 for actual T curvature; h4 for trend T curvature
@@ -2695,32 +2483,25 @@ def plot_climate_response_contours(
         for col_idx, approach in enumerate(available):
             result = results[approach]
 
-            if approach == 'approach6a':
-                # h1,h2 for actual T response; h3,h4 for departure (T-Ttrend) response
-                # h(T, Ttrend) = h1*T + h2*T² + h3*(T-Ttrend) + h4*(T-Ttrend)²
-                h1_T = getattr(result, 'h1_point', 0) or 0
-                h2_T = getattr(result, 'h2_point', 0) or 0
-                h1_dep = getattr(result, 'h3_point', 0) or 0
-                h2_dep = getattr(result, 'h4_point', 0) or 0
+            if approach == 'approach6e':
+                # h(T,Ttrend) - h(Ttrend,Ttrend) = h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
+                h1 = getattr(result, 'h1_point', 0) or 0
+                h2 = getattr(result, 'h2_point', 0) or 0
+                h4 = getattr(result, 'h4_point', 0) or 0
 
-                # Center at optima
-                h_T_opt = -h1_T**2 / (4 * h2_T) if h2_T != 0 else 0
-                h_dep_opt = -h1_dep**2 / (4 * h2_dep) if h2_dep != 0 else 0
+                # T_opt from standard quadratic interpretation
+                T_opt = getattr(result, 'T_opt_point', None)
 
-                # h(T, Ttrend) = h_T(T) + h_dep(T - Ttrend)
                 # deltaT = T - Ttrend
                 deltaT_p3 = T_grid_p3 - Ttrend_grid_p3
-                h_T_val = h1_T * T_grid_p3 + h2_T * T_grid_p3**2
-                h_dep_val = h1_dep * deltaT_p3 + h2_dep * deltaT_p3**2
-                response = (h_T_val - h_T_opt) + (h_dep_val - h_dep_opt)
+                response = (h1 * deltaT_p3 + h2 * (T_grid_p3**2 - Ttrend_grid_p3**2)
+                          + h4 * deltaT_p3**2)
 
-                # Derivatives: dh/dT = (h1_T + 2*h2_T*T) + (h1_dep + 2*h2_dep*(T-Ttrend))
-                deriv_T = h1_T + 2 * h2_T * T_grid_p3
-                deriv_dep = h1_dep + 2 * h2_dep * deltaT_p3
-                deriv = deriv_T + deriv_dep
+                # Derivatives: dh/dT = h1 + 2*h2*T + 2*h4*(T-Ttrend)
+                deriv = h1 + 2 * h2 * T_grid_p3 + 2 * h4 * deltaT_p3
 
-                T_opt_trend = getattr(result, 'T_dep_opt_point', None)
-                T_opt_total = -h1_T / (2 * h2_T) if h2_T != 0 else None
+                T_opt_trend = T_opt
+                T_opt_total = T_opt
 
             elif approach == 'approach8a':
                 # h2 for actual T curvature; h4 for trend T curvature
@@ -2820,44 +2601,19 @@ def compute_h_response_uncertainty_bands(
 
     For quadratic models: h(T) = h1*T + h2*T²
     For piecewise (approach8): h(T) - h(T_opt) = h2*(T-T_opt)² or h4*(T-T_opt)²
-    For approach6a/6b/8a variants: uses appropriate coefficients (h3,h4 for trend)
+    For approach6b/8a variants: uses appropriate coefficients (h3,h4 for trend)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
         approach_key: Approach identifier (e.g., 'approach8' for piecewise,
-                      'approach6a_high', 'approach6a_low', 'approach6b',
-                      'approach8a_high', 'approach8a_low')
+                      'approach6b', 'approach8a_high', 'approach8a_low')
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key == 'approach8')
-
-    # Handle approach 6a total response at T=Ttrend (where departure=0)
-    # h(T, Ttrend) = h1*T + h2*T² when T=Ttrend
-    if approach_key == 'approach6a_total':
-        # h1,h2 for actual T (when departure=0, just h_T)
-        h1_samples = getattr(result, 'h1_samples', None)
-        h2_samples = getattr(result, 'h2_samples', None)
-        if h1_samples is None or h2_samples is None:
-            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
-        h1_valid = h1_samples[valid_mask]
-        h2_valid = h2_samples[valid_mask]
-        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
-
-    # Handle approach 6a departure response (h3,h4)
-    if approach_key == 'approach6a_low':
-        h1_samples = getattr(result, 'h3_samples', None)
-        h2_samples = getattr(result, 'h4_samples', None)
-        if h1_samples is None or h2_samples is None:
-            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
-        h1_valid = h1_samples[valid_mask]
-        h2_valid = h2_samples[valid_mask]
-        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
 
     # Handle approach 6b (trend only)
     if approach_key == 'approach6b':
@@ -3059,29 +2815,6 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
 
     Returns list of tuples: (param_name, samples, point_est, param_stats, xlabel)
     """
-    # Approach 6a: separate actual T/departure response - show both
-    # h1,h2 for actual T; h3,h4 for departure; T_opt, T_dep_opt for optimal temps
-    if name == 'approach6a':
-        params = []
-        # Actual T params (h1, h2, T_opt)
-        if result.h1_samples is not None and 'h1' in stats:
-            params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
-        if result.h2_samples is not None and 'h2' in stats:
-            params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
-        if result.T_opt_samples is not None and 'T_opt' in stats:
-            params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
-        # Departure params (h3, h4, T_dep_opt)
-        h3_samples = getattr(result, 'h3_samples', None)
-        h4_samples = getattr(result, 'h4_samples', None)
-        T_dep_opt_samples = getattr(result, 'T_dep_opt_samples', None)
-        if h3_samples is not None and 'h3' in stats:
-            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (departure)'))
-        if h4_samples is not None and 'h4' in stats:
-            params.append(('h4', h4_samples, getattr(result, 'h4_point', np.nan), stats['h4'], 'h₄ (departure)'))
-        if T_dep_opt_samples is not None and 'T_dep_opt' in stats:
-            params.append(('T_dep_opt', T_dep_opt_samples, getattr(result, 'T_dep_opt_point', np.nan), stats['T_dep_opt'], 'T_dep_opt (°C)'))
-        return params if params else _get_standard_params(result, stats)
-
     # Approach 6b: T only (uses h1, h2, T_opt - departure terms h3, h4 are zero)
     if name == 'approach6b':
         params = []
@@ -3091,20 +2824,6 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
             params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
         if result.T_opt_samples is not None and 'T_opt' in stats:
             params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
-        return params if params else _get_standard_params(result, stats)
-
-    # Approach 6d: T + linear departure only (h1, h2, h3; h4=0)
-    if name == 'approach6d':
-        params = []
-        if result.h1_samples is not None and 'h1' in stats:
-            params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
-        if result.h2_samples is not None and 'h2' in stats:
-            params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
-        if result.T_opt_samples is not None and 'T_opt' in stats:
-            params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
-        h3_samples = getattr(result, 'h3_samples', None)
-        if h3_samples is not None and 'h3' in stats:
-            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (departure)'))
         return params if params else _get_standard_params(result, stats)
 
     # Approach 6e: T + quadratic departure only (h1, h2, h4; h3=0)
@@ -3300,12 +3019,7 @@ def _expand_approaches_for_plotting(approaches: list, results: dict) -> list:
         if name not in results:
             continue
 
-        if name == 'approach6a':
-            # Expand into total response and low-frequency panels
-            # Total response = h_high(T) - h_low(T), matching contour at T_delta=0
-            expanded.append(('approach6a_total', name, '6a: Total Response', 'total'))
-            expanded.append(('approach6a_low', name, '6a: Trend Response', 'low'))
-        elif name == 'approach8a':
+        if name == 'approach8a':
             # Expand into total response and low-frequency panels
             # Total response = (h2_high - h2_low)*(T - T_opt)^2, matching contour at T_delta=0
             expanded.append(('approach8a_total', name, '8a: Total Response', 'total'))
@@ -3331,45 +3045,6 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
     Returns:
         tuple: (h_point array, T_opt for vertical line)
     """
-    # Handle approach6a total response: h_total(T) - h_trend(T)
-    # This matches the contour plot at T_delta = 0 (where T = T_trend)
-    # h1,h2 for actual T; h3,h4 for trend T
-    if approach_key == 'approach6a_total' or (approach_key == 'approach6a' and variant == 'total'):
-        h1_total = getattr(result, 'h1_point', 0) or 0
-        h2_total = getattr(result, 'h2_point', 0) or 0
-        h1_trend = getattr(result, 'h3_point', 0) or 0
-        h2_trend = getattr(result, 'h4_point', 0) or 0
-
-        # Net response = h_total(T) - h_trend(T)
-        h1_net = h1_total - h1_trend
-        h2_net = h2_total - h2_trend
-
-        h_T = h1_net * T + h2_net * T ** 2
-
-        # Find optimal temperature for net response
-        if h2_net != 0:
-            T_opt = -h1_net / (2 * h2_net)
-            h_T_opt = -h1_net ** 2 / (4 * h2_net)
-        else:
-            T_opt = np.nan
-            h_T_opt = 0
-        return h_T - h_T_opt, T_opt
-
-    # Handle approach6a departure response (uses h3,h4 for departure coefficients)
-    if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
-        h1 = getattr(result, 'h3_point', 0) or 0
-        h2 = getattr(result, 'h4_point', 0) or 0
-        T_opt = getattr(result, 'T_dep_opt_point', None)
-        h_T = h1 * T + h2 * T ** 2
-        if h2 != 0:
-            h_T_opt = -h1 ** 2 / (4 * h2)
-            if T_opt is None:
-                T_opt = -h1 / (2 * h2)
-        else:
-            h_T_opt = 0
-            T_opt = T_opt or np.nan
-        return h_T - h_T_opt, T_opt
-
     # Handle approach6b (T only - departure terms h3,h4 are zero)
     if approach_key == 'approach6b':
         h1 = getattr(result, 'h1_point', 0) or 0
@@ -3672,42 +3347,19 @@ def compute_derivative_uncertainty_bands(
 
     For quadratic models: dh/dT = h1 + 2*h2*T
     For piecewise quadratic (approach8): dh/dT = 2*h2_low*(T-T_opt) or 2*h2_high*(T-T_opt)
-    For approach6a/6b/8a variants: uses appropriate high/low frequency coefficients
+    For approach6b/8a variants: uses appropriate high/low frequency coefficients
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
         approach_key: Approach identifier (e.g., 'approach8' for piecewise quadratic,
-                      'approach6a_high', 'approach6a_low', 'approach6b',
-                      'approach8a_high', 'approach8a_low')
+                      'approach6b', 'approach8a_high', 'approach8a_low')
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key == 'approach8')
-
-    # Handle approach 6a total derivative (uses h1,h2 for actual T response)
-    if approach_key == 'approach6a_high':
-        h1_samples = getattr(result, 'h1_samples', None)
-        h2_samples = getattr(result, 'h2_samples', None)
-        if h1_samples is None or h2_samples is None:
-            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
-        h1_valid = h1_samples[valid_mask]
-        h2_valid = h2_samples[valid_mask]
-        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
-
-    # Handle approach 6a trend derivative (uses h3,h4 for trend response)
-    if approach_key == 'approach6a_low':
-        h1_samples = getattr(result, 'h3_samples', None)
-        h2_samples = getattr(result, 'h4_samples', None)
-        if h1_samples is None or h2_samples is None:
-            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
-        h1_valid = h1_samples[valid_mask]
-        h2_valid = h2_samples[valid_mask]
-        return _compute_quadratic_derivative_bands(h1_valid, h2_valid, T_range, percentiles)
 
     # Handle approach 6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'approach6b':
@@ -3847,18 +3499,6 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
     Returns:
         dh_point array
     """
-    # Handle approach6a total (uses h1,h2 for actual T response)
-    if approach_key == 'approach6a_high' or (approach_key == 'approach6a' and variant == 'high'):
-        h1 = getattr(result, 'h1_point', 0) or 0
-        h2 = getattr(result, 'h2_point', 0) or 0
-        return h1 + 2 * h2 * T
-
-    # Handle approach6a trend (uses h3,h4 for trend response)
-    if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
-        h1 = getattr(result, 'h3_point', 0) or 0
-        h2 = getattr(result, 'h4_point', 0) or 0
-        return h1 + 2 * h2 * T
-
     # Handle approach6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'approach6b':
         h1 = getattr(result, 'h3_point', 0) or 0
@@ -4492,10 +4132,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS approaches (6, 6a-6e, 8, 8a-8d)
+    # Temperature response PDF 3: LOESS approaches (6, 6b, 6c, 6e, 8, 8a-8d)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach6', 'approach6b', 'approach6c', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4508,7 +4148,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+                    'approach6', 'approach6b', 'approach6c', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

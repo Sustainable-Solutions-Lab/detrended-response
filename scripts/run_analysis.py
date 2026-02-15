@@ -39,10 +39,8 @@ from src.fitting import (
     fit_approach5c_precomputed_k_combined,
     fit_approach5d_precomputed_k_gdp_response,
     fit_approach6_precomputed_k_loess,
-    fit_approach6a_separate_high_low_loess,
     fit_approach6b_low_only_loess,
     fit_approach6c_departure_trend_loess,
-    fit_approach6d_linear_departure_loess,
     fit_approach6e_quadratic_departure_loess,
     fit_approach8_gaussian_loess,
     fit_approach8a_shared_Topt_loess,
@@ -183,12 +181,10 @@ def main():
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6, 6a-6e, 8, 8a-8d: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 6b, 6c, 6e, 8, 8a-8d: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
-    results['approach6a'] = fit_approach6a_separate_high_low_loess(data, trends_loess, year_means)
     results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
     results['approach6c'] = fit_approach6c_departure_trend_loess(data, trends_loess, year_means)
-    results['approach6d'] = fit_approach6d_linear_departure_loess(data, trends_loess, year_means)
     results['approach6e'] = fit_approach6e_quadratic_departure_loess(data, trends_loess, year_means)
     results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
     results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
@@ -211,8 +207,8 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b/6d/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt
-        if name in ['approach6a', 'approach6b', 'approach6d', 'approach6e'] and hasattr(r, 'h3'):
+        # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt
+        if name in ['approach6b', 'approach6e'] and hasattr(r, 'h3'):
             print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h3 (departure) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")

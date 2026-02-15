@@ -22,7 +22,6 @@ from src.output import (
     plot_climate_response_contours,
     plot_temperature_response_2panel,
     plot_year_effects_2panel,
-    plot_temperature_response_4panel_with_6a,
 )
 
 
@@ -211,7 +210,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6b', 'approach6e', 'approach8', 'approach8a']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -452,7 +451,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (same order as variance decomposition table)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6b', 'approach6e', 'approach8', 'approach8a']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -463,7 +462,7 @@ def generate_bootstrap_comparison_table(
     # Parameters to include
     # Standard parameters for all approaches
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
-    # Additional parameters for approach 6a/6b/6c (departure/trend coefficients: h3, h4)
+    # Additional parameters for approach 6b/6c/6e (departure/trend coefficients: h3, h4)
     trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
     # Note: For piecewise approach8, h2 = curvature below T_opt, h4 = curvature above T_opt
     # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
@@ -505,7 +504,7 @@ def generate_bootstrap_comparison_table(
                 else:
                     row[f'{param}_{pct}'] = np.nan
 
-        # Add trend parameters (h3, h4, T_dep_opt, f1, f2 - populated for 6a/6b/6c/8/8a)
+        # Add trend parameters (h3, h4, T_dep_opt, f1, f2 - populated for 6b/6c/6e/8/8a)
         for param in trend_params:
             # Point estimate
             point_col = f'{param}_point'
@@ -644,24 +643,7 @@ def generate_figures(
     else:
         print("      [Figures] Skipping main figures (data not loaded)")
 
-    # Figure 2: Temperature response (h(T) - h(T*)) - 4 panels
-    # Top row: approach6 and approach8; Bottom row: 6a h_total(T) and h_trend(T)
-    if data is not None:
-        print("      [Figures] Generating temperature response figure (4 panels with 6a)...")
-        plot_temperature_response_4panel_with_6a(
-            results,
-            data,
-            output_dir,
-            top_approaches=approaches_2panel,
-            filename='fig_temperature_response_4panel.pdf',
-            T_range=(0, 30),
-            input_file=None,
-        )
-        print("      [Figures] Saved fig_temperature_response_4panel.pdf")
-    else:
-        print("      [Figures] Skipping 4-panel temperature response (data not loaded)")
-
-    # Figure 3: Temperature derivative (dh/dT) - 4 panels
+    # Figure 2: Temperature derivative (dh/dT) - 4 panels
     print("      [Figures] Generating temperature derivative figure (4 panels)...")
     plot_bootstrap_temperature_derivative(
         results,
@@ -735,8 +717,8 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
 
-    # Figure 9: Temperature response - 3 panels for variant approaches (6a, 6b, 8a)
-    approaches_variants = ['approach6a', 'approach6b', 'approach8a']
+    # Figure 9: Temperature response - 3 panels for variant approaches (6b, 6e, 8a)
+    approaches_variants = ['approach6b', 'approach6e', 'approach8a']
     print("      [Figures] Generating temperature response figure (3 panels - variants)...")
     plot_bootstrap_temperature_response(
         results,
@@ -749,7 +731,7 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_temperature_response_3panel_variants.pdf")
 
-    # Figure 10: Temperature derivative - 3 panels for variant approaches (6a, 6b, 8a)
+    # Figure 10: Temperature derivative - 3 panels for variant approaches (6b, 6e, 8a)
     print("      [Figures] Generating temperature derivative figure (3 panels - variants)...")
     plot_bootstrap_temperature_derivative(
         results,
@@ -761,7 +743,7 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_temperature_derivative_3panel_variants.pdf")
 
-    # Figure 11: T_optimal histograms - 3 panels for variant approaches (6a, 6b, 8a)
+    # Figure 11: T_optimal histograms - 3 panels for variant approaches (6b, 6e, 8a)
     print("      [Figures] Generating T_optimal histogram figure (3 panels - variants)...")
     plot_T_optimal_histograms(
         results,
@@ -772,12 +754,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_3panel_variants.pdf")
 
-    # Figure 12: Climate response contours for approaches 6a and 8a
-    print("      [Figures] Generating climate response contour figure (6a, 8a)...")
+    # Figure 12: Climate response contours for approaches 6e and 8a
+    print("      [Figures] Generating climate response contour figure (6e, 8a)...")
     plot_climate_response_contours(
         results,
         output_dir,
-        approaches=['approach6a', 'approach8a'],
+        approaches=['approach6e', 'approach8a'],
         filename='fig_climate_response_contours.pdf',
         Ttrend_range=(0, 30),
         deltaT_range=(-5, 5),

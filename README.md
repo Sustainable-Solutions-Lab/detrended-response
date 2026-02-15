@@ -63,7 +63,7 @@ All approaches use a consistent naming scheme for output coefficients:
 | f1 | GDP scaling exponent |
 | f2 | Reference GDP level |
 
-**Approaches 6a/6b/6d/6e** (separate T/departure responses):
+**Approaches 6b/6e** (separate T/departure responses):
 
 | Parameter | Meaning |
 |-----------|---------|
@@ -72,7 +72,7 @@ All approaches use a consistent naming scheme for output coefficients:
 | T_opt | Optimal actual temperature |
 | T_dep_opt | Optimal departure from trend |
 
-Note: 6d uses only h3 (linear departure), 6e uses only h4 (quadratic departure).
+Note: 6e uses only h4 (quadratic departure term), with h3=0.
 
 **Approach 6c** (departure/trend decomposition):
 
@@ -262,41 +262,6 @@ Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
-### Approach 6a: LOESS Detrending (T + Departure Response)
-
-Combines actual temperature and quadratic departure effects.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend) + h₄·(T - T_trend)²
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-       = (h₁+h₃)·(T - T_trend) + h₂·(T² - T_trend²) + h₄·(T - T_trend)²
-```
-
-The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²), (T - T_trend)²]`.
-
-**Note:** h₁ and h₃ are confounded—only their sum is identifiable. We report h₁ = h₁+h₃ and set h₃ = 0.
-
-**Parameters:**
-- `h₁`: Combined linear coefficient (original h₁ + h₃)
-- `h₂`: Quadratic T² - T_trend² coefficient
-- `h₄`: Quadratic departure coefficient
-- `T_opt`: Optimal temperature = -h₁/(2h₂)
-- `T_dep_opt`: Optimal departure = 0 (since h₃=0)
-
-**Key insight:** This is mathematically equivalent to Approach 6e. Both have the same 3-parameter design matrix.
-
-**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
-
 ### Approach 6b: LOESS Detrending (Actual T Response)
 
 Uses the same GDP detrending as Approach 6, but regresses on actual temperature rather than temperature departures.
@@ -363,39 +328,6 @@ The regression is performed on the design matrix `[(T - T_trend), (T - T_trend)�
 
 **Degrees of freedom:** 2 for h(T) (h₁, h₂)
 
-### Approach 6d: T Response with Linear Departure Only
-
-Restricted version with only linear departure term.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend)
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-       = (h₁+h₃)·(T - T_trend) + h₂·(T² - T_trend²)
-```
-
-The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²)]`.
-
-**Note:** h₁ and h₃ are confounded—only their sum is identifiable. We report h₁ = h₁+h₃ and set h₃ = 0.
-
-**Parameters:**
-- `h₁`: Combined linear coefficient (original h₁ + h₃)
-- `h₂`: Quadratic T² - T_trend² coefficient
-- `T_opt`: Optimal temperature = -h₁/(2h₂)
-
-**Key insight:** This is mathematically equivalent to Approach 6 (departure response). Both have the same 2-parameter design matrix.
-
-**Degrees of freedom:** 2 for h(T) (h₁, h₂)
-
 ### Approach 6e: T Response with Quadratic Departure Only
 
 Quadratic departure term only (no linear departure), testing whether temperature volatility matters regardless of direction.
@@ -425,7 +357,7 @@ The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend
 - `T_opt`: Optimal temperature = -h₁/(2h₂)
 - `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
 
-**Key insight:** This is mathematically equivalent to Approach 6a. Both have the same 3-parameter design matrix. A negative h₄ means larger fluctuations reduce growth (volatility is harmful).
+**Key insight:** A negative h₄ means larger temperature fluctuations reduce growth (volatility is harmful), regardless of whether the fluctuation is positive or negative.
 
 **Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
@@ -802,9 +734,8 @@ python scripts/run_influence_analysis.py
 | Approach | Coefficients |
 |----------|--------------|
 | Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_opt |
-| Approach 6a/6b | h₁, h₂, h₃, h₄, T_opt, T_dep_opt |
+| Approach 6b | h₁, h₂, h₃, h₄, T_opt, T_dep_opt |
 | Approach 6c | h₁, h₂, h₃, h₄, T_dep_opt, f₂ |
-| Approach 6d | h₁, h₂, h₃, T_opt |
 | Approach 6e | h₁, h₂, h₄, T_opt, T_dep_opt |
 | Approach 8 | h₂, h₄, T_opt |
 | Approach 8a | h₂, h₄, T_opt |

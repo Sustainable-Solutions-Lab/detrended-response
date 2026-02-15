@@ -212,8 +212,8 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (departure opt)
-        if name in ['approach6a', 'approach6b'] and result.h3_point is not None:
+        # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (departure opt)
+        if name in ['approach6b', 'approach6e'] and result.h3_point is not None:
             print(f"  h1 (T): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2 (T): {result.h2_point:.6f}")

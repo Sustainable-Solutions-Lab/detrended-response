@@ -52,10 +52,9 @@ class BootstrapResult:
     Field naming convention follows the FitResult naming:
     - Universal: h1, h2, T_opt (for standard quadratic approaches)
     - Approach 5d: f1 = GDP scaling exponent
-    - Approach 6a/6b/6d/6e: h1,h2 = actual T response; h3,h4 = departure response; T_opt, T_dep_opt = optimal temps
+    - Approach 6b/6e: h1,h2 = actual T response; h3,h4 = departure response; T_opt, T_dep_opt = optimal temps
     - Approach 6c: h1,h2 = departure response; h3,h4 = trend response; T_dep_opt, f2 = optimal temps
-    - Approach 6d: like 6a but h4=0 (linear departure only)
-    - Approach 6e: like 6a but h3=0 (quadratic departure only)
+    - Approach 6e: h3=0 (quadratic departure only)
     - Approach 8: h2 = curvature below T_opt; h4 = curvature above T_opt
     - Approach 8a: h2 = curvature for actual T; h4 = curvature for trend T
     - Approach 8b: f1 = linear modulation; f2 = quadratic modulation; h1,h2 = actual T response
@@ -89,11 +88,11 @@ class BootstrapResult:
     h4_point: float = None         # Curvature for T > T_opt (formerly h2_high_point)
     h4_samples: np.ndarray = None  # Bootstrap samples for h4 (formerly h2_high_samples)
 
-    # Approach 6a/6b (separate actual T/departure response) specific (optional)
+    # Approach 6b/6e (separate actual T/departure response) specific (optional)
     h3_point: float = None         # Linear coef for departure (formerly h1_trend_point)
     h3_samples: np.ndarray = None  # Bootstrap samples for h3
     # Note: h4 reused from above for quadratic departure coef (formerly h2_trend)
-    # For 6a/6b, T_opt is the optimal actual T; T_dep_opt is optimal departure
+    # For 6b/6e, T_opt is the optimal actual T; T_dep_opt is optimal departure
     T_dep_opt_point: float = None  # Optimal departure (-h3/(2*h4))
     T_dep_opt_samples: np.ndarray = None  # Bootstrap samples for T_dep_opt
 
@@ -244,10 +243,10 @@ def run_bootstrap(
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     # Approach-specific samples (f1, h3, h4, f2, T_dep_opt have different meanings per approach)
     f1_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 5d: beta; 8b/8c: linear modulation
-    h3_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6a/6b/6c: h3 (departure/trend linear)
-    h4_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 8: h4; 6a/6b/6c/8a: h4 (departure/trend quadratic)
+    h3_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6b/6c/6e: h3 (departure/trend linear)
+    h4_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 8: h4; 6b/6c/6e/8a: h4 (departure/trend quadratic)
     f2_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6c: T_opt_trend; 8b: quadratic modulation
-    T_dep_opt_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6a/6b/6c: optimal departure
+    T_dep_opt_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6b/6c/6e: optimal departure
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -323,13 +322,13 @@ def run_bootstrap(
                 # f1: 5d beta, 8b/8c linear modulation
                 if hasattr(r, 'f1') and r.f1 is not None:
                     f1_samples[name][b] = r.f1
-                # T_dep_opt: 6a/6b/6c optimal departure
+                # T_dep_opt: 6b/6c/6e optimal departure
                 if hasattr(r, 'T_dep_opt') and r.T_dep_opt is not None:
                     T_dep_opt_samples[name][b] = r.T_dep_opt
-                # h3: 6a/6b/6c linear departure/trend coefficient
+                # h3: 6b/6c/6e linear departure/trend coefficient
                 if hasattr(r, 'h3') and r.h3 is not None:
                     h3_samples[name][b] = r.h3
-                # h4: 8 curvature above T_opt, 6a/6b/6c/8a quadratic trend coef
+                # h4: 8 curvature above T_opt, 6b/6c/6e/8a quadratic trend coef
                 if hasattr(r, 'h4') and r.h4 is not None:
                     h4_samples[name][b] = r.h4
                 # f2: 6c T_opt_trend, 8b quadratic modulation
