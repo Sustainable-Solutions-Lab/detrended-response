@@ -33,6 +33,7 @@ from src.output import (
     save_bootstrap_country_samples_csv,
     save_bootstrap_summary_txt,
     save_bootstrap_summary_table,
+    save_variance_decomposition_table,
     save_all_bootstrap_plots,
 )
 
@@ -194,6 +195,7 @@ def main():
     save_bootstrap_country_samples_csv(country_samples, data, output_dir, input_file=input_file)
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)
+    save_variance_decomposition_table(bootstrap_results, output_dir, input_file=input_file)
 
     # Generate bootstrap plots
     print("\n[7/7] Generating bootstrap plots...")

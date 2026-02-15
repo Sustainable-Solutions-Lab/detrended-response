@@ -3794,9 +3794,9 @@ def fit_all_approaches(
         'approach5c': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'approach5d': Pre-computed k with GDP-only response (if trends_with_k, year_means, and Y_ref provided)
         'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
-        'approach6a': Separate high/low frequency responses with LOESS (if trends_loess provided)
         'approach6b': Low frequency only response with LOESS (if trends_loess provided)
         'approach6c': Departure/trend decomposition with LOESS (if trends_loess provided)
+        'approach6e': T response with quadratic departure only (if trends_loess provided)
         'approach8': Piecewise quadratic response with LOESS (if trends_loess provided)
         'approach8a': Shared T_opt for total/trend with LOESS (if trends_loess provided)
         'approach8b': Modulated temperature response with LOESS (if trends_loess provided)
@@ -3809,7 +3809,7 @@ def fit_all_approaches(
         data: AnalysisData object
         trends: CountryTrends for approaches 0-4
         trends_with_k: CountryTrends for approach 5, 5a, 5b, 5c (fit to dy - k)
-        year_means: Pre-computed k[t] for approaches 5, 5a, 5b, 5c, 6, 6a, 6b, 8, 8a
+        year_means: Pre-computed k[t] for approaches 5, 5a, 5b, 5c, 6, 6b, 6c, 6e, 8, 8a
         Y_ref: Reference GDP for approach 5d (computed once on full dataset)
         trends_loess: CountryTrendsLoess for approaches 6-8a (LOESS detrending)
     """
@@ -3850,16 +3850,10 @@ def fit_all_approaches(
         results['approach6'] = fit_approach6_precomputed_k_loess(
             data, trends_loess, year_means
         )
-        results['approach6a'] = fit_approach6a_separate_high_low_loess(
-            data, trends_loess, year_means
-        )
         results['approach6b'] = fit_approach6b_low_only_loess(
             data, trends_loess, year_means
         )
         results['approach6c'] = fit_approach6c_departure_trend_loess(
-            data, trends_loess, year_means
-        )
-        results['approach6d'] = fit_approach6d_linear_departure_loess(
             data, trends_loess, year_means
         )
         results['approach6e'] = fit_approach6e_quadratic_departure_loess(

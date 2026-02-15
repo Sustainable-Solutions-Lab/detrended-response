@@ -1576,6 +1576,198 @@ def save_bootstrap_var_attrib_csv(
     print(f"  Saved bootstrap_var_attrib_samples.csv ({len(df)} rows)")
 
 
+def save_variance_decomposition_table(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save variance decomposition table with bootstrap statistics.
+
+    Creates: variance_decomposition_table.xlsx and .csv with columns:
+    - Metric: variance/covariance metric name
+    - For each approach: point, p5, p25, p50, p75, p95 statistics
+
+    This table includes ALL approaches in the bootstrap results.
+    """
+    # Define variance metrics
+    variance_metrics = [
+        ('Sigma_Delta_u_Delta_u', 'Var(h(T)-h(Ttr))/Var(Δy)'),
+        ('Sigma_v_v', 'Var(h(Ttr))/Var(Δy)'),
+        ('Sigma_j_j', 'Var(j)/Var(Δy)'),
+        ('Sigma_k_k', 'Var(k)/Var(Δy)'),
+        ('Sigma_epsilon_epsilon', 'Var(ε)/Var(Δy)'),
+    ]
+    covariance_metrics = [
+        ('Sigma_Delta_u_v', '2Cov(h(T)-h(Ttr),h(Ttr))/Var(Δy)'),
+        ('Sigma_Delta_u_j', '2Cov(h(T)-h(Ttr),j)/Var(Δy)'),
+        ('Sigma_Delta_u_k', '2Cov(h(T)-h(Ttr),k)/Var(Δy)'),
+        ('Sigma_Delta_u_epsilon', '2Cov(h(T)-h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_v_j', '2Cov(h(Ttr),j)/Var(Δy)'),
+        ('Sigma_v_k', '2Cov(h(Ttr),k)/Var(Δy)'),
+        ('Sigma_v_epsilon', '2Cov(h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_j_k', '2Cov(j,k)/Var(Δy)'),
+        ('Sigma_j_epsilon', '2Cov(j,ε)/Var(Δy)'),
+        ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
+    ]
+
+    def compute_stats(samples: np.ndarray) -> dict:
+        """Compute point estimate (median) and percentiles from samples."""
+        valid_samples = samples[~np.isnan(samples)]
+        if len(valid_samples) == 0:
+            return {'point': np.nan, 'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
+        return {
+            'point': np.median(valid_samples),
+            'p5': np.percentile(valid_samples, 5),
+            'p25': np.percentile(valid_samples, 25),
+            'p50': np.percentile(valid_samples, 50),
+            'p75': np.percentile(valid_samples, 75),
+            'p95': np.percentile(valid_samples, 95),
+        }
+
+    # Get approaches that have var_attrib_samples
+    available_approaches = [name for name, result in results.items()
+                           if result.var_attrib_samples is not None]
+    if not available_approaches:
+        print("  No variance attribution data available")
+        return
+
+    # Build approach names mapping
+    approach_names = {name: results[name].approach for name in available_approaches}
+
+    # Build table rows
+    rows = []
+
+    # Add Total R² row first
+    total_r2_row = {'Metric': 'Total R²'}
+    for approach in available_approaches:
+        name = approach_names[approach]
+        result = results[approach]
+        samples = result.total_r_squared_samples
+        stats = compute_stats(samples)
+        total_r2_row[f'{name}_point'] = stats['point']
+        total_r2_row[f'{name}_p5'] = stats['p5']
+        total_r2_row[f'{name}_p25'] = stats['p25']
+        total_r2_row[f'{name}_p50'] = stats['p50']
+        total_r2_row[f'{name}_p75'] = stats['p75']
+        total_r2_row[f'{name}_p95'] = stats['p95']
+    rows.append(total_r2_row)
+
+    # Add variance metrics
+    for key, label in variance_metrics:
+        row = {'Metric': label}
+        for approach in available_approaches:
+            name = approach_names[approach]
+            result = results[approach]
+            var_attrib = result.var_attrib_samples
+
+            if key not in var_attrib or 'var_dy' not in var_attrib:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
+                continue
+
+            var_dy_samples = var_attrib['var_dy']
+            metric_samples = var_attrib[key]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                normalized = metric_samples / var_dy_samples
+            normalized = np.where(np.isfinite(normalized), normalized, np.nan)
+            stats = compute_stats(normalized)
+            row[f'{name}_point'] = stats['point']
+            row[f'{name}_p5'] = stats['p5']
+            row[f'{name}_p25'] = stats['p25']
+            row[f'{name}_p50'] = stats['p50']
+            row[f'{name}_p75'] = stats['p75']
+            row[f'{name}_p95'] = stats['p95']
+        rows.append(row)
+
+    # Add covariance metrics (multiply by 2)
+    for key, label in covariance_metrics:
+        row = {'Metric': label}
+        for approach in available_approaches:
+            name = approach_names[approach]
+            result = results[approach]
+            var_attrib = result.var_attrib_samples
+
+            if key not in var_attrib or 'var_dy' not in var_attrib:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
+                continue
+
+            var_dy_samples = var_attrib['var_dy']
+            metric_samples = var_attrib[key] * 2  # 2*Cov term
+            with np.errstate(divide='ignore', invalid='ignore'):
+                normalized = metric_samples / var_dy_samples
+            normalized = np.where(np.isfinite(normalized), normalized, np.nan)
+            stats = compute_stats(normalized)
+            row[f'{name}_point'] = stats['point']
+            row[f'{name}_p5'] = stats['p5']
+            row[f'{name}_p25'] = stats['p25']
+            row[f'{name}_p50'] = stats['p50']
+            row[f'{name}_p75'] = stats['p75']
+            row[f'{name}_p95'] = stats['p95']
+        rows.append(row)
+
+    # Add Sum row
+    sum_row = {'Metric': 'Sum'}
+    for approach in available_approaches:
+        name = approach_names[approach]
+        result = results[approach]
+        var_attrib = result.var_attrib_samples
+
+        if 'var_dy' not in var_attrib:
+            sum_row[f'{name}_point'] = np.nan
+            sum_row[f'{name}_p5'] = np.nan
+            sum_row[f'{name}_p25'] = np.nan
+            sum_row[f'{name}_p50'] = np.nan
+            sum_row[f'{name}_p75'] = np.nan
+            sum_row[f'{name}_p95'] = np.nan
+            continue
+
+        var_dy_samples = var_attrib['var_dy']
+        n_samples = len(var_dy_samples)
+        total_sum = np.zeros(n_samples)
+
+        for key, _ in variance_metrics:
+            if key in var_attrib:
+                total_sum += var_attrib[key]
+        for key, _ in covariance_metrics:
+            if key in var_attrib:
+                total_sum += 2 * var_attrib[key]
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            sum_normalized = total_sum / var_dy_samples
+        sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
+        stats = compute_stats(sum_normalized)
+        sum_row[f'{name}_point'] = stats['point']
+        sum_row[f'{name}_p5'] = stats['p5']
+        sum_row[f'{name}_p25'] = stats['p25']
+        sum_row[f'{name}_p50'] = stats['p50']
+        sum_row[f'{name}_p75'] = stats['p75']
+        sum_row[f'{name}_p95'] = stats['p95']
+    rows.append(sum_row)
+
+    # Create and save DataFrame
+    df = pd.DataFrame(rows)
+
+    xlsx_path = output_dir / 'variance_decomposition_table.xlsx'
+    df.to_excel(xlsx_path, index=False, sheet_name='Variance Decomposition')
+    print(f"  Saved variance_decomposition_table.xlsx ({len(rows)} rows × {len(available_approaches)} approaches)")
+
+    csv_path = output_dir / 'variance_decomposition_table.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved variance_decomposition_table.csv")
+
+
 def save_bootstrap_country_samples_csv(
     country_samples: np.ndarray,
     data: "AnalysisData",
@@ -2025,10 +2217,12 @@ def plot_temperature_response_2panel(
         mask_recent = data.year == max_year
         temp_recent = data.temp[mask_recent]
 
-    # First pass: compute y-axis range
-    y_min, y_max = np.inf, -np.inf
-    plot_data = {}
+    # Fixed y-axis range for publication consistency
+    y_min, y_max = -0.25, 0.00
+    y_ticks = np.arange(-0.25, 0.01, 0.05)
 
+    # Compute plot data
+    plot_data = {}
     for name in valid_approaches[:2]:
         result = results[name]
         h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
@@ -2040,17 +2234,6 @@ def plot_temperature_response_2panel(
             'h_p5': h_p5, 'h_p25': h_p25, 'h_p75': h_p75, 'h_p95': h_p95,
             'h_point': h_point, 'T_opt': T_opt
         }
-
-        if not np.all(np.isnan(h_p5)):
-            y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
-        if not np.all(np.isnan(h_p95)):
-            y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
-
-    if np.isinf(y_min) or np.isinf(y_max):
-        y_min, y_max = -0.05, 0.05
-    y_padding = (y_max - y_min) * 0.05
-    y_min -= y_padding
-    y_max += y_padding
 
     # Plot panels
     for col, name in enumerate(valid_approaches[:2]):
@@ -2089,6 +2272,7 @@ def plot_temperature_response_2panel(
         ax.set_title(result.approach, fontsize=11)
         ax.set_xlim(T_range)
         ax.set_ylim(y_min, y_max)
+        ax.set_yticks(y_ticks)
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8, loc='lower right')
 
@@ -4162,3 +4346,360 @@ def save_all_bootstrap_plots(
     # Year effects k(t) with bootstrap uncertainty bands
     if data is not None:
         plot_year_effects_bootstrap(results, data, output_dir, input_file=input_file)
+
+
+def plot_temperature_response_4panel_variants(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    filename: str = 'fig_temperature_response_4panel_variants.pdf',
+    T_range: tuple = (0, 30),
+    T_dep_range: tuple = (-5, 5),
+    input_file: str = None,
+) -> None:
+    """Plot 4-panel temperature response figure with approach 6, 8, and 6e components.
+
+    Creates a 2x2 figure:
+    - Top-left: Approach 6 h(T) bootstrap response
+    - Top-right: Approach 8 h(T) bootstrap response
+    - Bottom-left: Approach 6e actual T component: h1*T + h2*T²
+    - Bottom-right: Approach 6e departure component: h4*T_dep²
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for temperature histogram
+        output_dir: Directory to save the plot
+        filename: Output filename
+        T_range: Temperature range for top and bottom-left panels (default: (0, 30))
+        T_dep_range: Departure temperature range for bottom-right panel (default: (-5, 5))
+        input_file: Optional input file path for annotation
+    """
+    required = ['approach6', 'approach8', 'approach6e']
+    valid_approaches = [a for a in required if a in results]
+    if len(valid_approaches) < 3:
+        print(f"  WARNING: Not enough valid approaches for 4-panel figure (found {valid_approaches})")
+        return
+
+    # Create 2x2 figure
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+
+    # Temperature arrays
+    T = np.linspace(T_range[0], T_range[1], 200)
+    T_dep = np.linspace(T_dep_range[0], T_dep_range[1], 200)
+
+    # Fixed y-axis range for publication consistency
+    y_min, y_max = -0.25, 0.00
+    y_ticks = np.arange(-0.25, 0.01, 0.05)
+
+    # Get temperature data from most recent year for histogram
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+
+    # Top-left: Approach 6 (standard quadratic)
+    ax = axes[0, 0]
+    result6 = results['approach6']
+    color6 = APPROACH_COLORS.get('approach6', 'orange')
+    h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach6'
+    )
+    h_point6, T_opt6 = _compute_point_estimate_response(result6, T, 'approach6', None)
+
+    if temp_recent is not None:
+        ax2 = ax.twinx()
+        bins = np.linspace(T_range[0], T_range[1], 30)
+        ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel('Data density', fontsize=8, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+        ax2.set_ylim(bottom=0)
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
+    ax.fill_between(T, h_p5, h_p95, alpha=0.2, color=color6, label='90% CI')
+    ax.fill_between(T, h_p25, h_p75, alpha=0.3, color=color6, label='IQR')
+    ax.plot(T, h_point6, color=color6, linestyle='-', linewidth=2, label='Point estimate')
+    if T_opt6 is not None and not np.isnan(T_opt6):
+        ax.axvline(T_opt6, color=color6, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt6:.1f}°C')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+    ax.set_title('Approach 6: LOESS quadratic', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(y_ticks)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower right')
+
+    # Top-right: Approach 8 (piecewise quadratic)
+    ax = axes[0, 1]
+    result8 = results['approach8']
+    color8 = APPROACH_COLORS.get('approach8', 'magenta')
+    h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach8'
+    )
+    h_point8, T_opt8 = _compute_point_estimate_response(result8, T, 'approach8', None)
+
+    if temp_recent is not None:
+        ax2 = ax.twinx()
+        bins = np.linspace(T_range[0], T_range[1], 30)
+        ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel('Data density', fontsize=8, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+        ax2.set_ylim(bottom=0)
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
+    ax.fill_between(T, h_p5, h_p95, alpha=0.2, color=color8, label='90% CI')
+    ax.fill_between(T, h_p25, h_p75, alpha=0.3, color=color8, label='IQR')
+    ax.plot(T, h_point8, color=color8, linestyle='-', linewidth=2, label='Point estimate')
+    if T_opt8 is not None and not np.isnan(T_opt8):
+        ax.axvline(T_opt8, color=color8, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt8:.1f}°C')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+    ax.set_title('Approach 8: Piecewise quadratic', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(y_ticks)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower right')
+
+    # Bottom-left: Approach 6e actual T component (h1*T + h2*T²)
+    ax = axes[1, 0]
+    result6e = results['approach6e']
+    color6e = APPROACH_COLORS.get('approach6e', 'salmon')
+
+    h1_samples = result6e.h1_samples
+    h2_samples = result6e.h2_samples
+    valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+    h1_valid = h1_samples[valid_mask]
+    h2_valid = h2_samples[valid_mask]
+
+    h_p5, h_p25, h_p50, h_p75, h_p95 = _compute_quadratic_bands(
+        h1_valid, h2_valid, T, percentiles=(5, 25, 50, 75, 95)
+    )
+    h1_point = result6e.h1_point
+    h2_point = result6e.h2_point
+    h_T_point = h1_point * T + h2_point * T ** 2
+    if h2_point != 0:
+        T_opt_6e = -h1_point / (2 * h2_point)
+        h_T_opt_point = -h1_point ** 2 / (4 * h2_point)
+    else:
+        T_opt_6e = np.nan
+        h_T_opt_point = 0
+    h_point_6e = h_T_point - h_T_opt_point
+
+    if temp_recent is not None:
+        ax2 = ax.twinx()
+        bins = np.linspace(T_range[0], T_range[1], 30)
+        ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel('Data density', fontsize=8, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+        ax2.set_ylim(bottom=0)
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
+    ax.fill_between(T, h_p5, h_p95, alpha=0.2, color=color6e, label='90% CI')
+    ax.fill_between(T, h_p25, h_p75, alpha=0.3, color=color6e, label='IQR')
+    ax.plot(T, h_point_6e, color=color6e, linestyle='-', linewidth=2, label='Point estimate')
+    if not np.isnan(T_opt_6e):
+        ax.axvline(T_opt_6e, color=color6e, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt_6e:.1f}°C')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+    ax.set_title('Approach 6e: Actual T component (h₁T + h₂T²)', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(y_ticks)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower right')
+
+    # Bottom-right: Approach 6e departure component (h4*T_dep²)
+    ax = axes[1, 1]
+    h4_samples = result6e.h4_samples
+    h4_valid = h4_samples[~np.isnan(h4_samples)]
+    h4_point = result6e.h4_point
+
+    # Compute h4*T_dep² bands (centered at 0, no offset needed)
+    n_samples = len(h4_valid)
+    n_T = len(T_dep)
+    h_dep_samples = np.zeros((n_samples, n_T))
+    for i in range(n_samples):
+        h_dep_samples[i, :] = h4_valid[i] * T_dep ** 2
+
+    h_dep_p5 = np.percentile(h_dep_samples, 5, axis=0)
+    h_dep_p25 = np.percentile(h_dep_samples, 25, axis=0)
+    h_dep_p75 = np.percentile(h_dep_samples, 75, axis=0)
+    h_dep_p95 = np.percentile(h_dep_samples, 95, axis=0)
+    h_dep_point = h4_point * T_dep ** 2
+
+    ax.fill_between(T_dep, h_dep_p5, h_dep_p95, alpha=0.2, color=color6e, label='90% CI')
+    ax.fill_between(T_dep, h_dep_p25, h_dep_p75, alpha=0.3, color=color6e, label='IQR')
+    ax.plot(T_dep, h_dep_point, color=color6e, linestyle='-', linewidth=2, label='Point estimate')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.axvline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature departure from trend (°C)', fontsize=10)
+    ax.set_ylabel('h₄T²_dep', fontsize=10)
+    ax.set_title('Approach 6e: Departure component (h₄T²_dep)', fontsize=11)
+    ax.set_xlim(T_dep_range)
+    ax.set_ylim(y_min, y_max)
+    ax.set_yticks(y_ticks)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower right')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_temperature_derivative_4panel_variants(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = 'fig_temperature_derivative_4panel_variants.pdf',
+    T_range: tuple = (0, 30),
+    T_dep_range: tuple = (-5, 5),
+    input_file: str = None,
+) -> None:
+    """Plot 4-panel temperature derivative figure with approach 6, 8, and 6e components.
+
+    Creates a 2x2 figure:
+    - Top-left: Approach 6 dh/dT = h1 + 2*h2*T
+    - Top-right: Approach 8 piecewise dh/dT
+    - Bottom-left: Approach 6e actual T component: dh/dT = h1 + 2*h2*T
+    - Bottom-right: Approach 6e departure component: dh/dT_dep = 2*h4*T_dep
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename
+        T_range: Temperature range for top and bottom-left panels (default: (0, 30))
+        T_dep_range: Departure temperature range for bottom-right panel (default: (-5, 5))
+        input_file: Optional input file path for annotation
+    """
+    required = ['approach6', 'approach8', 'approach6e']
+    valid_approaches = [a for a in required if a in results]
+    if len(valid_approaches) < 3:
+        print(f"  WARNING: Not enough valid approaches for 4-panel derivative figure (found {valid_approaches})")
+        return
+
+    # Create 2x2 figure
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+
+    # Temperature arrays
+    T = np.linspace(T_range[0], T_range[1], 200)
+    T_dep = np.linspace(T_dep_range[0], T_dep_range[1], 200)
+
+    # Top-left: Approach 6 (standard quadratic derivative)
+    ax = axes[0, 0]
+    result6 = results['approach6']
+    color6 = APPROACH_COLORS.get('approach6', 'orange')
+
+    dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
+        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach6'
+    )
+    dh_point6 = _compute_derivative_point_estimate(result6, T, 'approach6', None)
+
+    ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color6, label='90% CI')
+    ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color6, label='IQR')
+    ax.plot(T, dh_point6, color=color6, linestyle='-', linewidth=2, label='Point estimate')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('dh/dT', fontsize=10)
+    ax.set_title('Approach 6: LOESS quadratic', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower left')
+
+    # Top-right: Approach 8 (piecewise quadratic derivative)
+    ax = axes[0, 1]
+    result8 = results['approach8']
+    color8 = APPROACH_COLORS.get('approach8', 'magenta')
+
+    dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
+        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach8'
+    )
+    dh_point8 = _compute_derivative_point_estimate(result8, T, 'approach8', None)
+
+    ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color8, label='90% CI')
+    ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color8, label='IQR')
+    ax.plot(T, dh_point8, color=color8, linestyle='-', linewidth=2, label='Point estimate')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('dh/dT', fontsize=10)
+    ax.set_title('Approach 8: Piecewise quadratic', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower left')
+
+    # Bottom-left: Approach 6e actual T component derivative (h1 + 2*h2*T)
+    ax = axes[1, 0]
+    result6e = results['approach6e']
+    color6e = APPROACH_COLORS.get('approach6e', 'salmon')
+
+    h1_samples = result6e.h1_samples
+    h2_samples = result6e.h2_samples
+    valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+    h1_valid = h1_samples[valid_mask]
+    h2_valid = h2_samples[valid_mask]
+
+    dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = _compute_quadratic_derivative_bands(
+        h1_valid, h2_valid, T, percentiles=(5, 25, 50, 75, 95)
+    )
+    h1_point = result6e.h1_point
+    h2_point = result6e.h2_point
+    dh_point_6e = h1_point + 2 * h2_point * T
+
+    ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color6e, label='90% CI')
+    ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color6e, label='IQR')
+    ax.plot(T, dh_point_6e, color=color6e, linestyle='-', linewidth=2, label='Point estimate')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)', fontsize=10)
+    ax.set_ylabel('dh/dT', fontsize=10)
+    ax.set_title('Approach 6e: Actual T component (h₁ + 2h₂T)', fontsize=11)
+    ax.set_xlim(T_range)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower left')
+
+    # Bottom-right: Approach 6e departure component derivative (2*h4*T_dep)
+    ax = axes[1, 1]
+    h4_samples = result6e.h4_samples
+    h4_valid = h4_samples[~np.isnan(h4_samples)]
+    h4_point = result6e.h4_point
+
+    # Compute 2*h4*T_dep derivative bands
+    n_samples = len(h4_valid)
+    n_T = len(T_dep)
+    dh_dep_samples = np.zeros((n_samples, n_T))
+    for i in range(n_samples):
+        dh_dep_samples[i, :] = 2 * h4_valid[i] * T_dep
+
+    dh_dep_p5 = np.percentile(dh_dep_samples, 5, axis=0)
+    dh_dep_p25 = np.percentile(dh_dep_samples, 25, axis=0)
+    dh_dep_p75 = np.percentile(dh_dep_samples, 75, axis=0)
+    dh_dep_p95 = np.percentile(dh_dep_samples, 95, axis=0)
+    dh_dep_point = 2 * h4_point * T_dep
+
+    ax.fill_between(T_dep, dh_dep_p5, dh_dep_p95, alpha=0.2, color=color6e, label='90% CI')
+    ax.fill_between(T_dep, dh_dep_p25, dh_dep_p75, alpha=0.3, color=color6e, label='IQR')
+    ax.plot(T_dep, dh_dep_point, color=color6e, linestyle='-', linewidth=2, label='Point estimate')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.axvline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature departure from trend (°C)', fontsize=10)
+    ax.set_ylabel('dh/dT_dep', fontsize=10)
+    ax.set_title('Approach 6e: Departure component (2h₄T_dep)', fontsize=11)
+    ax.set_xlim(T_dep_range)
+    ax.grid(True, alpha=0.3)
+    ax.legend(fontsize=8, loc='lower left')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")

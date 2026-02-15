@@ -22,6 +22,8 @@ from src.output import (
     plot_climate_response_contours,
     plot_temperature_response_2panel,
     plot_year_effects_2panel,
+    plot_temperature_response_4panel_variants,
+    plot_temperature_derivative_4panel_variants,
 )
 
 
@@ -208,9 +210,9 @@ def generate_variance_decomposition_table(
         print("      [Tables] WARNING: bootstrap_summary not loaded, skipping variance decomposition table")
         return
 
-    # Default approaches to include
+    # Default approaches to include (publication set)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6b', 'approach6e', 'approach8', 'approach8a']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach6', 'approach8', 'approach6e']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -449,9 +451,9 @@ def generate_bootstrap_comparison_table(
         print("      [Tables] WARNING: bootstrap_summary not loaded, skipping bootstrap comparison table")
         return
 
-    # Default approaches to include (same order as variance decomposition table)
+    # Default approaches to include (publication set, same as variance decomposition table)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach5a', 'approach5b', 'approach6', 'approach6b', 'approach6e', 'approach8', 'approach8a']
+        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach6', 'approach8', 'approach6e']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -643,17 +645,17 @@ def generate_figures(
     else:
         print("      [Figures] Skipping main figures (data not loaded)")
 
-    # Figure 2: Temperature derivative (dh/dT) - 4 panels
-    print("      [Figures] Generating temperature derivative figure (4 panels)...")
-    plot_bootstrap_temperature_derivative(
+    # Figure 2: Temperature derivative (dh/dT) - 4 panels (variants: 6, 8, 6e components)
+    print("      [Figures] Generating temperature derivative figure (4 panels - variants)...")
+    plot_temperature_derivative_4panel_variants(
         results,
         output_dir,
-        approaches=approaches_4panel,
-        filename='fig_temperature_derivative_4panel.pdf',
+        filename='fig_temperature_derivative_4panel_variants.pdf',
         T_range=(0, 30),
+        T_dep_range=(-5, 5),
         input_file=None,
     )
-    print("      [Figures] Saved fig_temperature_derivative_4panel.pdf")
+    print("      [Figures] Saved fig_temperature_derivative_4panel_variants.pdf")
 
     # Figure 4: Temperature derivative (dh/dT) - 2 panels
     print("      [Figures] Generating temperature derivative figure (2 panels)...")
@@ -717,19 +719,21 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
 
-    # Figure 9: Temperature response - 3 panels for variant approaches (6b, 6e, 8a)
-    approaches_variants = ['approach6b', 'approach6e', 'approach8a']
-    print("      [Figures] Generating temperature response figure (3 panels - variants)...")
-    plot_bootstrap_temperature_response(
+    # Figure 9: Temperature response - 4 panels for variant approaches (6, 8, 6e components)
+    print("      [Figures] Generating temperature response figure (4 panels - variants)...")
+    plot_temperature_response_4panel_variants(
         results,
+        data,
         output_dir,
-        approaches=approaches_variants,
-        filename='fig_temperature_response_3panel_variants.pdf',
+        filename='fig_temperature_response_4panel_variants.pdf',
         T_range=(0, 30),
-        data=data,
+        T_dep_range=(-5, 5),
         input_file=None,
     )
-    print("      [Figures] Saved fig_temperature_response_3panel_variants.pdf")
+    print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
+
+    # Keep the 3-panel variants for 6b, 6e, 8a
+    approaches_variants = ['approach6b', 'approach6e', 'approach8a']
 
     # Figure 10: Temperature derivative - 3 panels for variant approaches (6b, 6e, 8a)
     print("      [Figures] Generating temperature derivative figure (3 panels - variants)...")
