@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict
 from scipy.special import erf
 from .data_loader import AnalysisData
-from .detrending import CountryTrends
+from .detrending import CountryTrends, CountryTrendsLoess, compute_year_means, compute_country_trends_loess
 from .fitting import FitResult
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
@@ -4354,7 +4354,7 @@ def plot_temperature_response_4panel_variants(
     output_dir: Path,
     filename: str = 'fig_temperature_response_4panel_variants.pdf',
     T_range: tuple = (0, 30),
-    T_dep_range: tuple = (-5, 5),
+    T_dep_range: tuple = (-2, 2),
     input_file: str = None,
 ) -> None:
     """Plot 4-panel temperature response figure with approach 6, 8, and 6e components.
@@ -4393,10 +4393,16 @@ def plot_temperature_response_4panel_variants(
 
     # Get temperature data from most recent year for histogram
     temp_recent = None
+    T_dep_actual = None
     if data is not None:
         max_year = data.year_range[1]
         mask_recent = data.year == max_year
         temp_recent = data.temp[mask_recent]
+
+        # Compute T_dep (temperature departure from LOESS trend) for bottom-right panel histogram
+        year_means = compute_year_means(data)
+        trends_loess = compute_country_trends_loess(data, year_means)
+        T_dep_actual = data.temp - trends_loess.T_loess
 
     # Top-left: Approach 6 (standard quadratic)
     ax = axes[0, 0]
@@ -4538,6 +4544,18 @@ def plot_temperature_response_4panel_variants(
     h_dep_p95 = np.percentile(h_dep_samples, 95, axis=0)
     h_dep_point = h4_point * T_dep ** 2
 
+    # Add T_dep histogram on secondary y-axis
+    if T_dep_actual is not None:
+        ax2 = ax.twinx()
+        bins = np.linspace(T_dep_range[0], T_dep_range[1], 30)
+        ax2.hist(T_dep_actual, bins=bins, color='gray', alpha=0.3, density=True)
+        ax2.set_ylabel('Data density', fontsize=8, color='gray')
+        ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+        ax2.set_ylim(bottom=0)
+        ax2.set_zorder(ax.get_zorder() - 1)
+        ax.set_zorder(ax2.get_zorder() + 1)
+        ax.patch.set_visible(False)
+
     ax.fill_between(T_dep, h_dep_p5, h_dep_p95, alpha=0.2, color=color6e, label='90% CI')
     ax.fill_between(T_dep, h_dep_p25, h_dep_p75, alpha=0.3, color=color6e, label='IQR')
     ax.plot(T_dep, h_dep_point, color=color6e, linestyle='-', linewidth=2, label='Point estimate')
@@ -4547,9 +4565,11 @@ def plot_temperature_response_4panel_variants(
     ax.set_ylabel('h₄T²_dep', fontsize=10)
     ax.set_title('Approach 6e: Departure component (h₄T²_dep)', fontsize=11)
     ax.set_xlim(T_dep_range)
+    ax.set_xticks([-2, -1, 0, 1, 2])
+    ax.set_xticks([-1.5, -0.5, 0.5, 1.5], minor=True)
     ax.set_ylim(y_min, y_max)
     ax.set_yticks(y_ticks)
-    ax.grid(True, alpha=0.3)
+    ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=8, loc='lower right')
 
     plt.tight_layout()
@@ -4564,7 +4584,7 @@ def plot_temperature_derivative_4panel_variants(
     output_dir: Path,
     filename: str = 'fig_temperature_derivative_4panel_variants.pdf',
     T_range: tuple = (0, 30),
-    T_dep_range: tuple = (-5, 5),
+    T_dep_range: tuple = (-2, 2),
     input_file: str = None,
 ) -> None:
     """Plot 4-panel temperature derivative figure with approach 6, 8, and 6e components.
@@ -4695,7 +4715,9 @@ def plot_temperature_derivative_4panel_variants(
     ax.set_ylabel('dh/dT_dep', fontsize=10)
     ax.set_title('Approach 6e: Departure component (2h₄T_dep)', fontsize=11)
     ax.set_xlim(T_dep_range)
-    ax.grid(True, alpha=0.3)
+    ax.set_xticks([-2, -1, 0, 1, 2])
+    ax.set_xticks([-1.5, -0.5, 0.5, 1.5], minor=True)
+    ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=8, loc='lower left')
 
     plt.tight_layout()

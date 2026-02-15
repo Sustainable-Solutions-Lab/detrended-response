@@ -652,7 +652,7 @@ def generate_figures(
         output_dir,
         filename='fig_temperature_derivative_4panel_variants.pdf',
         T_range=(0, 30),
-        T_dep_range=(-5, 5),
+        T_dep_range=(-2, 2),
         input_file=None,
     )
     print("      [Figures] Saved fig_temperature_derivative_4panel_variants.pdf")
@@ -727,7 +727,7 @@ def generate_figures(
         output_dir,
         filename='fig_temperature_response_4panel_variants.pdf',
         T_range=(0, 30),
-        T_dep_range=(-5, 5),
+        T_dep_range=(-2, 2),
         input_file=None,
     )
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
