@@ -418,7 +418,7 @@ class FitResultApproach6ab:
     - h1, h2: Response to actual temperature T
     - h3, h4: Response to departure (T - Ttrend) (zero for 6b)
     - T_opt: Optimal actual temperature = -h1/(2*h2)
-    - f1: Optimal departure = -h3/(2*h4)
+    - T_dep_opt: Optimal departure = -h3/(2*h4)
     """
     approach: str
     # Actual T coefficients
@@ -442,7 +442,7 @@ class FitResultApproach6ab:
     residuals: np.ndarray
     # Derived
     T_opt: float           # -h1/(2*h2) - optimal actual T
-    f1: float              # -h3/(2*h4) - optimal departure
+    T_dep_opt: float       # -h3/(2*h4) - optimal departure
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -467,7 +467,7 @@ class FitResultApproach6c:
     Parameters:
     - h1, h2: Response to departure (T - T_trend)
     - h3, h4: Response to trend temperature T_trend
-    - f1: Optimal departure = -h1/(2*h2)
+    - T_dep_opt: Optimal departure = -h1/(2*h2)
     - f2: Optimal trend temperature = -h3/(2*h4)
     """
     approach: str
@@ -491,8 +491,8 @@ class FitResultApproach6c:
     n_params: int
     residuals: np.ndarray
     # Derived
-    f1: float              # -h1/(2*h2) - optimal departure (formerly T_optimal_dep)
-    f2: float              # -h3/(2*h4) - optimal trend T (formerly T_optimal_trend)
+    T_dep_opt: float       # -h1/(2*h2) - optimal departure
+    f2: float              # -h3/(2*h4) - optimal trend T
     total_r_squared: float
     # Diagnostics
     rms_imbalance: float = None
@@ -2264,7 +2264,7 @@ def fit_approach6a_separate_high_low_loess(
         n_params=n_params,
         residuals=residuals,
         T_opt=T_optimal_T,
-        f1=T_optimal_dep,
+        T_dep_opt=T_optimal_dep,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2380,7 +2380,258 @@ def fit_approach6b_low_only_loess(
         n_params=n_params,
         residuals=residuals,
         T_opt=T_optimal_T,
-        f1=T_optimal_dep,
+        T_dep_opt=T_optimal_dep,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach6d_linear_departure_loess(
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
+) -> FitResultApproach6ab:
+    """Approach 6d: T response with linear departure term only (LOESS detrending).
+
+    Model: h(T, Ttrend) = h1*T + h2*T² + h3*(T-Ttrend)
+
+    Where:
+        - delta-y*(t) = dy(t) - k(t) - y_loess (same as approach 6)
+        - h1, h2: response to actual temperature T
+        - h3: linear response to departure from trend (T - Ttrend)
+        - h4 = 0 (no quadratic departure term)
+
+    3-parameter OLS with design matrix: [T, T², (T-Ttrend)]
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+
+    Returns:
+        FitResultApproach6ab with h4=0
+    """
+    # Get temperature and trend temperature
+    T = data.temp
+    Ttrend = trends_loess.T_loess
+    T_dep = T - Ttrend  # Departure from trend
+
+    # Compute dependent variable: dy - k[t] - y_loess (same as approach 6)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Design matrix: [T, T², (T-Ttrend)] - no quadratic departure term
+    X = np.column_stack([T, T**2, T_dep])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1_T = beta[0]       # Linear coef for actual T
+    h2_T = beta[1]       # Quadratic coef for actual T
+    h1_dep = beta[2]     # Linear coef for departure
+    h2_dep = 0.0         # No quadratic departure term
+    h1_T_se = np.sqrt(cov[0, 0])
+    h2_T_se = np.sqrt(cov[1, 1])
+    h1_dep_se = np.sqrt(cov[2, 2])
+    h2_dep_se = 0.0
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1_T, h2_T, h1_dep
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperatures
+    T_optimal_T = compute_T_optimal(h1_T, h2_T)  # Optimal actual T
+    T_optimal_dep = np.nan  # No quadratic term, so no optimal departure
+
+    # Compute RMS values
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # h_T(T) - response to actual T
+    h_T_val = h1_T * T + h2_T * T**2
+    # h_dep(T - Ttrend) - linear departure only
+    h_dep_val = h1_dep * T_dep
+
+    # RMS imbalance: h_T(T) + j_trend + k (at trend: departure=0, so h = h_T)
+    imbalance = h_T_val + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # RMS of total response magnitude
+    h_total = h_T_val + h_dep_val
+    rms_h = np.sqrt(np.mean(h_total ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    Delta_u = h_dep_val
+    components = {
+        'h_T': h_T_val,
+        'h_dep': h_dep_val,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution
+    v = h_T_val
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach6ab(
+        approach="6d: T/Linear Departure LOESS",
+        h1=h1_T,
+        h2=h2_T,
+        h1_se=h1_T_se,
+        h2_se=h2_T_se,
+        h3=h1_dep,
+        h4=h2_dep,
+        h3_se=h1_dep_se,
+        h4_se=h2_dep_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_optimal_T,
+        T_dep_opt=T_optimal_dep,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach6e_quadratic_departure_loess(
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
+) -> FitResultApproach6ab:
+    """Approach 6e: T response with quadratic departure term only (LOESS detrending).
+
+    Model: h(T, Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
+
+    Where:
+        - delta-y*(t) = dy(t) - k(t) - y_loess (same as approach 6)
+        - h1, h2: response to actual temperature T
+        - h4: quadratic response to departure from trend (T - Ttrend)
+        - h3 = 0 (no linear departure term)
+
+    3-parameter OLS with design matrix: [T, T², (T-Ttrend)²]
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+
+    Returns:
+        FitResultApproach6ab with h3=0
+    """
+    # Get temperature and trend temperature
+    T = data.temp
+    Ttrend = trends_loess.T_loess
+    T_dep = T - Ttrend  # Departure from trend
+
+    # Compute dependent variable: dy - k[t] - y_loess (same as approach 6)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Design matrix: [T, T², (T-Ttrend)²] - no linear departure term
+    X = np.column_stack([T, T**2, T_dep**2])
+
+    # Fit OLS
+    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    # Extract coefficients
+    h1_T = beta[0]       # Linear coef for actual T
+    h2_T = beta[1]       # Quadratic coef for actual T
+    h1_dep = 0.0         # No linear departure term
+    h2_dep = beta[2]     # Quadratic coef for departure
+    h1_T_se = np.sqrt(cov[0, 0])
+    h2_T_se = np.sqrt(cov[1, 1])
+    h1_dep_se = 0.0
+    h2_dep_se = np.sqrt(cov[2, 2])
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1_T, h2_T, h2_dep
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperatures
+    T_optimal_T = compute_T_optimal(h1_T, h2_T)  # Optimal actual T
+    # For quadratic-only departure: h_dep = h4*(T-Ttrend)², optimal is at T-Ttrend = 0
+    T_optimal_dep = 0.0
+
+    # Compute RMS values
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # h_T(T) - response to actual T
+    h_T_val = h1_T * T + h2_T * T**2
+    # h_dep(T - Ttrend) - quadratic departure only
+    h_dep_val = h2_dep * T_dep**2
+
+    # RMS imbalance: h_T(T) + j_trend + k (at trend: departure=0, so h = h_T)
+    imbalance = h_T_val + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # RMS of total response magnitude
+    h_total = h_T_val + h_dep_val
+    rms_h = np.sqrt(np.mean(h_total ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    Delta_u = h_dep_val
+    components = {
+        'h_T': h_T_val,
+        'h_dep': h_dep_val,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution
+    v = h_T_val
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach6ab(
+        approach="6e: T/Quadratic Departure LOESS",
+        h1=h1_T,
+        h2=h2_T,
+        h1_se=h1_T_se,
+        h2_se=h2_T_se,
+        h3=h1_dep,
+        h4=h2_dep,
+        h3_se=h1_dep_se,
+        h4_se=h2_dep_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_optimal_T,
+        T_dep_opt=T_optimal_dep,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
         rms_h=rms_h,
@@ -2507,7 +2758,7 @@ def fit_approach6c_departure_trend_loess(
         n_obs=data.n_obs,
         n_params=n_params,
         residuals=residuals,
-        f1=T_optimal_dep,
+        T_dep_opt=T_optimal_dep,
         f2=T_optimal_trend,
         total_r_squared=total_r_sq,
         rms_imbalance=rms_imb,
@@ -3883,6 +4134,12 @@ def fit_all_approaches(
             data, trends_loess, year_means
         )
         results['approach6c'] = fit_approach6c_departure_trend_loess(
+            data, trends_loess, year_means
+        )
+        results['approach6d'] = fit_approach6d_linear_departure_loess(
+            data, trends_loess, year_means
+        )
+        results['approach6e'] = fit_approach6e_quadratic_departure_loess(
             data, trends_loess, year_means
         )
 

@@ -212,7 +212,7 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1 (departure opt)
+        # Approach 6a/6b: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (departure opt)
         if name in ['approach6a', 'approach6b'] and result.h3_point is not None:
             print(f"  h1 (T): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
@@ -227,14 +227,14 @@ def main():
                 print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
             else:
                 print(f"  T_opt: N/A")
-            if result.f1_point is not None and not np.isnan(result.f1_point):
-                print(f"  f1 (departure opt): {result.f1_point:.2f} C")
-                print(f"    90% CI: [{stats['f1']['p5']:.2f}, {stats['f1']['p95']:.2f}]")
+            if result.T_dep_opt_point is not None and not np.isnan(result.T_dep_opt_point):
+                print(f"  T_dep_opt (departure opt): {result.T_dep_opt_point:.2f} C")
+                print(f"    90% CI: [{stats['T_dep_opt']['p5']:.2f}, {stats['T_dep_opt']['p95']:.2f}]")
             else:
-                print(f"  f1 (departure opt): N/A")
+                print(f"  T_dep_opt (departure opt): N/A")
 
-        # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1 (departure T_opt), f2 (trend T_opt)
-        elif name == 'approach6c' and result.f1_point is not None and result.f2_point is not None:
+        # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt (departure opt), f2 (trend T_opt)
+        elif name == 'approach6c' and result.T_dep_opt_point is not None and result.f2_point is not None:
             print(f"  h1 (departure): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2 (departure): {result.h2_point:.6f}")
@@ -243,11 +243,11 @@ def main():
             print(f"    90% CI: [{stats['h3']['p5']:.6f}, {stats['h3']['p95']:.6f}]")
             print(f"  h4 (trend): {result.h4_point:.6f}")
             print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
-            if not np.isnan(result.f1_point):
-                print(f"  f1 (departure T_opt): {result.f1_point:.2f} C")
-                print(f"    90% CI: [{stats['f1']['p5']:.2f}, {stats['f1']['p95']:.2f}]")
+            if not np.isnan(result.T_dep_opt_point):
+                print(f"  T_dep_opt (departure opt): {result.T_dep_opt_point:.2f} C")
+                print(f"    90% CI: [{stats['T_dep_opt']['p5']:.2f}, {stats['T_dep_opt']['p95']:.2f}]")
             else:
-                print(f"  f1 (departure T_opt): N/A")
+                print(f"  T_dep_opt (departure opt): N/A")
             if not np.isnan(result.f2_point):
                 print(f"  f2 (trend T_opt): {result.f2_point:.2f} C")
                 print(f"    90% CI: [{stats['f2']['p5']:.2f}, {stats['f2']['p95']:.2f}]")
@@ -284,11 +284,11 @@ def main():
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            # Print f1 for Approach 8b (linear modulation) or 5d (GDP scaling exponent)
+            # Print f1 for Approach 8b/8c (linear modulation) or 5d (GDP scaling exponent)
             if result.f1_point is not None and 'f1' in stats:
                 print(f"  f1: {result.f1_point:.4f}")
                 print(f"    90% CI: [{stats['f1']['p5']:.4f}, {stats['f1']['p95']:.4f}]")
-            # Print f2 for Approach 8b (quadratic modulation)
+            # Print f2 for Approach 8b/8d (quadratic modulation)
             if result.f2_point is not None and 'f2' in stats:
                 print(f"  f2: {result.f2_point:.4f}")
                 print(f"    90% CI: [{stats['f2']['p5']:.4f}, {stats['f2']['p95']:.4f}]")

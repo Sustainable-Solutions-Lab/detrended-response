@@ -42,9 +42,13 @@ from src.fitting import (
     fit_approach6a_separate_high_low_loess,
     fit_approach6b_low_only_loess,
     fit_approach6c_departure_trend_loess,
+    fit_approach6d_linear_departure_loess,
+    fit_approach6e_quadratic_departure_loess,
     fit_approach8_gaussian_loess,
     fit_approach8a_shared_Topt_loess,
     fit_approach8b_modulated_loess,
+    fit_approach8c_linear_modulated_loess,
+    fit_approach8d_quadratic_modulated_loess,
     fit_nocr0_joint,
     fit_nocr5_precomputed_k,
 )
@@ -179,14 +183,18 @@ def main():
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
-    print("\n[9/11] Fitting Approaches 6, 6a, 6b, 6c, 8, 8a, 8b: LOESS detrending...")
+    print("\n[9/11] Fitting Approaches 6, 6a-6e, 8, 8a-8d: LOESS detrending...")
     results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
     results['approach6a'] = fit_approach6a_separate_high_low_loess(data, trends_loess, year_means)
     results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
     results['approach6c'] = fit_approach6c_departure_trend_loess(data, trends_loess, year_means)
+    results['approach6d'] = fit_approach6d_linear_departure_loess(data, trends_loess, year_means)
+    results['approach6e'] = fit_approach6e_quadratic_departure_loess(data, trends_loess, year_means)
     results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
     results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
     results['approach8b'] = fit_approach8b_modulated_loess(data, trends_loess, year_means)
+    results['approach8c'] = fit_approach8c_linear_modulated_loess(data, trends_loess, year_means)
+    results['approach8d'] = fit_approach8d_quadratic_modulated_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
@@ -203,8 +211,8 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1
-        if name in ['approach6a', 'approach6b'] and hasattr(r, 'h3'):
+        # Approach 6a/6b/6d/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt
+        if name in ['approach6a', 'approach6b', 'approach6d', 'approach6e'] and hasattr(r, 'h3'):
             print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h3 (departure) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
@@ -213,21 +221,21 @@ def main():
                 print(f"  T_opt = {r.T_opt:.2f} C")
             else:
                 print(f"  T_opt = N/A")
-            if not np.isnan(r.f1):
-                print(f"  f1 (departure opt) = {r.f1:.2f} C")
+            if not np.isnan(r.T_dep_opt):
+                print(f"  T_dep_opt (departure opt) = {r.T_dep_opt:.2f} C")
             else:
-                print(f"  f1 (departure opt) = N/A")
+                print(f"  T_dep_opt (departure opt) = N/A")
 
-        # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1, f2
-        elif name == 'approach6c' and hasattr(r, 'f1') and hasattr(r, 'f2'):
+        # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt, f2
+        elif name == 'approach6c' and hasattr(r, 'T_dep_opt') and hasattr(r, 'f2'):
             print(f"  h1 (departure) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (departure) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
             print(f"  h4 (trend) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            if not np.isnan(r.f1):
-                print(f"  f1 (departure T_opt) = {r.f1:.2f} C")
+            if not np.isnan(r.T_dep_opt):
+                print(f"  T_dep_opt (departure opt) = {r.T_dep_opt:.2f} C")
             else:
-                print(f"  f1 (departure T_opt) = N/A")
+                print(f"  T_dep_opt (departure opt) = N/A")
             if not np.isnan(r.f2):
                 print(f"  f2 (trend T_opt) = {r.f2:.2f} C")
             else:
@@ -246,11 +254,11 @@ def main():
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:
-            # Standard approaches (0-5, 5a-c, 5d, 6, 8b, etc.)
-            # Print f1 for Approach 8b (linear modulation) or 5d (GDP scaling exponent)
+            # Standard approaches (0-5, 5a-c, 5d, 6, 8b, 8c, 8d, etc.)
+            # Print f1 for Approach 8b/8c (linear modulation) or 5d (GDP scaling exponent)
             if hasattr(r, 'f1') and r.f1 is not None:
                 print(f"  f1 = {r.f1:12.6f}  (SE: {r.f1_se:.6f})")
-            # Print f2 for Approach 8b (quadratic modulation)
+            # Print f2 for Approach 8b/8d (quadratic modulation)
             if hasattr(r, 'f2') and r.f2 is not None:
                 print(f"  f2 = {r.f2:12.6f}  (SE: {r.f2_se:.6f})")
             # Print Y_ref for Approach 5d

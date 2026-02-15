@@ -63,14 +63,16 @@ All approaches use a consistent naming scheme for output coefficients:
 | f1 | GDP scaling exponent |
 | f2 | Reference GDP level |
 
-**Approaches 6a/6b** (separate T/departure responses):
+**Approaches 6a/6b/6d/6e** (separate T/departure responses):
 
 | Parameter | Meaning |
 |-----------|---------|
 | h1, h2 | Response to actual temperature T |
 | h3, h4 | Response to departure from trend (T - T_trend) |
 | T_opt | Optimal actual temperature |
-| f1 | Optimal departure from trend |
+| T_dep_opt | Optimal departure from trend |
+
+Note: 6d uses only h3 (linear departure), 6e uses only h4 (quadratic departure).
 
 **Approach 6c** (departure/trend decomposition):
 
@@ -78,7 +80,7 @@ All approaches use a consistent naming scheme for output coefficients:
 |-----------|---------|
 | h1, h2 | Response to departure from trend (T - T_trend) |
 | h3, h4 | Response to trend temperature T_trend |
-| f1 | Optimal departure from trend |
+| T_dep_opt | Optimal departure from trend |
 | f2 | Optimal trend temperature |
 
 **Approach 8** (piecewise quadratic):
@@ -233,65 +235,98 @@ h(Y,T) = (Y/f₂)^(-f₁) · (h₁·T* + h₂·T*²)
 ```
 where f₁ is the GDP scaling exponent (larger f₁ = stronger income-based adaptation) and f₂ is the reference GDP level.
 
-### Approach 6: LOESS Detrending
+### Approach 6: LOESS Detrending (Departure Response)
 
 Replaces polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
 
+**GDP detrending** (same for all Approach 6 variants):
 ```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h(T) - h(T_trend)
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
 
-where `h(T) = h₁·T + h₂·T²` and `T_trend = LOESS(T)`.
+**Climate response function:**
+```
+h(T) = h₁·T + h₂·T²
+```
 
-The regression is performed on the design matrix `[T - T_trend, T² - T_trend²]`, which corresponds to fitting the difference `h(T) - h(T_trend)` rather than `h(T - T_trend)`.
+**Regression model:**
+```
+Δy*(t) = h(T) - h(T_trend)
+```
+
+where `T_trend = LOESS(T)`. The regression is performed on the design matrix `[T - T_trend, T² - T_trend²]`.
+
+**Key insight:** This approach regresses GDP growth on the *departure of the climate response from its trend*, i.e., `h(T) - h(T_trend)`. It measures how GDP responds to year-to-year fluctuations in the climate effect, not to the absolute temperature level.
 
 Uses a 25-year LOESS window (configurable via `--loess-window`).
 
-**Key insight:** This formulation measures how GDP growth responds to departures of the *climate response function* from its trend value, not departures of temperature itself.
-
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
-### Approach 6a: T/Departure Response
+### Approach 6a: LOESS Detrending (T + Departure Response)
 
-Extends Approach 6 by decomposing the temperature response into response to actual temperature T and response to departure from trend (T - T_trend).
+Combines both actual temperature and departure effects, nesting Approaches 6 and 6b as special cases.
 
+**GDP detrending** (same as Approach 6):
+```
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
 ```
 h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend) + h₄·(T - T_trend)²
 ```
 
-where:
-- `h₁·T + h₂·T²` — response to actual temperature
-- `h₃·(T - T_trend) + h₄·(T - T_trend)²` — response to departure from trend
-- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend)
+```
+
+The regression is performed on the design matrix `[T, T², (T - T_trend), (T - T_trend)²]`.
 
 **Parameters:**
 - `h₁, h₂`: Actual temperature response coefficients (response to T)
 - `h₃, h₄`: Departure response coefficients (response to T - T_trend)
 - `T_opt`: Optimal actual temperature = -h₁/(2h₂)
-- `f1`: Optimal departure = -h₃/(2h₄)
+- `T_dep_opt`: Optimal departure = -h₃/(2h₄)
 
 **At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
 ```
 h(T, T) = h₁·T + h₂·T²
 ```
 
-**Interpretation:** This decomposition separates the effect of actual temperature from the additional effect of temperature anomalies. The departure terms capture whether economies respond differently to year-to-year fluctuations versus the underlying temperature level.
+**Key insight:** This approach allows GDP to respond to both the absolute temperature level (via h₁, h₂) and to temperature anomalies (via h₃, h₄). If h₃ = h₄ = 0, this reduces to Approach 6b. If h₁ = h₃ and h₂ = h₄, this is equivalent to Approach 6.
 
 **Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
 
-### Approach 6b: T Response Only
+### Approach 6b: LOESS Detrending (Actual T Response)
 
-A restricted version of Approach 6a that sets the departure response to zero, so only actual temperature matters.
+Uses the same GDP detrending as Approach 6, but regresses on actual temperature rather than temperature departures.
 
+**GDP detrending** (same as Approach 6):
 ```
-h(T, T_trend) = h₁·T + h₂·T²
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
 
-where:
-- `h₁·T + h₂·T²` — response to actual temperature
-- Departure terms (h₃, h₄) are zero
+**Climate response function:**
+```
+h(T) = h₁·T + h₂·T²
+```
 
-**Interpretation:** Tests the hypothesis that only actual temperature affects economic growth, with no additional effect from temperature anomalies relative to trend.
+**Regression model:**
+```
+Δy*(t) = h(T)
+```
+
+The regression is performed on the design matrix `[T, T²]` using actual temperature, not detrended temperature.
+
+**Key insight:** This approach regresses GDP growth on *actual temperature*, testing whether the absolute temperature level affects growth. Unlike Approach 6, this assumes there is no separate effect from temperature trends—only the current year's temperature matters.
+
+**Comparison to Approach 6:**
+| Aspect | Approach 6 | Approach 6b |
+|--------|------------|-------------|
+| GDP detrending | LOESS | LOESS (same) |
+| Independent variable | T - T_trend, T² - T_trend² | T, T² |
+| Measures response to | Departures from climate trend | Actual temperature level |
 
 **Degrees of freedom:** 2 for h(T) (h₁, h₂)
 
@@ -311,7 +346,7 @@ where:
 **Parameters:**
 - `h₁, h₂`: Departure response coefficients (response to T - T_trend)
 - `h₃, h₄`: Trend response coefficients (response to T_trend)
-- `f₁`: Optimal departure from trend = -h₁/(2h₂)
+- `T_dep_opt`: Optimal departure from trend = -h₁/(2h₂)
 - `f₂`: Optimal trend temperature = -h₃/(2h₄)
 
 **At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
@@ -322,6 +357,51 @@ h(T, T) = h₃·T_trend + h₄·T_trend²
 **Interpretation:** This decomposition separates how economies respond to year-to-year temperature fluctuations (departures from trend) versus the underlying temperature level (trend). Unlike Approach 6a which uses actual temperature T and departure, Approach 6c cleanly separates the trend and fluctuation components.
 
 **Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
+
+### Approach 6d: T Response with Linear Departure Only
+
+A restricted version of Approach 6a that includes only the linear departure term, testing whether temperature fluctuations have a directional effect.
+
+```
+h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend)
+```
+
+where:
+- `h₁·T + h₂·T²` — response to actual temperature
+- `h₃·(T - T_trend)` — linear response to departure from trend
+- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+
+**Parameters:**
+- `h₁, h₂`: Actual temperature response coefficients (response to T)
+- `h₃`: Linear departure coefficient
+- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
+
+**Interpretation:** Tests whether warmer-than-trend and cooler-than-trend years have asymmetric effects on growth. A positive h₃ means warmer-than-trend years boost growth (or cooler-than-trend years reduce it). A negative h₃ means the opposite.
+
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₃)
+
+### Approach 6e: T Response with Quadratic Departure Only
+
+A restricted version of Approach 6a that includes only the quadratic departure term, testing whether the magnitude of temperature fluctuations matters regardless of direction.
+
+```
+h(T, T_trend) = h₁·T + h₂·T² + h₄·(T - T_trend)²
+```
+
+where:
+- `h₁·T + h₂·T²` — response to actual temperature
+- `h₄·(T - T_trend)²` — quadratic response to departure from trend
+- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+
+**Parameters:**
+- `h₁, h₂`: Actual temperature response coefficients (response to T)
+- `h₄`: Quadratic departure coefficient
+- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
+- `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
+
+**Interpretation:** Tests whether any deviation from trend temperature—warmer or cooler—affects growth symmetrically. A negative h₄ means larger fluctuations reduce growth regardless of direction (volatility is harmful). A positive h₄ means larger fluctuations boost growth (variability is beneficial).
+
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 
@@ -664,7 +744,10 @@ python scripts/run_influence_analysis.py
 | Approach | Coefficients |
 |----------|--------------|
 | Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_opt |
-| Approach 6a/6b | h₁, h₂, h₃, h₄, T_opt, f₁ |
+| Approach 6a/6b | h₁, h₂, h₃, h₄, T_opt, T_dep_opt |
+| Approach 6c | h₁, h₂, h₃, h₄, T_dep_opt, f₂ |
+| Approach 6d | h₁, h₂, h₃, T_opt |
+| Approach 6e | h₁, h₂, h₄, T_opt, T_dep_opt |
 | Approach 8 | h₂, h₄, T_opt |
 | Approach 8a | h₂, h₄, T_opt |
 

@@ -32,11 +32,15 @@ APPROACH_COEFFICIENTS = {
     'approach6': STANDARD_COEFFICIENTS,
     'nocr0': STANDARD_COEFFICIENTS,
     'nocr5': STANDARD_COEFFICIENTS,
-    # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1 (departure opt)
-    'approach6a': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
-    'approach6b': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
-    # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1 (departure T_opt), f2 (trend T_opt)
-    'approach6c': ['h1', 'h2', 'h3', 'h4', 'f1', 'f2'],
+    # Approach 6a/6b: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (optimal departure)
+    'approach6a': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'T_dep_opt'],
+    'approach6b': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'T_dep_opt'],
+    # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt (departure opt), f2 (trend T_opt)
+    'approach6c': ['h1', 'h2', 'h3', 'h4', 'T_dep_opt', 'f2'],
+    # Approach 6d: h1,h2 (actual T), h3 (linear departure only), T_opt
+    'approach6d': ['h1', 'h2', 'h3', 'T_opt'],
+    # Approach 6e: h1,h2 (actual T), h4 (quadratic departure only), T_opt, T_dep_opt
+    'approach6e': ['h1', 'h2', 'h4', 'T_opt', 'T_dep_opt'],
     # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
     'approach8': ['h2', 'h4', 'T_opt'],
     # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt

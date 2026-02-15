@@ -82,7 +82,7 @@ def reconstruct_bootstrap_results(
         # Get approach name
         approach_name = summary_row['approach_name']
 
-        # Handle optional fields (f1 for GDP-dependent and 6a/6b, h3/h4 for trend coefficients)
+        # Handle optional fields (f1 for GDP-dependent/8b/8c, h3/h4 for departure/trend coefficients)
         f1_point = None
         f1_samples = None
         h3_point = None
@@ -91,6 +91,8 @@ def reconstruct_bootstrap_results(
         h4_samples = None
         f2_point = None
         f2_samples = None
+        T_dep_opt_point = None
+        T_dep_opt_samples = None
 
         if 'f1' in samples.columns and not samples['f1'].isna().all():
             f1_samples = samples['f1'].values
@@ -107,6 +109,10 @@ def reconstruct_bootstrap_results(
         if 'f2' in samples.columns and not samples['f2'].isna().all():
             f2_samples = samples['f2'].values
             f2_point = summary_row.get('f2_point', None)
+
+        if 'T_dep_opt' in samples.columns and not samples['T_dep_opt'].isna().all():
+            T_dep_opt_samples = samples['T_dep_opt'].values
+            T_dep_opt_point = summary_row.get('T_dep_opt_point', None)
 
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
@@ -157,6 +163,8 @@ def reconstruct_bootstrap_results(
             h4_samples=h4_samples,
             f2_point=f2_point,
             f2_samples=f2_samples,
+            T_dep_opt_point=T_dep_opt_point,
+            T_dep_opt_samples=T_dep_opt_samples,
             k_point=k_point,
             k_samples=k_samples,
         )
@@ -455,8 +463,8 @@ def generate_bootstrap_comparison_table(
     # Parameters to include
     # Standard parameters for all approaches
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
-    # Additional parameters for approach 6a/6b/6c (trend coefficients: h3, h4)
-    trend_params = ['h3', 'h4', 'f1', 'f2']
+    # Additional parameters for approach 6a/6b/6c (departure/trend coefficients: h3, h4)
+    trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
     # Note: For piecewise approach8, h2 = curvature below T_opt, h4 = curvature above T_opt
     # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
 
@@ -497,7 +505,7 @@ def generate_bootstrap_comparison_table(
                 else:
                     row[f'{param}_{pct}'] = np.nan
 
-        # Add trend parameters (h3, h4, f1, f2 - populated for 6a/6b/6c/8/8a)
+        # Add trend parameters (h3, h4, T_dep_opt, f1, f2 - populated for 6a/6b/6c/8/8a)
         for param in trend_params:
             # Point estimate
             point_col = f'{param}_point'

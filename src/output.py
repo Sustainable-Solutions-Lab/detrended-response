@@ -50,6 +50,9 @@ APPROACH_COLORS = {
     'approach6': 'orange',
     'approach6a': 'darkorange',
     'approach6b': 'coral',
+    'approach6c': 'tomato',
+    'approach6d': 'orangered',
+    'approach6e': 'salmon',
     'approach8': 'magenta',
     'approach8a': 'darkviolet',
     'approach8b': 'mediumorchid',
@@ -79,6 +82,9 @@ APPROACH_LINESTYLES = {
     'approach6': (0, (5, 1)),   # densely dashed
     'approach6a': (0, (5, 1)),  # densely dashed
     'approach6b': (0, (5, 1)),  # densely dashed
+    'approach6c': (0, (5, 1)),  # densely dashed
+    'approach6d': (0, (5, 1)),  # densely dashed
+    'approach6e': (0, (5, 1)),  # densely dashed
     'approach8': (0, (5, 1)),   # densely dashed
     'approach8a': (0, (5, 1)),  # densely dashed
     'approach8b': (0, (5, 1)),  # densely dashed
@@ -166,7 +172,8 @@ def compute_h_response(T: np.ndarray, result) -> np.ndarray:
         h1, h2 = result.h1, result.h2
         h_T = h1 * T + h2 * T ** 2
         # h(T_opt) at optimal temperature
-        if not np.isnan(result.T_opt) and h2 != 0:
+        T_opt = getattr(result, 'T_opt', np.nan)
+        if not np.isnan(T_opt) and h2 != 0:
             h_T_opt = -h1 ** 2 / (4 * h2)
         else:
             h_T_opt = 0
@@ -254,8 +261,9 @@ def save_summary_table(
             'h3_SE': None,
             'h4': None,  # For 6a/6b/6c/8/8a
             'h4_SE': None,
-            'f1': None,  # For 5d/6a/6b/6c/8b/8c
+            'f1': None,  # For 5d/8b/8c (not for 6a/6b/6c - use T_dep_opt)
             'f1_SE': None,
+            'T_dep_opt': None,  # For 6a/6b/6c - optimal departure temperature
             'f2': None,  # For 6c/8b/8d
             'f2_SE': None,
             'Y_ref': None,  # For 5d
@@ -276,22 +284,22 @@ def save_summary_table(
         # Add Y_ref for GDP-dependent approaches (5d)
         if hasattr(result, 'Y_ref'):
             row['Y_ref'] = result.Y_ref
-        # Add h3, h4, f1 for Approach 6a/6b (separate total/trend freq)
-        # h1,h2 = actual T response; h3,h4 = trend T response; T_opt = optimal actual T; f1 = optimal trend T
-        if hasattr(result, 'h3') and hasattr(result, 'f1') and not hasattr(result, 'f2'):
+        # Add h3, h4, T_dep_opt for Approach 6a/6b (separate total/departure response)
+        # h1,h2 = actual T response; h3,h4 = departure response; T_opt = optimal actual T; T_dep_opt = optimal departure
+        if hasattr(result, 'h3') and hasattr(result, 'T_dep_opt') and not hasattr(result, 'f2'):
             row['h3'] = result.h3
             row['h3_SE'] = result.h3_se
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
-            row['f1'] = result.f1  # Optimal trend T
-        # Add h3, h4, f1, f2 for Approach 6c (departure/trend decomposition)
-        # h1,h2 = departure response; h3,h4 = trend response; f1 = optimal departure; f2 = optimal trend T
+            row['T_dep_opt'] = result.T_dep_opt  # Optimal departure
+        # Add h3, h4, T_dep_opt, f2 for Approach 6c (departure/trend decomposition)
+        # h1,h2 = departure response; h3,h4 = trend response; T_dep_opt = optimal departure; f2 = optimal trend T
         elif hasattr(result, 'h3') and hasattr(result, 'f2'):
             row['h3'] = result.h3
             row['h3_SE'] = result.h3_se
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
-            row['f1'] = result.f1  # Optimal departure
+            row['T_dep_opt'] = result.T_dep_opt  # Optimal departure
             row['f2'] = result.f2  # Optimal trend T
         # Add h4 for Approach 8a (shared T_opt, total/trend)
         # h2 = curvature for actual T; h4 = curvature for trend T
@@ -386,32 +394,32 @@ def save_summary_table(
         for name, result in results.items():
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
-            # Special handling for Approach 6a/6b (separate total/trend frequency)
-            # h1,h2 = actual T response; h3,h4 = trend T response
-            if hasattr(result, 'h3') and hasattr(result, 'f1') and not hasattr(result, 'f2'):
+            # Special handling for Approach 6a/6b (separate actual T/departure response)
+            # h1,h2 = actual T response; h3,h4 = departure response
+            if hasattr(result, 'h3') and hasattr(result, 'T_dep_opt') and not hasattr(result, 'f2'):
                 f.write(f"  h1 = {result.h1:.6f}  (SE: {result.h1_se:.6f})  [actual T linear]\n")
                 f.write(f"  h2 = {result.h2:.6f}  (SE: {result.h2_se:.6f})  [actual T quadratic]\n")
-                f.write(f"  h3 = {result.h3:.6f}  (SE: {result.h3_se:.6f})  [trend T linear]\n")
-                f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [trend T quadratic]\n")
+                f.write(f"  h3 = {result.h3:.6f}  (SE: {result.h3_se:.6f})  [departure linear]\n")
+                f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [departure quadratic]\n")
                 if not np.isnan(result.T_opt):
                     f.write(f"  T_opt = {result.T_opt:.2f} C  [optimal actual T]\n")
                 else:
                     f.write(f"  T_opt = N/A\n")
-                if not np.isnan(result.f1):
-                    f.write(f"  f1 = {result.f1:.2f} C  [optimal trend T]\n")
+                if not np.isnan(result.T_dep_opt):
+                    f.write(f"  T_dep_opt = {result.T_dep_opt:.2f} C  [optimal departure]\n")
                 else:
-                    f.write(f"  f1 = N/A\n")
+                    f.write(f"  T_dep_opt = N/A\n")
             # Special handling for Approach 6c (departure/trend decomposition)
-            # h1,h2 = departure response; h3,h4 = trend response; f1 = opt departure; f2 = opt trend T
+            # h1,h2 = departure response; h3,h4 = trend response; T_dep_opt = opt departure; f2 = opt trend T
             elif hasattr(result, 'h3') and hasattr(result, 'f2'):
                 f.write(f"  h1 = {result.h1:.6f}  (SE: {result.h1_se:.6f})  [departure linear]\n")
                 f.write(f"  h2 = {result.h2:.6f}  (SE: {result.h2_se:.6f})  [departure quadratic]\n")
                 f.write(f"  h3 = {result.h3:.6f}  (SE: {result.h3_se:.6f})  [trend T linear]\n")
                 f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [trend T quadratic]\n")
-                if not np.isnan(result.f1):
-                    f.write(f"  f1 = {result.f1:.2f} C  [optimal departure]\n")
+                if not np.isnan(result.T_dep_opt):
+                    f.write(f"  T_dep_opt = {result.T_dep_opt:.2f} C  [optimal departure]\n")
                 else:
-                    f.write(f"  f1 = N/A\n")
+                    f.write(f"  T_dep_opt = N/A\n")
                 if not np.isnan(result.f2):
                     f.write(f"  f2 = {result.f2:.2f} C  [optimal trend T]\n")
                 else:
@@ -598,15 +606,20 @@ def _plot_temperature_response_subset(
             continue
         r = results[name]
 
+        # Skip approaches without T_opt (e.g., 6c which decomposes into departure/trend)
+        T_opt = getattr(r, 'T_opt', np.nan)
+        if np.isnan(T_opt):
+            continue
+
         # Use helper function that handles both quadratic and power-law models
         h_relative = compute_h_response(T, r)
 
-        label = f"{r.approach} (T_opt = {r.T_opt:.1f}°C)"
+        label = f"{r.approach} (T_opt = {T_opt:.1f}°C)"
         ax.plot(T, h_relative, color=APPROACH_COLORS.get(name, 'gray'),
                 linestyle=APPROACH_LINESTYLES.get(name, '-'), label=label, linewidth=2)
 
         # Mark optimal temperature
-        ax.axvline(r.T_opt, color=APPROACH_COLORS.get(name, 'gray'),
+        ax.axvline(T_opt, color=APPROACH_COLORS.get(name, 'gray'),
                    linestyle=':', alpha=0.5)
 
     ax.axhline(0, color='gray', linewidth=0.5)
@@ -652,7 +665,7 @@ def plot_temperature_response(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -674,6 +687,12 @@ def _plot_temperature_derivative_subset(
         if name not in results:
             continue
         r = results[name]
+
+        # Skip approaches without T_opt (e.g., 6c which decomposes into departure/trend)
+        T_opt = getattr(r, 'T_opt', np.nan)
+        if np.isnan(T_opt):
+            continue
+
         # Use helper function that handles both quadratic and power-law models
         dh_dT = compute_dh_dT(T, r)
         label = f"{r.approach}"
@@ -720,10 +739,10 @@ def plot_temperature_derivative(
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
+    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a-6e, 8, 8a-8d)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -1071,10 +1090,11 @@ def save_bootstrap_coefficients_csv(
     - iteration
     - approach
     - h1, h2, T_opt, r_squared, total_r_squared
-    - f1 (GDP scaling exponent for approach 5d)
+    - f1 (GDP scaling exponent for approach 5d, linear modulation for 8b/8c)
     - h4 (curvature above T_opt for approach 8)
     - h3, h4 (trend coefficients for approaches 6a/6b/6c)
-    - f1, f2 (optimal temps for approach 6c)
+    - T_dep_opt (optimal departure for approaches 6a/6b/6c)
+    - f2 (optimal trend temp for approach 6c)
     """
     rows = []
     for name, result in results.items():
@@ -1143,7 +1163,7 @@ def save_bootstrap_summary_txt(
             f.write(f"{result.approach}\n")
             f.write("-" * 50 + "\n")
 
-            # T_opt (not available for all approaches, e.g., Approach 6c uses f1/f2)
+            # T_opt (not available for all approaches, e.g., Approach 6c uses T_dep_opt/f2)
             if result.T_opt_point is not None:
                 f.write(f"  T_opt (Optimal Temperature, C):\n")
                 f.write(f"    Point estimate:  {result.T_opt_point:10.2f}\n")
@@ -1168,14 +1188,23 @@ def save_bootstrap_summary_txt(
             f.write(f"    IQR:             [{stats['h2']['p25']:10.6f}, {stats['h2']['p75']:10.6f}]\n")
             f.write(f"    Std:             {stats['h2']['std']:10.6f}\n")
 
-            # f1 (GDP scaling exponent for approach 5d, or optimal trend T for 6a/6b)
+            # f1 (GDP scaling exponent for approach 5d, linear modulation for 8b/8c)
             if result.f1_point is not None and 'f1' in stats:
-                f.write(f"  f1 (GDP scaling exponent / optimal trend T):\n")
+                f.write(f"  f1 (GDP scaling exponent / linear modulation):\n")
                 f.write(f"    Point estimate:  {result.f1_point:10.4f}\n")
                 f.write(f"    Bootstrap median:{stats['f1']['p50']:10.4f}\n")
                 f.write(f"    90% CI:          [{stats['f1']['p5']:10.4f}, {stats['f1']['p95']:10.4f}]\n")
                 f.write(f"    IQR:             [{stats['f1']['p25']:10.4f}, {stats['f1']['p75']:10.4f}]\n")
                 f.write(f"    Std:             {stats['f1']['std']:10.4f}\n")
+
+            # T_dep_opt (optimal departure for approaches 6a/6b/6c)
+            if result.T_dep_opt_point is not None and 'T_dep_opt' in stats:
+                f.write(f"  T_dep_opt (Optimal departure, C):\n")
+                f.write(f"    Point estimate:  {result.T_dep_opt_point:10.2f}\n")
+                f.write(f"    Bootstrap median:{stats['T_dep_opt']['p50']:10.2f}\n")
+                f.write(f"    90% CI:          [{stats['T_dep_opt']['p5']:10.2f}, {stats['T_dep_opt']['p95']:10.2f}]\n")
+                f.write(f"    IQR:             [{stats['T_dep_opt']['p25']:10.2f}, {stats['T_dep_opt']['p75']:10.2f}]\n")
+                f.write(f"    Std:             {stats['T_dep_opt']['std']:10.2f}\n")
 
             # h4 (curvature above T_opt for Approach 8 piecewise quadratic)
             # Note: h2 is the curvature below T_opt, h4 is curvature above
@@ -1190,7 +1219,7 @@ def save_bootstrap_summary_txt(
             # For Approach 8a: h2 is curvature for actual T, h4 is curvature for trend T
             # These are covered by the universal h2 output above and h4 below
 
-            # h3, h4, f1 (for Approach 6a/6b - trend coefficients and optimal trend T)
+            # h3, h4, T_dep_opt (for Approach 6a/6b - departure coefficients and optimal departure)
             # h1/h2 are universal and output above; T_opt is for actual T response
             if result.h3_point is not None and 'h3' in stats:
                 f.write(f"  h3 (Linear coef for trend response T_trend):\n")
@@ -1279,7 +1308,8 @@ def save_bootstrap_summary_table(
 
     Each row is an approach, with columns for each parameter's statistics:
     - Point estimate, median, p5, p25, p75, p95, std for h1, h2, T_opt, total_r_squared
-    - f1 statistics included for approaches where it's used (5d, 6a/6b, 8b, 8c)
+    - f1 statistics included for approaches where it's used (5d, 8b, 8c)
+    - T_dep_opt statistics for approaches 6a/6b/6c (optimal departure)
     - f2 statistics included for approach 6c (T_opt_trend) or 8b/8d (quadratic modulation)
     """
     rows = []
@@ -1338,7 +1368,7 @@ def save_bootstrap_summary_table(
             'r_squared_std': stats['r_squared']['std'],
         }
 
-        # Add f1 statistics for approaches where it's used (5d, 6a/6b, 8b, 8c)
+        # Add f1 statistics for approaches where it's used (5d, 8b, 8c)
         if result.f1_point is not None and 'f1' in stats:
             row['f1_point'] = result.f1_point
             row['f1_median'] = stats['f1']['p50']
@@ -1356,6 +1386,25 @@ def save_bootstrap_summary_table(
             row['f1_p75'] = np.nan
             row['f1_p95'] = np.nan
             row['f1_std'] = np.nan
+
+        # Add T_dep_opt statistics for approaches 6a/6b/6c (optimal departure)
+        if result.T_dep_opt_point is not None and 'T_dep_opt' in stats:
+            row['T_dep_opt_point'] = result.T_dep_opt_point
+            row['T_dep_opt_median'] = stats['T_dep_opt']['p50']
+            row['T_dep_opt_p5'] = stats['T_dep_opt']['p5']
+            row['T_dep_opt_p25'] = stats['T_dep_opt']['p25']
+            row['T_dep_opt_p75'] = stats['T_dep_opt']['p75']
+            row['T_dep_opt_p95'] = stats['T_dep_opt']['p95']
+            row['T_dep_opt_std'] = stats['T_dep_opt']['std']
+        else:
+            # Fill with NaN for approaches without T_dep_opt
+            row['T_dep_opt_point'] = np.nan
+            row['T_dep_opt_median'] = np.nan
+            row['T_dep_opt_p5'] = np.nan
+            row['T_dep_opt_p25'] = np.nan
+            row['T_dep_opt_p75'] = np.nan
+            row['T_dep_opt_p95'] = np.nan
+            row['T_dep_opt_std'] = np.nan
 
         # Add h3 statistics for approaches 6a/6b/6c (trend linear coefficient)
         if result.h3_point is not None and 'h3' in stats:
@@ -2260,7 +2309,7 @@ def plot_temperature_response_4panel_with_6a(
             # h_dep(T-Ttrend) = h3*(T-Ttrend) + h4*(T-Ttrend)² - uses h3,h4 for departure
             h1 = getattr(result, 'h3_point', 0) or 0
             h2 = getattr(result, 'h4_point', 0) or 0
-            T_opt = getattr(result, 'f1_point', None)
+            T_opt = getattr(result, 'T_dep_opt_point', None)
             h_T = h1 * T + h2 * T ** 2
             if h2 != 0:
                 h_T_opt = -h1 ** 2 / (4 * h2)
@@ -2670,7 +2719,7 @@ def plot_climate_response_contours(
                 deriv_dep = h1_dep + 2 * h2_dep * deltaT_p3
                 deriv = deriv_T + deriv_dep
 
-                T_opt_trend = getattr(result, 'f1_point', None)
+                T_opt_trend = getattr(result, 'T_dep_opt_point', None)
                 T_opt_total = -h1_T / (2 * h2_T) if h2_T != 0 else None
 
             elif approach == 'approach8a':
@@ -3010,41 +3059,69 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
 
     Returns list of tuples: (param_name, samples, point_est, param_stats, xlabel)
     """
-    # Approach 6a: separate total/trend frequency - show both
-    # h1,h2 for actual T; h3,h4 for trend T; T_opt, f1 for optimal temps
+    # Approach 6a: separate actual T/departure response - show both
+    # h1,h2 for actual T; h3,h4 for departure; T_opt, T_dep_opt for optimal temps
     if name == 'approach6a':
         params = []
-        # Total params (h1, h2, T_opt)
+        # Actual T params (h1, h2, T_opt)
         if result.h1_samples is not None and 'h1' in stats:
             params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
         if result.h2_samples is not None and 'h2' in stats:
             params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
         if result.T_opt_samples is not None and 'T_opt' in stats:
             params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
-        # Trend params (h3, h4, f1)
+        # Departure params (h3, h4, T_dep_opt)
         h3_samples = getattr(result, 'h3_samples', None)
         h4_samples = getattr(result, 'h4_samples', None)
-        f1_samples = getattr(result, 'f1_samples', None)
+        T_dep_opt_samples = getattr(result, 'T_dep_opt_samples', None)
         if h3_samples is not None and 'h3' in stats:
-            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (trend T)'))
+            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (departure)'))
         if h4_samples is not None and 'h4' in stats:
-            params.append(('h4', h4_samples, getattr(result, 'h4_point', np.nan), stats['h4'], 'h₄ (trend T)'))
-        if f1_samples is not None and 'f1' in stats:
-            params.append(('f1', f1_samples, getattr(result, 'f1_point', np.nan), stats['f1'], 'f₁ (opt trend T)'))
+            params.append(('h4', h4_samples, getattr(result, 'h4_point', np.nan), stats['h4'], 'h₄ (departure)'))
+        if T_dep_opt_samples is not None and 'T_dep_opt' in stats:
+            params.append(('T_dep_opt', T_dep_opt_samples, getattr(result, 'T_dep_opt_point', np.nan), stats['T_dep_opt'], 'T_dep_opt (°C)'))
         return params if params else _get_standard_params(result, stats)
 
-    # Approach 6b: trend only (uses h3, h4, f1)
+    # Approach 6b: T only (uses h1, h2, T_opt - departure terms h3, h4 are zero)
     if name == 'approach6b':
         params = []
+        if result.h1_samples is not None and 'h1' in stats:
+            params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
+        if result.h2_samples is not None and 'h2' in stats:
+            params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
+        if result.T_opt_samples is not None and 'T_opt' in stats:
+            params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Approach 6d: T + linear departure only (h1, h2, h3; h4=0)
+    if name == 'approach6d':
+        params = []
+        if result.h1_samples is not None and 'h1' in stats:
+            params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
+        if result.h2_samples is not None and 'h2' in stats:
+            params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
+        if result.T_opt_samples is not None and 'T_opt' in stats:
+            params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
         h3_samples = getattr(result, 'h3_samples', None)
-        h4_samples = getattr(result, 'h4_samples', None)
-        f1_samples = getattr(result, 'f1_samples', None)
         if h3_samples is not None and 'h3' in stats:
-            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (trend T)'))
+            params.append(('h3', h3_samples, getattr(result, 'h3_point', np.nan), stats['h3'], 'h₃ (departure)'))
+        return params if params else _get_standard_params(result, stats)
+
+    # Approach 6e: T + quadratic departure only (h1, h2, h4; h3=0)
+    if name == 'approach6e':
+        params = []
+        if result.h1_samples is not None and 'h1' in stats:
+            params.append(('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (actual T)'))
+        if result.h2_samples is not None and 'h2' in stats:
+            params.append(('h2', result.h2_samples, result.h2_point, stats['h2'], 'h₂ (actual T)'))
+        if result.T_opt_samples is not None and 'T_opt' in stats:
+            params.append(('T_opt', result.T_opt_samples, result.T_opt_point, stats['T_opt'], 'T_opt (°C)'))
+        h4_samples = getattr(result, 'h4_samples', None)
         if h4_samples is not None and 'h4' in stats:
-            params.append(('h4', h4_samples, getattr(result, 'h4_point', np.nan), stats['h4'], 'h₄ (trend T)'))
-        if f1_samples is not None and 'f1' in stats:
-            params.append(('f1', f1_samples, getattr(result, 'f1_point', np.nan), stats['f1'], 'f₁ (opt trend T)'))
+            params.append(('h4', h4_samples, getattr(result, 'h4_point', np.nan), stats['h4'], 'h₄ (departure)'))
+        T_dep_opt_samples = getattr(result, 'T_dep_opt_samples', None)
+        if T_dep_opt_samples is not None and 'T_dep_opt' in stats:
+            params.append(('T_dep_opt', T_dep_opt_samples, getattr(result, 'T_dep_opt_point', np.nan), stats['T_dep_opt'], 'T_dep_opt (°C)'))
         return params if params else _get_standard_params(result, stats)
 
     # Approach 8: piecewise quadratic (h2 for T<=T_opt, h4 for T>T_opt)
@@ -3104,8 +3181,8 @@ def plot_all_bootstrap_distributions(
     Creates a multi-page PDF with each approach on its own page.
     Handles different parameter structures for different approaches:
     - Standard (0-5, 5a-5d, 6): h1, h2, T_opt
-    - Approach 6a: h1, h2, T_opt (actual T), h3, h4, f1 (trend T)
-    - Approach 6b: h3, h4, f1 (trend only)
+    - Approach 6a: h1, h2, T_opt (actual T), h3, h4, T_dep_opt (departure)
+    - Approach 6b: h1, h2, T_opt (actual T only, departure terms are zero)
     - Approach 8: h2 (T ≤ T_opt), h4 (T > T_opt), T_opt
     - Approach 8a: h2 (actual T), h4 (trend T), T_opt
 
@@ -3278,11 +3355,11 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
             h_T_opt = 0
         return h_T - h_T_opt, T_opt
 
-    # Handle approach6a trend response (uses h3,h4 for trend coefficients)
+    # Handle approach6a departure response (uses h3,h4 for departure coefficients)
     if approach_key == 'approach6a_low' or (approach_key == 'approach6a' and variant == 'low'):
         h1 = getattr(result, 'h3_point', 0) or 0
         h2 = getattr(result, 'h4_point', 0) or 0
-        T_opt = getattr(result, 'f1_point', None)
+        T_opt = getattr(result, 'T_dep_opt_point', None)
         h_T = h1 * T + h2 * T ** 2
         if h2 != 0:
             h_T_opt = -h1 ** 2 / (4 * h2)
@@ -3293,11 +3370,11 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
             T_opt = T_opt or np.nan
         return h_T - h_T_opt, T_opt
 
-    # Handle approach6b (trend only - uses h3,h4 for trend coefficients)
+    # Handle approach6b (T only - departure terms h3,h4 are zero)
     if approach_key == 'approach6b':
-        h1 = getattr(result, 'h3_point', 0) or 0
-        h2 = getattr(result, 'h4_point', 0) or 0
-        T_opt = getattr(result, 'f1_point', None)
+        h1 = getattr(result, 'h1_point', 0) or 0
+        h2 = getattr(result, 'h2_point', 0) or 0
+        T_opt = getattr(result, 'T_opt_point', None)
         h_T = h1 * T + h2 * T ** 2
         if h2 != 0:
             h_T_opt = -h1 ** 2 / (4 * h2)
@@ -3540,7 +3617,7 @@ def plot_bootstrap_T_optimal_comparison(
     """
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Filter to approaches that have T_opt (e.g., exclude Approach 6c which uses f1/f2)
+    # Filter to approaches that have T_opt (e.g., exclude Approach 6c which uses T_dep_opt/f2)
     approach_names = [name for name in results.keys() if results[name].T_opt_point is not None]
     n_approaches = len(approach_names)
     y_positions = np.arange(n_approaches)
@@ -4415,10 +4492,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 8, 8a)
+    # Temperature response PDF 3: LOESS approaches (6, 6a-6e, 8, 8a-8d)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+        approaches=['approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4431,7 +4508,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
+                    'approach6', 'approach6a', 'approach6b', 'approach6c', 'approach6d', 'approach6e', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
