@@ -2164,11 +2164,11 @@ def plot_temperature_response_4panel_with_6a(
     T_range: tuple = (0, 30),
     input_file: str = None,
 ) -> None:
-    """Plot 4-panel temperature response: top row = approach6/8, bottom row = 6a total/trend.
+    """Plot 4-panel temperature response: top row = approach6/8, bottom row = 6a T/departure.
 
     Creates a 2x2 figure:
     - Top row: Temperature response for specified approaches (default: approach6, approach8)
-    - Bottom row: h_total(T) and h_trend(T) from approach 6a
+    - Bottom row: h(T) and h_dep(T-Ttrend) from approach 6a
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -2208,8 +2208,8 @@ def plot_temperature_response_4panel_with_6a(
     panels = [
         (0, 0, valid_top[0], None, results[valid_top[0]].approach),
         (0, 1, valid_top[1], None, results[valid_top[1]].approach),
-        (1, 0, 'approach6a', 'total_only', '6a: h_total(T)'),
-        (1, 1, 'approach6a', 'trend_only', '6a: h_trend(T)'),
+        (1, 0, 'approach6a', 'total_only', '6a: h(T)'),
+        (1, 1, 'approach6a', 'trend_only', '6a: h_dep(T-Ttrend)'),
     ]
 
     # First pass: compute all data and find global y-axis range
@@ -2221,7 +2221,7 @@ def plot_temperature_response_4panel_with_6a(
 
         # Compute point estimate
         if variant == 'total_only':
-            # h_total(T) only (not the difference) - uses universal h1,h2 for actual T
+            # h(T) = h1*T + h2*T² - uses h1,h2 for actual T response
             h1 = getattr(result, 'h1_point', 0) or 0
             h2 = getattr(result, 'h2_point', 0) or 0
             T_opt = getattr(result, 'T_opt_point', None)
@@ -2235,7 +2235,7 @@ def plot_temperature_response_4panel_with_6a(
                 T_opt = T_opt or np.nan
             h_point = h_T - h_T_opt
         elif variant == 'trend_only':
-            # h_trend(T) only - uses h3,h4 for trend response
+            # h_dep(T-Ttrend) = h3*(T-Ttrend) + h4*(T-Ttrend)² - uses h3,h4 for departure
             h1 = getattr(result, 'h3_point', 0) or 0
             h2 = getattr(result, 'h4_point', 0) or 0
             T_opt = getattr(result, 'f1_point', None)
@@ -2422,40 +2422,45 @@ def plot_climate_response_contours(
         result = results[approach]
 
         if approach == 'approach6a':
-            # h1,h2 for actual T response; h3,h4 for trend T response
-            h1_total = getattr(result, 'h1_point', 0) or 0
-            h2_total = getattr(result, 'h2_point', 0) or 0
-            h1_trend = getattr(result, 'h3_point', 0) or 0
-            h2_trend = getattr(result, 'h4_point', 0) or 0
+            # h1,h2 for actual T response; h3,h4 for departure (T-Ttrend) response
+            # h(T, Ttrend) = h1*T + h2*T² + h3*(T-Ttrend) + h4*(T-Ttrend)²
+            h1_T = getattr(result, 'h1_point', 0) or 0
+            h2_T = getattr(result, 'h2_point', 0) or 0
+            h1_dep = getattr(result, 'h3_point', 0) or 0
+            h2_dep = getattr(result, 'h4_point', 0) or 0
 
             # Center at optima
-            h_total_opt = -h1_total**2 / (4 * h2_total) if h2_total != 0 else 0
-            h_trend_opt = -h1_trend**2 / (4 * h2_trend) if h2_trend != 0 else 0
+            h_T_opt = -h1_T**2 / (4 * h2_T) if h2_T != 0 else 0
+            h_dep_opt = -h1_dep**2 / (4 * h2_dep) if h2_dep != 0 else 0
 
             # Response functions for rows 0-1 (Ttrend on x-axis)
-            h_total = h1_total * T_grid + h2_total * T_grid**2
-            h_trend = h1_trend * Ttrend_grid + h2_trend * Ttrend_grid**2
-            response_total_only = h_total - h_total_opt
-            response_full = (h_total - h_total_opt) - (h_trend - h_trend_opt)
+            # T_grid = Ttrend + deltaT, so T = Ttrend_grid + deltaT_grid
+            T_actual_grid = Ttrend_grid + deltaT_grid
+            h_T_val = h1_T * T_actual_grid + h2_T * T_actual_grid**2
+            h_dep_val = h1_dep * deltaT_grid + h2_dep * deltaT_grid**2
+            response_total_only = h_T_val - h_T_opt  # Just T component centered (at T=Ttrend+deltaT)
+            response_full = (h_T_val - h_T_opt) + (h_dep_val - h_dep_opt)
 
             # Response functions for row 2 (T on x-axis)
-            # h_total(T) - h_trend(T - deltaT)
-            h_total_row2 = h1_total * T_grid_row2 + h2_total * T_grid_row2**2
-            h_trend_row2 = h1_trend * Ttrend_grid_row2 + h2_trend * Ttrend_grid_row2**2
-            response_full_row2 = (h_total_row2 - h_total_opt) - (h_trend_row2 - h_trend_opt)
+            # T_grid_row2 is actual T, deltaT_grid_row2 = T - Ttrend
+            h_T_row2 = h1_T * T_grid_row2 + h2_T * T_grid_row2**2
+            h_dep_row2 = h1_dep * deltaT_grid_row2 + h2_dep * deltaT_grid_row2**2
+            response_full_row2 = (h_T_row2 - h_T_opt) + (h_dep_row2 - h_dep_opt)
 
-            # Derivatives for rows 0-1: dh/dT = h1 + 2*h2*T
-            deriv_total = h1_total + 2 * h2_total * T_grid
-            deriv_trend = h1_trend + 2 * h2_trend * Ttrend_grid
-            deriv_full = deriv_total - deriv_trend
+            # Derivatives for rows 0-1: dh/dT at fixed Ttrend
+            # dh/dT = (h1_T + 2*h2_T*T) + (h1_dep + 2*h2_dep*(T-Ttrend))
+            deriv_T_val = h1_T + 2 * h2_T * T_actual_grid
+            deriv_dep_val = h1_dep + 2 * h2_dep * deltaT_grid
+            deriv_total = deriv_T_val + deriv_dep_val  # Total dh/dT
+            deriv_trend = deriv_T_val  # Just T component derivative
+            deriv_full = deriv_total
 
             # Derivatives for row 2 (T on x-axis)
-            # (dh_total/dT)(T) - (dh_trend/dT)(T - deltaT)
-            deriv_total_row2 = h1_total + 2 * h2_total * T_grid_row2
-            deriv_trend_row2 = h1_trend + 2 * h2_trend * Ttrend_grid_row2
-            deriv_full_row2 = deriv_total_row2 - deriv_trend_row2
+            deriv_T_row2 = h1_T + 2 * h2_T * T_grid_row2
+            deriv_dep_row2 = h1_dep + 2 * h2_dep * deltaT_grid_row2
+            deriv_full_row2 = deriv_T_row2 + deriv_dep_row2
 
-            T_opt_trend = getattr(result, 'f1_point', None)
+            T_opt_trend = getattr(result, 'T_opt_point', None)
 
         elif approach == 'approach8a':
             # h2 for actual T curvature; h4 for trend T curvature
@@ -2620,28 +2625,31 @@ def plot_climate_response_contours(
             result = results[approach]
 
             if approach == 'approach6a':
-                # h1,h2 for actual T response; h3,h4 for trend T response
-                h1_total = getattr(result, 'h1_point', 0) or 0
-                h2_total = getattr(result, 'h2_point', 0) or 0
-                h1_trend = getattr(result, 'h3_point', 0) or 0
-                h2_trend = getattr(result, 'h4_point', 0) or 0
+                # h1,h2 for actual T response; h3,h4 for departure (T-Ttrend) response
+                # h(T, Ttrend) = h1*T + h2*T² + h3*(T-Ttrend) + h4*(T-Ttrend)²
+                h1_T = getattr(result, 'h1_point', 0) or 0
+                h2_T = getattr(result, 'h2_point', 0) or 0
+                h1_dep = getattr(result, 'h3_point', 0) or 0
+                h2_dep = getattr(result, 'h4_point', 0) or 0
 
                 # Center at optima
-                h_total_opt = -h1_total**2 / (4 * h2_total) if h2_total != 0 else 0
-                h_trend_opt = -h1_trend**2 / (4 * h2_trend) if h2_trend != 0 else 0
+                h_T_opt = -h1_T**2 / (4 * h2_T) if h2_T != 0 else 0
+                h_dep_opt = -h1_dep**2 / (4 * h2_dep) if h2_dep != 0 else 0
 
-                # h_total(T) - h_trend(Ttrend)
-                h_total = h1_total * T_grid_p3 + h2_total * T_grid_p3**2
-                h_trend = h1_trend * Ttrend_grid_p3 + h2_trend * Ttrend_grid_p3**2
-                response = (h_total - h_total_opt) - (h_trend - h_trend_opt)
+                # h(T, Ttrend) = h_T(T) + h_dep(T - Ttrend)
+                # deltaT = T - Ttrend
+                deltaT_p3 = T_grid_p3 - Ttrend_grid_p3
+                h_T_val = h1_T * T_grid_p3 + h2_T * T_grid_p3**2
+                h_dep_val = h1_dep * deltaT_p3 + h2_dep * deltaT_p3**2
+                response = (h_T_val - h_T_opt) + (h_dep_val - h_dep_opt)
 
-                # Derivatives: dh_total/dT - dh_trend/dTtrend
-                deriv_total = h1_total + 2 * h2_total * T_grid_p3
-                deriv_trend = h1_trend + 2 * h2_trend * Ttrend_grid_p3
-                deriv = deriv_total - deriv_trend
+                # Derivatives: dh/dT = (h1_T + 2*h2_T*T) + (h1_dep + 2*h2_dep*(T-Ttrend))
+                deriv_T = h1_T + 2 * h2_T * T_grid_p3
+                deriv_dep = h1_dep + 2 * h2_dep * deltaT_p3
+                deriv = deriv_T + deriv_dep
 
                 T_opt_trend = getattr(result, 'f1_point', None)
-                T_opt_total = -h1_total / (2 * h2_total) if h2_total != 0 else None
+                T_opt_total = -h1_T / (2 * h2_T) if h2_T != 0 else None
 
             elif approach == 'approach8a':
                 # h2 for actual T curvature; h4 for trend T curvature
@@ -2756,24 +2764,20 @@ def compute_h_response_uncertainty_bands(
     """
     is_piecewise = (approach_key == 'approach8')
 
-    # Handle approach 6a total response: h_total(T) - h_trend(T)
-    # This matches the contour plot at T_delta = 0 (where T = T_trend)
+    # Handle approach 6a total response at T=Ttrend (where departure=0)
+    # h(T, Ttrend) = h1*T + h2*T² when T=Ttrend
     if approach_key == 'approach6a_total':
-        # h1,h2 for actual T; h3,h4 for trend T
-        h1_total_samples = getattr(result, 'h1_samples', None)
-        h2_total_samples = getattr(result, 'h2_samples', None)
-        h1_trend_samples = getattr(result, 'h3_samples', None)
-        h2_trend_samples = getattr(result, 'h4_samples', None)
-        if h1_total_samples is None or h2_total_samples is None or h1_trend_samples is None or h2_trend_samples is None:
+        # h1,h2 for actual T (when departure=0, just h_T)
+        h1_samples = getattr(result, 'h1_samples', None)
+        h2_samples = getattr(result, 'h2_samples', None)
+        if h1_samples is None or h2_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
-        valid_mask = (~np.isnan(h1_total_samples) & ~np.isnan(h2_total_samples) &
-                      ~np.isnan(h1_trend_samples) & ~np.isnan(h2_trend_samples))
-        # Net coefficients: h1_net = h1 - h3, h2_net = h2 - h4
-        h1_net = h1_total_samples[valid_mask] - h1_trend_samples[valid_mask]
-        h2_net = h2_total_samples[valid_mask] - h2_trend_samples[valid_mask]
-        return _compute_quadratic_bands(h1_net, h2_net, T_range, percentiles)
+        valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+        h1_valid = h1_samples[valid_mask]
+        h2_valid = h2_samples[valid_mask]
+        return _compute_quadratic_bands(h1_valid, h2_valid, T_range, percentiles)
 
-    # Handle approach 6a trend response
+    # Handle approach 6a departure response (h3,h4)
     if approach_key == 'approach6a_low':
         h1_samples = getattr(result, 'h3_samples', None)
         h2_samples = getattr(result, 'h4_samples', None)

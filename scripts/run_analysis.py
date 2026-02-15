@@ -203,20 +203,20 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b: h1,h2 (total), h3,h4 (trend), T_opt, f1
+        # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1
         if name in ['approach6a', 'approach6b'] and hasattr(r, 'h3'):
-            print(f"  h1 (total) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
-            print(f"  h2 (total) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
-            print(f"  h4 (trend) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h3 (departure) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
+            print(f"  h4 (departure) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             if not np.isnan(r.T_opt):
-                print(f"  T_opt (total) = {r.T_opt:.2f} C")
+                print(f"  T_opt = {r.T_opt:.2f} C")
             else:
-                print(f"  T_opt (total) = N/A")
+                print(f"  T_opt = N/A")
             if not np.isnan(r.f1):
-                print(f"  f1 (trend T_opt) = {r.f1:.2f} C")
+                print(f"  f1 (departure opt) = {r.f1:.2f} C")
             else:
-                print(f"  f1 (trend T_opt) = N/A")
+                print(f"  f1 (departure opt) = N/A")
 
         # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1, f2
         elif name == 'approach6c' and hasattr(r, 'f1') and hasattr(r, 'f2'):

@@ -32,7 +32,7 @@ APPROACH_COEFFICIENTS = {
     'approach6': STANDARD_COEFFICIENTS,
     'nocr0': STANDARD_COEFFICIENTS,
     'nocr5': STANDARD_COEFFICIENTS,
-    # Approach 6a/6b: h1,h2 (total), h3,h4 (trend), T_opt, f1 (trend T_opt)
+    # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1 (departure opt)
     'approach6a': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
     'approach6b': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'f1'],
     # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1 (departure T_opt), f2 (trend T_opt)

@@ -230,48 +230,49 @@ Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
-### Approach 6a: Separate Total/Trend Response
+### Approach 6a: T/Departure Response
 
-Extends Approach 6 by allowing different temperature response functions for the total temperature (T) vs trend temperature (T_trend) components.
+Extends Approach 6 by decomposing the temperature response into response to actual temperature T and response to departure from trend (T - T_trend).
 
 ```
-Δy*(t) = h_total(T) - h_trend(T_trend)
+h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend) + h₄·(T - T_trend)²
 ```
 
 where:
-- `h_total(T) = h₁·T + h₂·T²` — response to actual (total) temperature
-- `h_trend(T_trend) = h₃·T_trend + h₄·T_trend²` — response to trend temperature
+- `h₁·T + h₂·T²` — response to actual temperature
+- `h₃·(T - T_trend) + h₄·(T - T_trend)²` — response to departure from trend
 - `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
 
 **Parameters:**
-- `h₁, h₂`: Total temperature response coefficients (response to actual T)
-- `h₃, h₄`: Trend temperature response coefficients (response to T_trend)
-- `T_opt, f1`: Optimal temperatures for total and trend components
+- `h₁, h₂`: Actual temperature response coefficients (response to T)
+- `h₃, h₄`: Departure response coefficients (response to T - T_trend)
+- `T_opt`: Optimal actual temperature = -h₁/(2h₂)
+- `f1`: Optimal departure = -h₃/(2h₄)
 
-**Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
+**At Trend:** When T = T_trend (i.e., departure = 0), the climate effect is:
 ```
-h_total(T) - h_trend(T) = (h₁ - h₃)·T + (h₂ - h₄)·T²
+h(T, T) = h₁·T + h₂·T²
 ```
 
-**Interpretation:** If climate adaptation occurs over time, the response to trend temperature changes may differ from the response to total temperature. Approach 6a tests whether economies respond differently to these two components.
+**Interpretation:** This decomposition separates the effect of actual temperature from the additional effect of temperature anomalies. The departure terms capture whether economies respond differently to year-to-year fluctuations versus the underlying temperature level.
 
 **Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
 
-### Approach 6b: Trend Response Only
+### Approach 6b: T Response Only
 
-A restricted version of Approach 6a that sets the total temperature response to zero, attributing all temperature effects to the trend component only.
+A restricted version of Approach 6a that sets the departure response to zero, so only actual temperature matters.
 
 ```
-Δy*(t) = 0 - h_trend(T_trend)
+h(T, T_trend) = h₁·T + h₂·T²
 ```
 
 where:
-- `h_total(T) = 0` (no response to total temperature)
-- `h_trend(T_trend) = h₃·T_trend + h₄·T_trend²`
+- `h₁·T + h₂·T²` — response to actual temperature
+- Departure terms (h₃, h₄) are zero
 
-**Interpretation:** Tests the hypothesis that only trend temperature affects economic growth, while deviations from the trend have no systematic effect.
+**Interpretation:** Tests the hypothesis that only actual temperature affects economic growth, with no additional effect from temperature anomalies relative to trend.
 
-**Degrees of freedom:** 2 for h(T) (h₃, h₄)
+**Degrees of freedom:** 2 for h(T) (h₁, h₂)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 

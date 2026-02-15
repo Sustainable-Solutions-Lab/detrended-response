@@ -212,26 +212,26 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # Approach 6a/6b: h1,h2 (total), h3,h4 (trend), T_opt, f1 (trend T_opt)
+        # Approach 6a/6b: h1,h2 (T), h3,h4 (departure), T_opt, f1 (departure opt)
         if name in ['approach6a', 'approach6b'] and result.h3_point is not None:
-            print(f"  h1 (total): {result.h1_point:.6f}")
+            print(f"  h1 (T): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
-            print(f"  h2 (total): {result.h2_point:.6f}")
+            print(f"  h2 (T): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            print(f"  h3 (trend): {result.h3_point:.6f}")
+            print(f"  h3 (departure): {result.h3_point:.6f}")
             print(f"    90% CI: [{stats['h3']['p5']:.6f}, {stats['h3']['p95']:.6f}]")
-            print(f"  h4 (trend): {result.h4_point:.6f}")
+            print(f"  h4 (departure): {result.h4_point:.6f}")
             print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
             if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
-                print(f"  T_opt (total): {result.T_opt_point:.2f} C")
+                print(f"  T_opt: {result.T_opt_point:.2f} C")
                 print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
             else:
-                print(f"  T_opt (total): N/A")
+                print(f"  T_opt: N/A")
             if result.f1_point is not None and not np.isnan(result.f1_point):
-                print(f"  f1 (trend T_opt): {result.f1_point:.2f} C")
+                print(f"  f1 (departure opt): {result.f1_point:.2f} C")
                 print(f"    90% CI: [{stats['f1']['p5']:.2f}, {stats['f1']['p95']:.2f}]")
             else:
-                print(f"  f1 (trend T_opt): N/A")
+                print(f"  f1 (departure opt): N/A")
 
         # Approach 6c: h1,h2 (departure), h3,h4 (trend), f1 (departure T_opt), f2 (trend T_opt)
         elif name == 'approach6c' and result.f1_point is not None and result.f2_point is not None:
