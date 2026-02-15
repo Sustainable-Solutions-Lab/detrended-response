@@ -284,10 +284,14 @@ def main():
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            # Print f1 for Approach 8b (modulation coef) or 5d (GDP scaling exponent)
+            # Print f1 for Approach 8b (linear modulation) or 5d (GDP scaling exponent)
             if result.f1_point is not None and 'f1' in stats:
                 print(f"  f1: {result.f1_point:.4f}")
                 print(f"    90% CI: [{stats['f1']['p5']:.4f}, {stats['f1']['p95']:.4f}]")
+            # Print f2 for Approach 8b (quadratic modulation)
+            if result.f2_point is not None and 'f2' in stats:
+                print(f"  f2: {result.f2_point:.4f}")
+                print(f"    90% CI: [{stats['f2']['p5']:.4f}, {stats['f2']['p95']:.4f}]")
 
         print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
 

@@ -56,7 +56,7 @@ class BootstrapResult:
     - Approach 6c: h1,h2 = departure response; h3,h4 = trend response; f1,f2 = optimal temps
     - Approach 8: h2 = curvature below T_opt; h4 = curvature above T_opt
     - Approach 8a: h2 = curvature for actual T; h4 = curvature for trend T
-    - Approach 8b: f1 = modulation coef; h1,h2 = trend response
+    - Approach 8b: f1 = linear modulation; f2 = quadratic modulation; h1,h2 = actual T response
     """
     approach: str
 
@@ -97,12 +97,14 @@ class BootstrapResult:
     # Note: h2 is curvature for actual T; h4 is curvature for trend T (reuses h4_point)
 
     # Approach 8b (modulated response) specific (optional)
-    # Note: f1 reused for modulation coefficient (formerly h0)
+    # Note: f1 = linear modulation coefficient; f2 = quadratic modulation coefficient
+    # h1,h2 = actual T response coefficients
 
     # Approach 6c (departure/trend decomposition) specific (optional)
     # Note: h1,h2 = departure coefficients; h3,h4 = trend coefficients (reuses h3/h4_point)
     # f1 = optimal departure; f2 = optimal trend T
-    f2_point: float = None         # Optimal trend T for approach 6c (formerly T_optimal_trend for 6c)
+    # For 8b: f2 = quadratic modulation coefficient
+    f2_point: float = None         # 6c: T_opt_trend; 8b: quadratic modulation
     f2_samples: np.ndarray = None  # Bootstrap samples for f2
 
     # Variance decomposition
@@ -237,10 +239,10 @@ def run_bootstrap(
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     # Approach-specific samples (f1, h3, h4, f2 have different meanings per approach)
-    f1_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 5d: beta; 6a/6b: T_opt_trend; 6c: f1; 8b: h0
+    f1_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 5d: beta; 6a/6b: T_opt_trend; 6c: f1; 8b: linear modulation
     h3_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6a/6b/6c: h3 (trend linear)
     h4_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 8: h4; 6a/6b/6c/8a: h4 (trend quadratic)
-    f2_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6c: f2 (T_opt_trend)
+    f2_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6c: T_opt_trend; 8b: quadratic modulation
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -313,7 +315,7 @@ def run_bootstrap(
                 r_squared_samples[name][b] = r.r_squared
                 total_r_squared_samples[name][b] = r.total_r_squared
                 # Store approach-specific coefficients (f1, h3, h4, f2)
-                # f1: 5d beta, 6a/6b T_opt_trend, 6c T_opt_dep, 8b modulation coef
+                # f1: 5d beta, 6a/6b T_opt_trend, 6c T_opt_dep, 8b linear modulation
                 if hasattr(r, 'f1') and r.f1 is not None:
                     f1_samples[name][b] = r.f1
                 # h3: 6a/6b/6c linear trend coefficient
@@ -322,7 +324,7 @@ def run_bootstrap(
                 # h4: 8 curvature above T_opt, 6a/6b/6c/8a quadratic trend coef
                 if hasattr(r, 'h4') and r.h4 is not None:
                     h4_samples[name][b] = r.h4
-                # f2: 6c T_opt_trend
+                # f2: 6c T_opt_trend, 8b quadratic modulation
                 if hasattr(r, 'f2') and r.f2 is not None:
                     f2_samples[name][b] = r.f2
 

@@ -290,10 +290,14 @@ def save_summary_table(
             row['T_opt_SE'] = result.T_opt_se
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
-        # Add f1 for Approach 8b (modulated response) - modulation coefficient
+        # Add f1, f2 for Approach 8b (modulated response) - modulation coefficients
         if hasattr(result, 'f1') and result.f1 is not None and not hasattr(result, 'Y_ref') and not hasattr(result, 'h3'):
             row['f1'] = result.f1
             row['f1_SE'] = result.f1_se
+            # f2 for 8b (quadratic modulation)
+            if hasattr(result, 'f2') and result.f2 is not None:
+                row['f2'] = result.f2
+                row['f2_SE'] = result.f2_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -413,9 +417,11 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
                 f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
             else:
-                # Add f1 for Approach 8b (modulated response)
+                # Add f1, f2 for Approach 8b (modulated response)
                 if hasattr(result, 'f1') and result.f1 is not None and not hasattr(result, 'Y_ref') and not hasattr(result, 'h3'):
-                    f.write(f"  f1 = {result.f1:12.6f}  (SE: {result.f1_se:.6f})  [modulation coef]\n")
+                    f.write(f"  f1 = {result.f1:12.6f}  (SE: {result.f1_se:.6f})  [linear modulation]\n")
+                    if hasattr(result, 'f2') and result.f2 is not None:
+                        f.write(f"  f2 = {result.f2:12.6f}  (SE: {result.f2_se:.6f})  [quadratic modulation]\n")
                 f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
                 f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
                 # Add f1 for GDP-dependent approaches (5d)
@@ -1258,7 +1264,8 @@ def save_bootstrap_summary_table(
 
     Each row is an approach, with columns for each parameter's statistics:
     - Point estimate, median, p5, p25, p75, p95, std for h1, h2, T_opt, total_r_squared
-    - f1 statistics included for approaches where it's used (5d, 6a/6b/8b)
+    - f1 statistics included for approaches where it's used (5d, 6a/6b, 8b)
+    - f2 statistics included for approach 6c (T_opt_trend) or 8b (quadratic modulation)
     """
     rows = []
     for name, result in results.items():
@@ -1371,7 +1378,7 @@ def save_bootstrap_summary_table(
             row['h4_p95'] = np.nan
             row['h4_std'] = np.nan
 
-        # Add f2 statistics for approach 6c (optimal trend temperature)
+        # Add f2 statistics for approach 6c (optimal trend T) or 8b (quadratic modulation)
         if result.f2_point is not None and 'f2' in stats:
             row['f2_point'] = result.f2_point
             row['f2_median'] = stats['f2']['p50']

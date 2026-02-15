@@ -41,8 +41,8 @@ APPROACH_COEFFICIENTS = {
     'approach8': ['h2', 'h4', 'T_opt'],
     # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
     'approach8a': ['h2', 'h4', 'T_opt'],
-    # Approach 8b: f1 (modulation), h1, h2, T_opt
-    'approach8b': ['f1', 'h1', 'h2', 'T_opt'],
+    # Approach 8b: f1 (linear modulation), f2 (quadratic modulation), h1, h2, T_opt
+    'approach8b': ['f1', 'f2', 'h1', 'h2', 'T_opt'],
 }
 
 

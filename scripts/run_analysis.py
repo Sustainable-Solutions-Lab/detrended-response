@@ -247,12 +247,15 @@ def main():
 
         else:
             # Standard approaches (0-5, 5a-c, 5d, 6, 8b, etc.)
-            # Print f1 for Approach 8b (modulation coef) or 5d (GDP scaling exponent)
+            # Print f1 for Approach 8b (linear modulation) or 5d (GDP scaling exponent)
             if hasattr(r, 'f1') and r.f1 is not None:
                 print(f"  f1 = {r.f1:12.6f}  (SE: {r.f1_se:.6f})")
-            # Print f2 for Approach 5d (Y_ref)
+            # Print f2 for Approach 8b (quadratic modulation)
             if hasattr(r, 'f2') and r.f2 is not None:
-                print(f"  f2 (Y_ref) = {r.f2:.2f}")
+                print(f"  f2 = {r.f2:12.6f}  (SE: {r.f2_se:.6f})")
+            # Print Y_ref for Approach 5d
+            if hasattr(r, 'Y_ref') and r.Y_ref is not None:
+                print(f"  Y_ref = {r.Y_ref:.2f}")
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):

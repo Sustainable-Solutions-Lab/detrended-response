@@ -332,31 +332,32 @@ where:
 
 **Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
-### Approach 8b: Squared-Deviation Modulated Temperature Response
+### Approach 8b: Modulated Actual Temperature Response
 
-Uses a symmetric modulation where the temperature response is scaled by the squared deviation from trend temperature. This captures effects that depend on the magnitude of deviation from trend, regardless of sign.
+Uses a linear and quadratic modulation where the temperature response to actual temperature is scaled by the deviation from trend temperature. This captures effects that depend on both the direction and magnitude of deviation from trend.
 
 **Model:**
 ```
-Δy*(t) = (1 + f₁ · (T - T_trend)²) · (h₁ · T_trend + h₂ · T_trend²)
+h(T, Ttrend) = (1 + f₁ · (T - Ttrend) + f₂ · (T - Ttrend)²) · (h₁ · T + h₂ · T²)
 ```
 
 **Parameters:**
-- `f₁`: Squared-deviation modulation coefficient
-- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to trend temperature)
-- `T_opt`: Optimal temperature = -h₁/(2·h₂)
+- `f₁`: Linear departure modulation coefficient
+- `f₂`: Quadratic departure modulation coefficient
+- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
 
 **Interpretation:**
-- When T = T_trend, the multiplier is 1 (standard quadratic response)
-- Any deviation from trend (warmer or cooler) scales the response by (1 + f₁·T_delta²)
-- If f₁ > 0: deviations from trend amplify the temperature response
-- If f₁ < 0: deviations from trend dampen the temperature response
+- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
+- Linear term f₁ captures asymmetric effects (warmer vs cooler deviations have different effects)
+- Quadratic term f₂ captures symmetric effects (magnitude of deviation matters regardless of sign)
+- If f₁ = f₂ = 0, the model reduces to the standard h₁·T + h₂·T² response
 
 **Fitting Strategy:**
-- Outer optimization: Search for f₁ using L-BFGS-B
-- Inner OLS: For each f₁, solve for h₁ and h₂ via 2-column OLS
+- Outer optimization: 2D L-BFGS-B search over (f₁, f₂)
+- Inner OLS: For each (f₁, f₂), solve for h₁ and h₂ via 2-column OLS
 
-**Degrees of freedom:** 3 (f₁, h₁, h₂)
+**Degrees of freedom:** 4 (f₁, f₂, h₁, h₂)
 
 ### Null Models (No Climate Response)
 
