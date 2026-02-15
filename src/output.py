@@ -2273,6 +2273,205 @@ def plot_year_effects_2panel(
     print(f"  Saved {filename}")
 
 
+def plot_temperature_response_4panel_with_6a(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    top_approaches: list = None,
+    filename: str = 'fig_temperature_response_4panel.pdf',
+    T_range: tuple = (0, 30),
+    input_file: str = None,
+) -> None:
+    """Plot 4-panel temperature response: top row = approach6/8, bottom row = 6a total/trend.
+
+    Creates a 2x2 figure:
+    - Top row: Temperature response for specified approaches (default: approach6, approach8)
+    - Bottom row: h_total(T) and h_trend(T) from approach 6a
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for temperature histogram
+        output_dir: Directory to save the plot
+        top_approaches: List of 2 approach keys for top row (default: ['approach6', 'approach8'])
+        filename: Output filename
+        T_range: Temperature range for x-axis (default: (0, 30))
+        input_file: Optional input file path for annotation
+    """
+    if top_approaches is None:
+        top_approaches = ['approach6', 'approach8']
+
+    # Validate approaches exist
+    valid_top = [a for a in top_approaches if a in results]
+    if 'approach6a' not in results:
+        print("  WARNING: approach6a not found, cannot create 4-panel figure")
+        return
+    if len(valid_top) < 2:
+        print("  WARNING: Not enough valid approaches for top row")
+        return
+
+    # Create 2x2 figure
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+
+    # Temperature array
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Get temperature data from most recent year for histogram
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+
+    # Define all panels: (row, col, approach_key, variant, title)
+    panels = [
+        (0, 0, valid_top[0], None, results[valid_top[0]].approach),
+        (0, 1, valid_top[1], None, results[valid_top[1]].approach),
+        (1, 0, 'approach6a', 'total_only', '6a: h_total(T)'),
+        (1, 1, 'approach6a', 'trend_only', '6a: h_trend(T)'),
+    ]
+
+    # First pass: compute all data and find global y-axis range
+    plot_data = {}
+    y_min, y_max = np.inf, -np.inf
+
+    for row, col, approach_key, variant, title in panels:
+        result = results[approach_key]
+
+        # Compute point estimate
+        if variant == 'total_only':
+            # h_total(T) only (not the difference)
+            h1 = getattr(result, 'h1_total_point', 0) or 0
+            h2 = getattr(result, 'h2_total_point', 0) or 0
+            T_opt = getattr(result, 'T_optimal_total_point', None)
+            h_T = h1 * T + h2 * T ** 2
+            if h2 != 0:
+                h_T_opt = -h1 ** 2 / (4 * h2)
+                if T_opt is None:
+                    T_opt = -h1 / (2 * h2)
+            else:
+                h_T_opt = 0
+                T_opt = T_opt or np.nan
+            h_point = h_T - h_T_opt
+        elif variant == 'trend_only':
+            # h_trend(T) only
+            h1 = getattr(result, 'h1_trend_point', 0) or 0
+            h2 = getattr(result, 'h2_trend_point', 0) or 0
+            T_opt = getattr(result, 'T_optimal_trend_point', None)
+            h_T = h1 * T + h2 * T ** 2
+            if h2 != 0:
+                h_T_opt = -h1 ** 2 / (4 * h2)
+                if T_opt is None:
+                    T_opt = -h1 / (2 * h2)
+            else:
+                h_T_opt = 0
+                T_opt = T_opt or np.nan
+            h_point = h_T - h_T_opt
+        else:
+            # Standard approach
+            h_point, T_opt = _compute_point_estimate_response(result, T, approach_key, None)
+
+        # Compute uncertainty bands
+        if variant in ('total_only', 'trend_only'):
+            # For 6a components, compute bands from samples
+            h_samples = []
+            if variant == 'total_only':
+                h1_samples = getattr(result, 'h1_total_samples', None)
+                h2_samples = getattr(result, 'h2_total_samples', None)
+            else:
+                h1_samples = getattr(result, 'h1_trend_samples', None)
+                h2_samples = getattr(result, 'h2_trend_samples', None)
+
+            if h1_samples is not None and h2_samples is not None:
+                valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+                h1_valid = h1_samples[valid_mask]
+                h2_valid = h2_samples[valid_mask]
+                for i in range(len(h1_valid)):
+                    h1_i, h2_i = h1_valid[i], h2_valid[i]
+                    h_T_i = h1_i * T + h2_i * T ** 2
+                    if h2_i != 0:
+                        h_T_opt_i = -h1_i ** 2 / (4 * h2_i)
+                    else:
+                        h_T_opt_i = 0
+                    h_samples.append(h_T_i - h_T_opt_i)
+                if h_samples:
+                    h_samples = np.array(h_samples)
+                    h_p5 = np.percentile(h_samples, 5, axis=0)
+                    h_p25 = np.percentile(h_samples, 25, axis=0)
+                    h_p75 = np.percentile(h_samples, 75, axis=0)
+                    h_p95 = np.percentile(h_samples, 95, axis=0)
+                else:
+                    h_p5 = h_p25 = h_p75 = h_p95 = np.full_like(T, np.nan)
+            else:
+                h_p5 = h_p25 = h_p75 = h_p95 = np.full_like(T, np.nan)
+        else:
+            h_p5, h_p25, _, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=approach_key
+            )
+
+        plot_data[(row, col)] = {
+            'h_p5': h_p5, 'h_p25': h_p25, 'h_p75': h_p75, 'h_p95': h_p95,
+            'h_point': h_point, 'T_opt': T_opt, 'title': title,
+            'approach_key': approach_key
+        }
+
+        # Update y range
+        if not np.all(np.isnan(h_p5)):
+            y_min = min(y_min, np.nanmin(h_p5), np.nanmin(h_point))
+        if not np.all(np.isnan(h_p95)):
+            y_max = max(y_max, np.nanmax(h_p95), np.nanmax(h_point))
+
+    if np.isinf(y_min) or np.isinf(y_max):
+        y_min, y_max = -0.05, 0.05
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    # Plot all panels
+    for row, col, approach_key, variant, title in panels:
+        ax = axes[row, col]
+        pdata = plot_data[(row, col)]
+        color = APPROACH_COLORS.get(approach_key, 'steelblue')
+
+        # Add temperature histogram on secondary y-axis
+        if temp_recent is not None:
+            ax2 = ax.twinx()
+            bins = np.linspace(T_range[0], T_range[1], 30)
+            ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax2.set_ylabel('Data density', fontsize=8, color='gray')
+            ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+            ax2.set_ylim(bottom=0)
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.set_zorder(ax2.get_zorder() + 1)
+            ax.patch.set_visible(False)
+
+        # Plot 90% CI band
+        ax.fill_between(T, pdata['h_p5'], pdata['h_p95'], alpha=0.2, color=color, label='90% CI')
+        # Plot IQR band
+        ax.fill_between(T, pdata['h_p25'], pdata['h_p75'], alpha=0.3, color=color, label='IQR')
+        # Plot point estimate
+        ax.plot(T, pdata['h_point'], color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+        # Mark optimal temperature
+        T_opt = pdata['T_opt']
+        if T_opt is not None and not np.isnan(T_opt) and T_range[0] <= T_opt <= T_range[1]:
+            ax.axvline(T_opt, color=color, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt:.1f}°C')
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_xlabel('Temperature (°C)', fontsize=10)
+        ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+        ax.set_title(pdata['title'], fontsize=11)
+        ax.set_xlim(T_range)
+        ax.set_ylim(y_min, y_max)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=7, loc='lower right')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
 def plot_climate_response_contours(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,

@@ -22,6 +22,7 @@ from src.output import (
     plot_climate_response_contours,
     plot_temperature_response_2panel,
     plot_year_effects_2panel,
+    plot_temperature_response_4panel_with_6a,
 )
 
 
@@ -702,18 +703,22 @@ def generate_figures(
     else:
         print("      [Figures] Skipping main figures (data not loaded)")
 
-    # Figure 2: Temperature response (h(T) - h(T*)) - 2 panels
-    print("      [Figures] Generating temperature response figure (2 panels)...")
-    plot_bootstrap_temperature_response(
-        results,
-        output_dir,
-        approaches=approaches_2panel,
-        filename='fig_temperature_response_2panel.pdf',
-        T_range=(0, 30),
-        data=data,  # Include temperature histogram
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_temperature_response_2panel.pdf")
+    # Figure 2: Temperature response (h(T) - h(T*)) - 4 panels
+    # Top row: approach6 and approach8; Bottom row: 6a h_total(T) and h_trend(T)
+    if data is not None:
+        print("      [Figures] Generating temperature response figure (4 panels with 6a)...")
+        plot_temperature_response_4panel_with_6a(
+            results,
+            data,
+            output_dir,
+            top_approaches=approaches_2panel,
+            filename='fig_temperature_response_4panel.pdf',
+            T_range=(0, 30),
+            input_file=None,
+        )
+        print("      [Figures] Saved fig_temperature_response_4panel.pdf")
+    else:
+        print("      [Figures] Skipping 4-panel temperature response (data not loaded)")
 
     # Figure 3: Temperature derivative (dh/dT) - 4 panels
     print("      [Figures] Generating temperature derivative figure (4 panels)...")
