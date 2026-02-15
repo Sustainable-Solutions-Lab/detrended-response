@@ -332,16 +332,24 @@ The regression is performed on the design matrix `[T, T²]` using actual tempera
 
 ### Approach 6c: Departure/Trend Decomposition
 
-Extends Approach 6 by decomposing the temperature response into separate responses to the departure from trend (T - T_trend) and to the trend temperature itself (T_trend).
+Decomposes the temperature response into separate responses to the departure from trend and to the trend temperature itself.
 
+**GDP detrending** (same as Approach 6):
+```
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
 ```
 h(T, T_trend) = h₁·(T - T_trend) + h₂·(T - T_trend)² + h₃·T_trend + h₄·T_trend²
 ```
 
-where:
-- `h₁·(T - T_trend) + h₂·(T - T_trend)²` — response to departure from trend
-- `h₃·T_trend + h₄·T_trend²` — response to trend temperature
-- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend)
+```
+
+The regression is performed on the design matrix `[(T - T_trend), (T - T_trend)², T_trend, T_trend²]`.
 
 **Parameters:**
 - `h₁, h₂`: Departure response coefficients (response to T - T_trend)
@@ -354,44 +362,60 @@ where:
 h(T, T) = h₃·T_trend + h₄·T_trend²
 ```
 
-**Interpretation:** This decomposition separates how economies respond to year-to-year temperature fluctuations (departures from trend) versus the underlying temperature level (trend). Unlike Approach 6a which uses actual temperature T and departure, Approach 6c cleanly separates the trend and fluctuation components.
+**Key insight:** Unlike Approach 6a which uses actual temperature T and departure, Approach 6c cleanly separates the trend and fluctuation components. This allows testing whether economies respond differently to year-to-year fluctuations versus the underlying temperature level.
 
 **Degrees of freedom:** 4 for h(T) (h₁, h₂, h₃, h₄)
 
 ### Approach 6d: T Response with Linear Departure Only
 
-A restricted version of Approach 6a that includes only the linear departure term, testing whether temperature fluctuations have a directional effect.
+A restricted version of Approach 6a with only the linear departure term, testing whether temperature fluctuations have a directional effect.
 
+**GDP detrending** (same as Approach 6):
+```
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
 ```
 h(T, T_trend) = h₁·T + h₂·T² + h₃·(T - T_trend)
 ```
 
-where:
-- `h₁·T + h₂·T²` — response to actual temperature
-- `h₃·(T - T_trend)` — linear response to departure from trend
-- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend)
+```
+
+The regression is performed on the design matrix `[T, T², (T - T_trend)]`.
 
 **Parameters:**
 - `h₁, h₂`: Actual temperature response coefficients (response to T)
 - `h₃`: Linear departure coefficient
 - `T_opt`: Optimal actual temperature = -h₁/(2h₂)
 
-**Interpretation:** Tests whether warmer-than-trend and cooler-than-trend years have asymmetric effects on growth. A positive h₃ means warmer-than-trend years boost growth (or cooler-than-trend years reduce it). A negative h₃ means the opposite.
+**Key insight:** Tests whether warmer-than-trend and cooler-than-trend years have asymmetric effects on growth. A positive h₃ means warmer-than-trend years boost growth; a negative h₃ means the opposite.
 
 **Degrees of freedom:** 3 for h(T) (h₁, h₂, h₃)
 
 ### Approach 6e: T Response with Quadratic Departure Only
 
-A restricted version of Approach 6a that includes only the quadratic departure term, testing whether the magnitude of temperature fluctuations matters regardless of direction.
+A restricted version of Approach 6a with only the quadratic departure term, testing whether temperature volatility matters regardless of direction.
 
+**GDP detrending** (same as Approach 6):
+```
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
 ```
 h(T, T_trend) = h₁·T + h₂·T² + h₄·(T - T_trend)²
 ```
 
-where:
-- `h₁·T + h₂·T²` — response to actual temperature
-- `h₄·(T - T_trend)²` — quadratic response to departure from trend
-- `Δy*(t) = Δy(t) - k(t) - LOESS(Δy - k)` — same detrending as Approach 6
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend)
+```
+
+The regression is performed on the design matrix `[T, T², (T - T_trend)²]`.
 
 **Parameters:**
 - `h₁, h₂`: Actual temperature response coefficients (response to T)
@@ -399,18 +423,28 @@ where:
 - `T_opt`: Optimal actual temperature = -h₁/(2h₂)
 - `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
 
-**Interpretation:** Tests whether any deviation from trend temperature—warmer or cooler—affects growth symmetrically. A negative h₄ means larger fluctuations reduce growth regardless of direction (volatility is harmful). A positive h₄ means larger fluctuations boost growth (variability is beneficial).
+**Key insight:** Tests whether any deviation from trend—warmer or cooler—affects growth symmetrically. A negative h₄ means larger fluctuations reduce growth (volatility is harmful); a positive h₄ means larger fluctuations boost growth.
 
 **Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
 ### Approach 8: Piecewise Quadratic Response with LOESS
 
-Uses a piecewise quadratic temperature response that allows different curvatures for temperatures above vs below the optimum. This captures the asymmetry where warming may have different effects on hot vs cold countries.
+Uses a piecewise quadratic temperature response that allows different curvatures for temperatures above vs below the optimum. This captures asymmetry where warming may have different effects on hot vs cold countries.
 
-**Model:**
+**GDP detrending** (same as Approach 6):
 ```
-h(T) = h₄ · (T - T_opt)²   if T > T_opt
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
+```
 h(T) = h₂ · (T - T_opt)²   if T ≤ T_opt
+h(T) = h₄ · (T - T_opt)²   if T > T_opt
+```
+
+**Regression model:**
+```
+Δy*(t) = h(T) - h(T_trend)
 ```
 
 **Parameters:**
@@ -418,126 +452,147 @@ h(T) = h₂ · (T - T_opt)²   if T ≤ T_opt
 - `h₂`: Curvature for cold countries (T ≤ T_opt)
 - `h₄`: Curvature for hot countries (T > T_opt)
 
-**Fitting uses the detrended formulation:**
-```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h(T) - h(T_trend)
-```
-
 **Optimization strategy:**
 1. Outer optimization: Search for T_opt using L-BFGS-B
 2. Inner OLS: For each T_opt, solve for h₂ and h₄ via 2-column OLS
 
-**Interpretation:**
-- Both h₂ and h₄ should be negative (growth decreases away from optimum)
-- If h₂ ≈ h₄, model reduces to symmetric quadratic
-- If |h₄| > |h₂|, warming hurts hot countries more than cooling hurts cold countries
+**Key insight:** Allows asymmetric curvature above vs below the optimum. Both h₂ and h₄ should be negative (growth decreases away from optimum). If |h₄| > |h₂|, warming hurts hot countries more than cooling hurts cold countries.
 
 **Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
 ### Approach 8a: Separate Total/Trend Response with Shared T_opt
 
-Combines the total/trend separation of Approach 6a with the piecewise quadratic structure of Approach 8. Uses separate curvature parameters for total temperature (T) and trend temperature (T_trend), but with a shared optimal temperature.
+Combines total/trend separation with shared optimal temperature. Uses separate curvature parameters for actual temperature (T) and trend temperature (T_trend).
 
+**GDP detrending** (same as Approach 6):
 ```
-Δy*(t) = h₂·(T - T_opt)² - h₄·(T_trend - T_opt)²
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
 
-where:
-- `h₂`: Curvature for total (actual) temperature response
+**Climate response function:**
+```
+h(T, T_trend) = h₂·(T - T_opt)² - h₄·(T_trend - T_opt)²
+```
+
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend)
+```
+
+**Parameters:**
+- `h₂`: Curvature for actual temperature response
 - `h₄`: Curvature for trend temperature response
 - `T_opt`: Shared optimal temperature for both components
 
-**Total Response:** When T = T_trend (i.e., T_delta = 0), the total climate effect is:
+**At Trend:** When T = T_trend, the climate effect is:
 ```
 (h₂ - h₄)·(T - T_opt)²
 ```
 
-**Key features:**
-- Both functions share the same optimal temperature
-- Linear terms (h₁) are implicitly zero (piecewise quadratic centered at T_opt)
-- Allows different sensitivities to total vs trend temperature
-
-**Interpretation:** Tests whether the curvature of the temperature-growth relationship differs between total temperature and trend temperature, while maintaining a common optimal temperature.
+**Key insight:** Tests whether the curvature differs between actual temperature and trend temperature, while maintaining a common optimal temperature. Linear terms (h₁) are implicitly zero.
 
 **Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
 ### Approach 8b: Modulated Actual Temperature Response
 
-Uses a linear and quadratic modulation where the temperature response to actual temperature is scaled by the deviation from trend temperature. This captures effects that depend on both the direction and magnitude of deviation from trend.
+The temperature response to actual temperature is scaled by the deviation from trend, capturing effects that depend on both direction and magnitude of deviation.
 
-**Model:**
+**GDP detrending** (same as Approach 6):
 ```
-h(T, Ttrend) = (1 + f₁ · (T - Ttrend) + f₂ · (T - Ttrend)²) · (h₁ · T + h₂ · T²)
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
+```
+h(T, T_trend) = (1 + f₁·(T - T_trend) + f₂·(T - T_trend)²) · (h₁·T + h₂·T²)
+```
+
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
 ```
 
 **Parameters:**
 - `f₁`: Linear departure modulation coefficient
 - `f₂`: Quadratic departure modulation coefficient
-- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `h₁, h₂`: Quadratic temperature response coefficients
 - `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
 
-**Interpretation:**
-- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
-- Linear term f₁ captures asymmetric effects (warmer vs cooler deviations have different effects)
-- Quadratic term f₂ captures symmetric effects (magnitude of deviation matters regardless of sign)
-- If f₁ = f₂ = 0, the model reduces to the standard h₁·T + h₂·T² response
+**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
 
 **Fitting Strategy:**
 - Outer optimization: 2D L-BFGS-B search over (f₁, f₂)
 - Inner OLS: For each (f₁, f₂), solve for h₁ and h₂ via 2-column OLS
 
+**Key insight:** f₁ captures asymmetric effects (warmer vs cooler deviations differ); f₂ captures symmetric effects (magnitude matters regardless of sign). If f₁ = f₂ = 0, reduces to standard quadratic.
+
 **Degrees of freedom:** 4 (f₁, f₂, h₁, h₂)
 
 ### Approach 8c: Linear-Only Modulated Response
 
-Like Approach 8b but without the quadratic modulation term (f₂ = 0). The temperature response is modulated only by a linear function of the deviation from trend.
+Like Approach 8b but with only linear modulation (f₂ = 0). The temperature response is scaled by a linear function of deviation from trend.
 
-**Model:**
+**GDP detrending** (same as Approach 6):
 ```
-h(T, Ttrend) = (1 + f₁ · (T - Ttrend)) · (h₁ · T + h₂ · T²)
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
+```
+h(T, T_trend) = (1 + f₁·(T - T_trend)) · (h₁·T + h₂·T²)
+```
+
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
 ```
 
 **Parameters:**
 - `f₁`: Linear departure modulation coefficient
-- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `h₁, h₂`: Quadratic temperature response coefficients
 - `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
 
-**Interpretation:**
-- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
-- Positive f₁ means the climate effect is amplified when T > Ttrend and dampened when T < Ttrend
-- Negative f₁ means the opposite: amplified when cooler than trend, dampened when warmer
-- If f₁ = 0, the model reduces to the standard h₁·T + h₂·T² response
+**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
 
 **Fitting Strategy:**
 - Outer optimization: 1D L-BFGS-B search over f₁
 - Inner OLS: For each f₁, solve for h₁ and h₂ via 2-column OLS
 
+**Key insight:** Positive f₁ means the climate effect is amplified when T > T_trend and dampened when T < T_trend. If f₁ = 0, reduces to standard quadratic.
+
 **Degrees of freedom:** 3 (f₁, h₁, h₂)
 
 ### Approach 8d: Quadratic-Only Modulated Response
 
-Like Approach 8b but without the linear modulation term (f₁ = 0). The temperature response is modulated only by a quadratic function of the deviation from trend.
+Like Approach 8b but with only quadratic modulation (f₁ = 0). The temperature response is scaled by a quadratic function of deviation from trend.
 
-**Model:**
+**GDP detrending** (same as Approach 6):
 ```
-h(T, Ttrend) = (1 + f₂ · (T - Ttrend)²) · (h₁ · T + h₂ · T²)
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function:**
+```
+h(T, T_trend) = (1 + f₂·(T - T_trend)²) · (h₁·T + h₂·T²)
+```
+
+**Regression model:**
+```
+Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
 ```
 
 **Parameters:**
 - `f₂`: Quadratic departure modulation coefficient
-- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `h₁, h₂`: Quadratic temperature response coefficients
 - `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
 
-**Interpretation:**
-- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
-- Positive f₂ means the climate effect is amplified for any deviation from trend (warmer or cooler)
-- Negative f₂ means the climate effect is dampened for any deviation from trend
-- The effect is symmetric: |T - Ttrend| = 1°C has the same modulation whether warmer or cooler
-- If f₂ = 0, the model reduces to the standard h₁·T + h₂·T² response
+**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
 
 **Fitting Strategy:**
 - Outer optimization: 1D L-BFGS-B search over f₂
 - Inner OLS: For each f₂, solve for h₁ and h₂ via 2-column OLS
+
+**Key insight:** Positive f₂ means the climate effect is amplified for any deviation from trend (symmetric effect). If f₂ = 0, reduces to standard quadratic.
 
 **Degrees of freedom:** 3 (f₂, h₁, h₂)
 
