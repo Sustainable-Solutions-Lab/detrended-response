@@ -591,6 +591,82 @@ class FitResultApproach8b:
     var_attrib: dict = None
 
 
+@dataclass
+class FitResultApproach8c:
+    """Container for Approach 8c: Linear-only modulated actual temperature response.
+
+    Model: h(T, Ttrend) = (1 + f1·(T-Ttrend)) · (h1·T + h2·T²)
+
+    Like 8b but without the quadratic modulation term (f2=0).
+    The quadratic response h1·T + h2·T² is evaluated at the actual temperature,
+    then modulated by a linear factor (1 + f1·T_delta) where T_delta = T - T_trend.
+
+    Parameters:
+        f1: Linear departure modulation coefficient (nonlinear parameter)
+        h1, h2: Actual temperature response coefficients (linear parameters)
+        T_opt: Optimal actual temperature = -h1/(2*h2)
+    """
+    approach: str
+    f1: float              # Linear modulation coefficient
+    f1_se: float
+    h1: float
+    h1_se: float
+    h2: float
+    h2_se: float
+    T_opt: float           # Optimal actual temperature
+    k: Dict[int, float]
+    r_squared: float
+    adj_r_squared: float
+    rmse: float
+    n_obs: int
+    n_params: int  # = 3 (f1, h1, h2)
+    residuals: np.ndarray
+    total_r_squared: float
+    rms_imbalance: float = None
+    rms_h: float = None
+    imbalance_ratio: float = None
+    var_decomp: dict = None
+    var_attrib: dict = None
+
+
+@dataclass
+class FitResultApproach8d:
+    """Container for Approach 8d: Quadratic-only modulated actual temperature response.
+
+    Model: h(T, Ttrend) = (1 + f2·(T-Ttrend)²) · (h1·T + h2·T²)
+
+    Like 8b but without the linear modulation term (f1=0).
+    The quadratic response h1·T + h2·T² is evaluated at the actual temperature,
+    then modulated by a quadratic factor (1 + f2·T_delta²) where T_delta = T - T_trend.
+
+    Parameters:
+        f2: Quadratic departure modulation coefficient (nonlinear parameter)
+        h1, h2: Actual temperature response coefficients (linear parameters)
+        T_opt: Optimal actual temperature = -h1/(2*h2)
+    """
+    approach: str
+    f2: float              # Quadratic modulation coefficient
+    f2_se: float
+    h1: float
+    h1_se: float
+    h2: float
+    h2_se: float
+    T_opt: float           # Optimal actual temperature
+    k: Dict[int, float]
+    r_squared: float
+    adj_r_squared: float
+    rmse: float
+    n_obs: int
+    n_params: int  # = 3 (f2, h1, h2)
+    residuals: np.ndarray
+    total_r_squared: float
+    rms_imbalance: float = None
+    rms_h: float = None
+    imbalance_ratio: float = None
+    var_decomp: dict = None
+    var_attrib: dict = None
+
+
 def build_design_matrix(data: AnalysisData, X1: np.ndarray, X2: np.ndarray) -> tuple:
     """Build design matrix with temperature terms and year fixed effects.
 
@@ -1659,7 +1735,7 @@ def fit_approach5d_precomputed_k_gdp_response(
     h2_se = 0.0
 
     # Compute beta SE via numerical second derivative
-    beta_se = compute_beta_se_numerical(
+    beta_se = compute_1d_se_numerical(
         compute_sse_for_beta, beta_opt, beta_bounds, data.n_obs, n_params=2
     )
 
@@ -1727,36 +1803,36 @@ def fit_approach5d_precomputed_k_gdp_response(
     )
 
 
-def compute_beta_se_numerical(
+def compute_1d_se_numerical(
     sse_func: callable,
-    beta_opt: float,
-    beta_bounds: tuple,
+    param_opt: float,
+    param_bounds: tuple,
     n_obs: int,
     n_params: int = 3,
 ) -> float:
-    """Compute standard error of beta from curvature of SSE profile.
+    """Compute standard error of a 1D parameter from curvature of SSE profile.
 
     Uses numerical second derivative of the SSE function at the optimum.
-    SE(beta) is approximated from the profile likelihood curvature.
+    SE is approximated from the profile likelihood curvature.
 
     Args:
-        sse_func: Function that computes SSE for a given beta
-        beta_opt: Optimal beta value
-        beta_bounds: Bounds for beta (to ensure step stays in bounds)
+        sse_func: Function that computes SSE for a given parameter value
+        param_opt: Optimal parameter value
+        param_bounds: Bounds for parameter (to ensure step stays in bounds)
         n_obs: Number of observations
-        n_params: Number of parameters (default 3: h1, h2, beta)
+        n_params: Total number of parameters in the model
 
     Returns:
-        Standard error of beta (or np.nan if curvature is non-positive)
+        Standard error of the parameter (or np.nan if curvature is non-positive)
     """
     # Step size for finite differences
     h = 0.01
     # Ensure we stay within bounds
-    h = min(h, (beta_bounds[1] - beta_opt) / 2, (beta_opt - beta_bounds[0]) / 2)
+    h = min(h, (param_bounds[1] - param_opt) / 2, (param_opt - param_bounds[0]) / 2)
 
-    sse_minus = sse_func(beta_opt - h)
-    sse_center = sse_func(beta_opt)
-    sse_plus = sse_func(beta_opt + h)
+    sse_minus = sse_func(param_opt - h)
+    sse_center = sse_func(param_opt)
+    sse_plus = sse_func(param_opt + h)
 
     # Second derivative: d2(SSE)/d(beta)^2 ~ (f(x+h) - 2*f(x) + f(x-h)) / h^2
     d2_sse = (sse_plus - 2 * sse_center + sse_minus) / (h ** 2)
@@ -2732,7 +2808,7 @@ def fit_approach8b_modulated_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
-    f_bounds: tuple = ((-5.0, 5.0), (-5.0, 5.0)),
+    f_bounds: tuple = ((-20.0, 20.0), (-20.0, 20.0)),
 ) -> FitResultApproach8b:
     """Approach 8b: Modulated actual temperature response with LOESS detrending.
 
@@ -2754,7 +2830,7 @@ def fit_approach8b_modulated_loess(
         data: AnalysisData object
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
-        f_bounds: Bounds for (f₁, f₂) as tuple of tuples (default [(-5, 5), (-5, 5)])
+        f_bounds: Bounds for (f₁, f₂) as tuple of tuples (default [(-20, 20), (-20, 20)])
 
     Returns:
         FitResultApproach8b with f₁, f₂, h₁, h₂, and standard errors
@@ -2872,6 +2948,328 @@ def fit_approach8b_modulated_loess(
         approach="8b: Modulated Response LOESS",
         f1=f1_opt,
         f1_se=f1_se,
+        f2=f2_opt,
+        f2_se=f2_se,
+        h1=h1,
+        h1_se=h1_se,
+        h2=h2,
+        h2_se=h2_se,
+        T_opt=T_opt,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach8c_linear_modulated_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    f_bounds: tuple = (-20.0, 20.0),
+) -> FitResultApproach8c:
+    """Approach 8c: Linear-only modulated actual temperature response with LOESS detrending.
+
+    Model: h(T, Ttrend) = (1 + f₁·(T-Ttrend)) · (h₁·T + h₂·T²)
+
+    Like 8b but without the quadratic modulation term (f₂=0).
+    The quadratic response h₁·T + h₂·T² is evaluated at the actual temperature,
+    then modulated by a linear factor (1 + f₁·T_delta) where T_delta = T - T_trend.
+    When T = T_trend, the modulation is 1.
+
+    Fitting Strategy:
+        - Outer: 1D L-BFGS-B over f₁
+        - Inner: 2-parameter OLS for h₁, h₂
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        f_bounds: Bounds for f₁ as tuple (default (-20, 20))
+
+    Returns:
+        FitResultApproach8c with f₁, h₁, h₂, and standard errors
+    """
+    # Get temperature and trend temperature
+    T = data.temp
+    Ttrend = trends_loess.T_loess
+    T_delta = T - Ttrend
+
+    # Compute dependent variable: dy - k[t] - y_loess (same as approach 6)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    def compute_sse_for_f(f1_val):
+        """Compute SSE for given f₁ by solving inner 2-parameter OLS for h₁, h₂."""
+        # Linear departure modulation factor only
+        modulation = 1 + f1_val * T_delta
+
+        # Design matrix: [modulation * T, modulation * T²]
+        X1 = modulation * T
+        X2 = modulation * (T ** 2)
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS: min ||y - X @ [h₁, h₂]||²
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # Initial guess: f₁ = 0 (no modulation)
+    x0 = [0.0]
+
+    # 1D optimization using L-BFGS-B
+    result = minimize(
+        compute_sse_for_f,
+        x0=x0,
+        bounds=[f_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    f1_opt = result.x[0]
+
+    # Re-fit at optimal f₁ to get h₁, h₂, residuals, covariance
+    modulation = 1 + f1_opt * T_delta
+    X1 = modulation * T
+    X2 = modulation * (T ** 2)
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for f₁ using numerical Hessian
+    f1_se = compute_1d_se_numerical(
+        compute_sse_for_f,
+        f1_opt,
+        f_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    # Compute T_optimal from h₁ and h₂ (applies to actual temperature)
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # f₁, h₁, h₂
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Compute RMS values
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # Climate response: (1 + f₁·T_delta) · (h₁·T + h₂·T²)
+    h_T = modulation * (h1 * T + h2 * T ** 2)
+
+    # Baseline at T = T_trend (modulation = 1): h₁·T_trend + h₂·T_trend²
+    h_T_trend = h1 * Ttrend + h2 * Ttrend ** 2
+
+    # Δu = h(T) - h(T_trend) (increment from deviation)
+    Delta_u = h_T - h_T_trend
+
+    # RMS imbalance: h(T_trend) + j_trend + k
+    imbalance = h_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # RMS of climate response
+    rms_h = np.sqrt(np.mean(h_T ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_T,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    v = h_T_trend
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach8c(
+        approach="8c: Linear Modulated LOESS",
+        f1=f1_opt,
+        f1_se=f1_se,
+        h1=h1,
+        h1_se=h1_se,
+        h2=h2,
+        h2_se=h2_se,
+        T_opt=T_opt,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach8d_quadratic_modulated_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    f_bounds: tuple = (-20.0, 20.0),
+) -> FitResultApproach8d:
+    """Approach 8d: Quadratic-only modulated actual temperature response with LOESS detrending.
+
+    Model: h(T, Ttrend) = (1 + f₂·(T-Ttrend)²) · (h₁·T + h₂·T²)
+
+    Like 8b but without the linear modulation term (f₁=0).
+    The quadratic response h₁·T + h₂·T² is evaluated at the actual temperature,
+    then modulated by a quadratic factor (1 + f₂·T_delta²) where T_delta = T - T_trend.
+    When T = T_trend, the modulation is 1.
+
+    Fitting Strategy:
+        - Outer: 1D L-BFGS-B over f₂
+        - Inner: 2-parameter OLS for h₁, h₂
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        f_bounds: Bounds for f₂ as tuple (default (-20, 20))
+
+    Returns:
+        FitResultApproach8d with f₂, h₁, h₂, and standard errors
+    """
+    # Get temperature and trend temperature
+    T = data.temp
+    Ttrend = trends_loess.T_loess
+    T_delta = T - Ttrend
+
+    # Compute dependent variable: dy - k[t] - y_loess (same as approach 6)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    def compute_sse_for_f(f2_val):
+        """Compute SSE for given f₂ by solving inner 2-parameter OLS for h₁, h₂."""
+        # Quadratic departure modulation factor only
+        modulation = 1 + f2_val * T_delta ** 2
+
+        # Design matrix: [modulation * T, modulation * T²]
+        X1 = modulation * T
+        X2 = modulation * (T ** 2)
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS: min ||y - X @ [h₁, h₂]||²
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # Initial guess: f₂ = 0 (no modulation)
+    x0 = [0.0]
+
+    # 1D optimization using L-BFGS-B
+    result = minimize(
+        compute_sse_for_f,
+        x0=x0,
+        bounds=[f_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    f2_opt = result.x[0]
+
+    # Re-fit at optimal f₂ to get h₁, h₂, residuals, covariance
+    modulation = 1 + f2_opt * T_delta ** 2
+    X1 = modulation * T
+    X2 = modulation * (T ** 2)
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for f₂ using numerical Hessian
+    f2_se = compute_1d_se_numerical(
+        compute_sse_for_f,
+        f2_opt,
+        f_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    # Compute T_optimal from h₁ and h₂ (applies to actual temperature)
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # f₂, h₁, h₂
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Compute RMS values
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # Climate response: (1 + f₂·T_delta²) · (h₁·T + h₂·T²)
+    h_T = modulation * (h1 * T + h2 * T ** 2)
+
+    # Baseline at T = T_trend (modulation = 1): h₁·T_trend + h₂·T_trend²
+    h_T_trend = h1 * Ttrend + h2 * Ttrend ** 2
+
+    # Δu = h(T) - h(T_trend) (increment from deviation)
+    Delta_u = h_T - h_T_trend
+
+    # RMS imbalance: h(T_trend) + j_trend + k
+    imbalance = h_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # RMS of climate response
+    rms_h = np.sqrt(np.mean(h_T ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_T,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    v = h_T_trend
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach8d(
+        approach="8d: Quadratic Modulated LOESS",
         f2=f2_opt,
         f2_se=f2_se,
         h1=h1,
@@ -3428,6 +3826,8 @@ def fit_all_approaches(
         'approach8': Piecewise quadratic response with LOESS (if trends_loess provided)
         'approach8a': Shared T_opt for total/trend with LOESS (if trends_loess provided)
         'approach8b': Modulated temperature response with LOESS (if trends_loess provided)
+        'approach8c': Linear-only modulated response with LOESS (if trends_loess provided)
+        'approach8d': Quadratic-only modulated response with LOESS (if trends_loess provided)
         'nocr0': No climate response, joint OLS (country trends + year effects only)
         'nocr5': No climate response, precomputed k (if trends_with_k and year_means provided)
 
@@ -3494,6 +3894,12 @@ def fit_all_approaches(
             data, trends_loess, year_means
         )
         results['approach8b'] = fit_approach8b_modulated_loess(
+            data, trends_loess, year_means
+        )
+        results['approach8c'] = fit_approach8c_linear_modulated_loess(
+            data, trends_loess, year_means
+        )
+        results['approach8d'] = fit_approach8d_quadratic_modulated_loess(
             data, trends_loess, year_means
         )
 

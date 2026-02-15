@@ -63,14 +63,14 @@ All approaches use a consistent naming scheme for output coefficients:
 | f1 | GDP scaling exponent |
 | f2 | Reference GDP level |
 
-**Approaches 6a/6b** (separate total/trend responses):
+**Approaches 6a/6b** (separate T/departure responses):
 
 | Parameter | Meaning |
 |-----------|---------|
 | h1, h2 | Response to actual temperature T |
-| h3, h4 | Response to trend temperature T_trend |
+| h3, h4 | Response to departure from trend (T - T_trend) |
 | T_opt | Optimal actual temperature |
-| f1 | Optimal trend temperature |
+| f1 | Optimal departure from trend |
 
 **Approach 6c** (departure/trend decomposition):
 
@@ -103,6 +103,22 @@ All approaches use a consistent naming scheme for output coefficients:
 | Parameter | Meaning |
 |-----------|---------|
 | f1 | Linear departure modulation coefficient |
+| f2 | Quadratic departure modulation coefficient |
+| h1, h2 | Response to actual temperature T |
+| T_opt | Optimal actual temperature |
+
+**Approach 8c** (linear-only modulated response):
+
+| Parameter | Meaning |
+|-----------|---------|
+| f1 | Linear departure modulation coefficient |
+| h1, h2 | Response to actual temperature T |
+| T_opt | Optimal actual temperature |
+
+**Approach 8d** (quadratic-only modulated response):
+
+| Parameter | Meaning |
+|-----------|---------|
 | f2 | Quadratic departure modulation coefficient |
 | h1, h2 | Response to actual temperature T |
 | T_opt | Optimal actual temperature |
@@ -222,12 +238,16 @@ where f₁ is the GDP scaling exponent (larger f₁ = stronger income-based adap
 Replaces polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
 
 ```
-[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h₁·[T - LOESS(T)] + h₂·[T - LOESS(T)]²
+[Δyᵢ(t) - k(t)] - LOESS(Δyᵢ - k) = h(T) - h(T_trend)
 ```
+
+where `h(T) = h₁·T + h₂·T²` and `T_trend = LOESS(T)`.
+
+The regression is performed on the design matrix `[T - T_trend, T² - T_trend²]`, which corresponds to fitting the difference `h(T) - h(T_trend)` rather than `h(T - T_trend)`.
 
 Uses a 25-year LOESS window (configurable via `--loess-window`).
 
-**Key difference from polynomial approaches:** Uses `h(T) - h(T_trend)` formulation where the response function is applied to both actual and trend temperatures, then differenced.
+**Key insight:** This formulation measures how GDP growth responds to departures of the *climate response function* from its trend value, not departures of temperature itself.
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
@@ -387,6 +407,59 @@ h(T, Ttrend) = (1 + f₁ · (T - Ttrend) + f₂ · (T - Ttrend)²) · (h₁ · T
 - Inner OLS: For each (f₁, f₂), solve for h₁ and h₂ via 2-column OLS
 
 **Degrees of freedom:** 4 (f₁, f₂, h₁, h₂)
+
+### Approach 8c: Linear-Only Modulated Response
+
+Like Approach 8b but without the quadratic modulation term (f₂ = 0). The temperature response is modulated only by a linear function of the deviation from trend.
+
+**Model:**
+```
+h(T, Ttrend) = (1 + f₁ · (T - Ttrend)) · (h₁ · T + h₂ · T²)
+```
+
+**Parameters:**
+- `f₁`: Linear departure modulation coefficient
+- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
+
+**Interpretation:**
+- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
+- Positive f₁ means the climate effect is amplified when T > Ttrend and dampened when T < Ttrend
+- Negative f₁ means the opposite: amplified when cooler than trend, dampened when warmer
+- If f₁ = 0, the model reduces to the standard h₁·T + h₂·T² response
+
+**Fitting Strategy:**
+- Outer optimization: 1D L-BFGS-B search over f₁
+- Inner OLS: For each f₁, solve for h₁ and h₂ via 2-column OLS
+
+**Degrees of freedom:** 3 (f₁, h₁, h₂)
+
+### Approach 8d: Quadratic-Only Modulated Response
+
+Like Approach 8b but without the linear modulation term (f₁ = 0). The temperature response is modulated only by a quadratic function of the deviation from trend.
+
+**Model:**
+```
+h(T, Ttrend) = (1 + f₂ · (T - Ttrend)²) · (h₁ · T + h₂ · T²)
+```
+
+**Parameters:**
+- `f₂`: Quadratic departure modulation coefficient
+- `h₁, h₂`: Standard quadratic temperature response coefficients (applied to actual temperature)
+- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
+
+**Interpretation:**
+- When T = Ttrend, the modulation is 1 and h = h₁·T + h₂·T² (standard quadratic response)
+- Positive f₂ means the climate effect is amplified for any deviation from trend (warmer or cooler)
+- Negative f₂ means the climate effect is dampened for any deviation from trend
+- The effect is symmetric: |T - Ttrend| = 1°C has the same modulation whether warmer or cooler
+- If f₂ = 0, the model reduces to the standard h₁·T + h₂·T² response
+
+**Fitting Strategy:**
+- Outer optimization: 1D L-BFGS-B search over f₂
+- Inner OLS: For each f₂, solve for h₁ and h₂ via 2-column OLS
+
+**Degrees of freedom:** 3 (f₂, h₁, h₂)
 
 ### Null Models (No Climate Response)
 

@@ -53,6 +53,8 @@ APPROACH_COLORS = {
     'approach8': 'magenta',
     'approach8a': 'darkviolet',
     'approach8b': 'mediumorchid',
+    'approach8c': 'orchid',
+    'approach8d': 'plum',
     'nocr0': 'gray',
     'nocr5': 'gray',
 }
@@ -80,6 +82,8 @@ APPROACH_LINESTYLES = {
     'approach8': (0, (5, 1)),   # densely dashed
     'approach8a': (0, (5, 1)),  # densely dashed
     'approach8b': (0, (5, 1)),  # densely dashed
+    'approach8c': (0, (5, 1)),  # densely dashed
+    'approach8d': (0, (5, 1)),  # densely dashed
     'nocr0': '--',
     'nocr5': ':',
 }
@@ -244,15 +248,15 @@ def save_summary_table(
             'h2': result.h2,
             'h2_SE': result.h2_se,
             'T_opt': getattr(result, 'T_opt', None),  # Not all approaches have T_opt (e.g., 6c)
-            'T_opt_SE': getattr(result, 'T_opt_se', None),  # SE for T_opt (approaches 8, 8a, 8b)
+            'T_opt_SE': getattr(result, 'T_opt_se', None),  # SE for T_opt (approaches 8, 8a, 8b, 8c, 8d)
             # Extended coefficients - define in order to ensure consistent column placement
             'h3': None,  # For 6a/6b/6c
             'h3_SE': None,
             'h4': None,  # For 6a/6b/6c/8/8a
             'h4_SE': None,
-            'f1': None,  # For 5d/6a/6b/6c/8b
+            'f1': None,  # For 5d/6a/6b/6c/8b/8c
             'f1_SE': None,
-            'f2': None,  # For 6c/8b
+            'f2': None,  # For 6c/8b/8d
             'f2_SE': None,
             'Y_ref': None,  # For 5d
             'R_squared': result.r_squared,
@@ -299,14 +303,15 @@ def save_summary_table(
         elif is_piecewise_result(result):
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
-        # Add f1, f2 for Approach 8b (modulated response) - modulation coefficients
-        if hasattr(result, 'f1') and result.f1 is not None and not hasattr(result, 'Y_ref') and not hasattr(result, 'h3'):
+        # Add f1, f2 for Approach 8b/8c/8d (modulated response) - modulation coefficients
+        # 8b has both f1 and f2, 8c has only f1, 8d has only f2
+        is_modulated_approach = not hasattr(result, 'Y_ref') and not hasattr(result, 'h3')
+        if is_modulated_approach and hasattr(result, 'f1') and result.f1 is not None:
             row['f1'] = result.f1
             row['f1_SE'] = result.f1_se
-            # f2 for 8b (quadratic modulation)
-            if hasattr(result, 'f2') and result.f2 is not None:
-                row['f2'] = result.f2
-                row['f2_SE'] = result.f2_se
+        if is_modulated_approach and hasattr(result, 'f2') and result.f2 is not None:
+            row['f2'] = result.f2
+            row['f2_SE'] = result.f2_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -426,11 +431,12 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
                 f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
             else:
-                # Add f1, f2 for Approach 8b (modulated response)
-                if hasattr(result, 'f1') and result.f1 is not None and not hasattr(result, 'Y_ref') and not hasattr(result, 'h3'):
+                # Add f1, f2 for Approach 8b/8c/8d (modulated response)
+                is_modulated = not hasattr(result, 'Y_ref') and not hasattr(result, 'h3')
+                if is_modulated and hasattr(result, 'f1') and result.f1 is not None:
                     f.write(f"  f1 = {result.f1:12.6f}  (SE: {result.f1_se:.6f})  [linear modulation]\n")
-                    if hasattr(result, 'f2') and result.f2 is not None:
-                        f.write(f"  f2 = {result.f2:12.6f}  (SE: {result.f2_se:.6f})  [quadratic modulation]\n")
+                if is_modulated and hasattr(result, 'f2') and result.f2 is not None:
+                    f.write(f"  f2 = {result.f2:12.6f}  (SE: {result.f2_se:.6f})  [quadratic modulation]\n")
                 f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})\n")
                 f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})\n")
                 # Add f1 for GDP-dependent approaches (5d)
@@ -646,7 +652,7 @@ def plot_temperature_response(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_response_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -717,7 +723,7 @@ def plot_temperature_derivative(
     # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6a, 6b, 7, 8, 8a)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
+        approaches=['approach5', 'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='Quadratic vs LOESS',
         T_range=T_range,
@@ -1273,8 +1279,8 @@ def save_bootstrap_summary_table(
 
     Each row is an approach, with columns for each parameter's statistics:
     - Point estimate, median, p5, p25, p75, p95, std for h1, h2, T_opt, total_r_squared
-    - f1 statistics included for approaches where it's used (5d, 6a/6b, 8b)
-    - f2 statistics included for approach 6c (T_opt_trend) or 8b (quadratic modulation)
+    - f1 statistics included for approaches where it's used (5d, 6a/6b, 8b, 8c)
+    - f2 statistics included for approach 6c (T_opt_trend) or 8b/8d (quadratic modulation)
     """
     rows = []
     for name, result in results.items():
@@ -1332,7 +1338,7 @@ def save_bootstrap_summary_table(
             'r_squared_std': stats['r_squared']['std'],
         }
 
-        # Add f1 statistics for approaches where it's used (5d, 6a/6b, 8b)
+        # Add f1 statistics for approaches where it's used (5d, 6a/6b, 8b, 8c)
         if result.f1_point is not None and 'f1' in stats:
             row['f1_point'] = result.f1_point
             row['f1_median'] = stats['f1']['p50']
@@ -1387,7 +1393,7 @@ def save_bootstrap_summary_table(
             row['h4_p95'] = np.nan
             row['h4_std'] = np.nan
 
-        # Add f2 statistics for approach 6c (optimal trend T) or 8b (quadratic modulation)
+        # Add f2 statistics for approach 6c (optimal trend T) or 8b/8d (quadratic modulation)
         if result.f2_point is not None and 'f2' in stats:
             row['f2_point'] = result.f2_point
             row['f2_median'] = stats['f2']['p50']
@@ -4412,7 +4418,7 @@ def save_all_bootstrap_plots(
     # Temperature response PDF 3: LOESS approaches (6, 6a, 6b, 8, 8a)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
+        approaches=['approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4425,7 +4431,7 @@ def save_all_bootstrap_plots(
         results, output_dir,
         approaches=['approach0', 'approach1', 'approach2', 'approach3',
                     'approach4', 'approach5', 'approach5a', 'approach5b', 'approach5c',
-                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b'],
+                    'approach6', 'approach6a', 'approach6b', 'approach8', 'approach8a', 'approach8b', 'approach8c', 'approach8d'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
