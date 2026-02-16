@@ -1,0 +1,484 @@
+#!/usr/bin/env python3
+"""Calculate cumulative climate effects from bootstrap h(T) values.
+
+This script processes bootstrap_h_values.csv to compute cumulative climate effects
+from 1961-2022, select representative countries, and create a box-and-whisker
+visualization.
+
+Usage:
+    python scripts/calculate_cumulative_effects.py [--input-dir DIR] [--output-dir DIR]
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.detrending import fit_quadratic_trend, DEFAULT_LOESS_WINDOW_YEARS
+from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annotation
+
+
+# ==============================================================================
+# Constants
+# ==============================================================================
+
+# Approaches that use quadratic OLS for h(T) trend
+QUADRATIC_APPROACHES = {'approach0', 'approach5c'}
+
+# Approaches that use LOESS for h(T) trend
+LOESS_APPROACHES = {'approach6', 'approach6e', 'approach8'}
+
+# Base year for cumulative effect calculation
+BASE_YEAR = 1961
+
+# Percentiles for selecting representative countries
+REPRESENTATIVE_PERCENTILES = (5, 25, 50, 75, 95)
+
+
+# ==============================================================================
+# Core Functions
+# ==============================================================================
+
+def fit_h_T_trend_1961(
+    years: np.ndarray,
+    h_T_values: np.ndarray,
+    approach: str,
+    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS
+) -> float:
+    """Fit trend to h(T) and evaluate at 1961.
+
+    For quadratic approaches (approach0, approach5c): fit h_T ~ year + year²
+    For LOESS approaches (approach6, approach6e, approach8): use LOESS smoothing
+
+    Args:
+        years: Array of year values
+        h_T_values: Array of h(T) values
+        approach: Approach name
+        loess_window: Window size in years for LOESS smoothing
+
+    Returns:
+        Trend value at 1961
+    """
+    if approach in QUADRATIC_APPROACHES:
+        # Fit quadratic: h_T = a + b*year + c*year²
+        a, b, c = fit_quadratic_trend(years, h_T_values)
+        return a + b * BASE_YEAR + c * BASE_YEAR ** 2
+    else:
+        # LOESS smoothing
+        n = len(years)
+        t_range = years.max() - years.min()
+        frac = min(loess_window / t_range, 1.0) if t_range > 0 else 1.0
+        frac = max(frac, 3.0 / n)  # Ensure minimum points
+
+        # Sort data for LOESS
+        sort_idx = np.argsort(years)
+        years_sorted = years[sort_idx]
+        h_T_sorted = h_T_values[sort_idx]
+
+        # Fit LOESS
+        smoothed = lowess(h_T_sorted, years_sorted, frac=frac, return_sorted=False)
+
+        # Interpolate to get value at 1961
+        return np.interp(BASE_YEAR, years_sorted, smoothed)
+
+
+def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> np.ndarray:
+    """Calculate compound cumulative effect.
+
+    For year 1961: h_T_delta_cum = h_T_delta
+    For year > 1961: h_T_delta_cum(year) = (1 + h_T_delta_cum(year-1)) * (1 + h_T_delta(year)) - 1
+
+    Args:
+        h_T_delta: Array of h_T - h_T_trend_1961 values
+        years: Array of year values (must be sorted)
+
+    Returns:
+        Array of compound cumulative effects
+    """
+    # Sort by year to ensure proper ordering
+    sort_idx = np.argsort(years)
+    h_T_delta_sorted = h_T_delta[sort_idx]
+
+    # Calculate compound cumulative
+    h_T_delta_cum = np.zeros(len(h_T_delta))
+    h_T_delta_cum[0] = h_T_delta_sorted[0]
+
+    for i in range(1, len(h_T_delta_sorted)):
+        h_T_delta_cum[i] = (1 + h_T_delta_cum[i - 1]) * (1 + h_T_delta_sorted[i]) - 1
+
+    # Restore original order
+    result = np.zeros(len(h_T_delta))
+    result[sort_idx] = h_T_delta_cum
+
+    return result
+
+
+def log_transform(pct):
+    """Transform percentage to log scale: log(1 + pct/100)."""
+    return np.log(1 + pct / 100)
+
+
+def inv_log_transform(y):
+    """Inverse transform: from log scale back to percentage."""
+    return (np.exp(y) - 1) * 100
+
+
+def plot_cumulative_effects_boxplot(
+    df: pd.DataFrame,
+    representatives: dict,
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Create clustered box-and-whisker plot of cumulative effects.
+
+    Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
+
+    Args:
+        df: DataFrame with cumulative effects for representative countries
+        representatives: Dictionary from select_representative_countries
+        output_dir: Directory to save plot
+        input_file: Input file for annotation
+    """
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    # Get unique approaches in consistent order
+    approaches = ['approach0', 'approach5c', 'approach6', 'approach6e', 'approach8']
+    n_approaches = len(approaches)
+
+    # Sort percentiles for x-axis ordering
+    percentiles_sorted = sorted(representatives.keys())
+    n_clusters = len(percentiles_sorted)
+
+    # Spacing parameters
+    cluster_width = 0.8
+    box_width = cluster_width / (n_approaches + 1)  # Extra space between clusters
+
+    # Filter to year 2022 for final values
+    df_2022 = df[df['year'] == 2022].copy()
+
+    # Create box plots
+    for i, percentile in enumerate(percentiles_sorted):
+        iso3 = representatives[percentile]['iso3']
+        cluster_center = i
+
+        for j, approach in enumerate(approaches):
+            # Get bootstrap samples (iterations 0-999) for this country/approach
+            mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
+            bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
+
+            # Transform to log scale
+            bootstrap_values = log_transform(bootstrap_values_pct)
+
+            # Get point estimate (iteration -1)
+            mask_point = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] == -1)
+            point_estimate_pct = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate_pct = point_estimate_pct[0] * 100 if len(point_estimate_pct) > 0 else np.nan
+            point_estimate = log_transform(point_estimate_pct)
+
+            # Position for this box
+            pos = cluster_center + (j - (n_approaches - 1) / 2) * box_width
+
+            # Draw box
+            color = APPROACH_COLORS.get(approach, 'gray')
+            box = ax.boxplot(
+                [bootstrap_values],
+                positions=[pos],
+                widths=box_width * 0.8,
+                patch_artist=True,
+                showfliers=False,
+                whis=[5, 95],  # Whiskers at 5th and 95th percentile
+                medianprops=dict(color='black', linewidth=1),
+            )
+
+            # Color the box
+            for patch in box['boxes']:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+
+            # Add point estimate as diamond marker
+            ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
+                    markeredgecolor='black', markeredgewidth=1, zorder=10)
+
+    # X-axis labels (country codes with percentile info)
+    x_labels = [f"{representatives[p]['iso3']}\n(P{p})" for p in percentiles_sorted]
+    ax.set_xticks(range(n_clusters))
+    ax.set_xticklabels(x_labels)
+
+    # Y-axis: set ticks at nice percentage values, but plot at log-transformed positions
+    # Choose tick values that span the data range nicely
+    tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
+    tick_positions = [log_transform(p) for p in tick_pcts]
+    tick_labels = [f'{p}%' for p in tick_pcts]
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_labels)
+
+    # Formatting
+    ax.set_ylabel('Cumulative Climate Effect')
+    ax.set_xlabel('Representative Country (Percentile)')
+    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022)')
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+
+    # Legend for approaches
+    legend_handles = [
+        plt.Rectangle((0, 0), 1, 1, facecolor=APPROACH_COLORS.get(a, 'gray'), alpha=0.7)
+        for a in approaches
+    ]
+    ax.legend(legend_handles, approaches, loc='best', fontsize=8)
+
+    # Add diamond marker explanation to legend
+    ax.plot([], [], 'd', color='white', markersize=6,
+            markeredgecolor='black', markeredgewidth=1, label='Point estimate')
+
+    plt.tight_layout()
+
+    # Add input file annotation
+    add_input_file_annotation(fig, input_file)
+
+    # Save
+    output_path = output_dir / 'cumulative_effects_boxplot.pdf'
+    fig.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    print(f"      Saved: {output_path}")
+
+
+def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.DataFrame:
+    """Process a single (iteration, approach, iso3) group to compute cumulative effects.
+
+    Args:
+        group: DataFrame for a single group with columns [year, temp, h_T]
+        approach: Approach name
+        loess_window: Window size for LOESS smoothing
+
+    Returns:
+        DataFrame with added columns [h_T_trend_1961, h_T_delta, h_T_delta_cum]
+    """
+    years = group['year'].values
+    h_T = group['h_T'].values
+
+    # Calculate h_T_trend_1961
+    h_T_trend_1961 = fit_h_T_trend_1961(years, h_T, approach, loess_window)
+
+    # Calculate h_T_delta
+    h_T_delta = h_T - h_T_trend_1961
+
+    # Calculate cumulative
+    h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
+
+    result = group.copy()
+    result['h_T_trend_1961'] = h_T_trend_1961
+    result['h_T_delta'] = h_T_delta
+    result['h_T_delta_cum'] = h_T_delta_cum
+
+    return result
+
+
+def select_representative_countries_from_file(
+    input_path: Path,
+    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS,
+    percentiles: tuple = REPRESENTATIVE_PERCENTILES
+) -> dict:
+    """Select representative countries using only point estimate data.
+
+    Loads only iteration=-1, approach=approach0 to minimize memory usage.
+
+    Args:
+        input_path: Path to bootstrap_h_values.csv
+        loess_window: Window size for LOESS smoothing
+        percentiles: Percentiles for selecting representatives
+
+    Returns:
+        Dictionary mapping percentile -> {'iso3': str, 'value': float, 'target': float}
+    """
+    print("      Loading point estimate data (iteration=-1, approach0)...")
+
+    # Read CSV in chunks, filtering to only needed rows
+    chunks = []
+    for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'approach0')]
+        if len(filtered) > 0:
+            chunks.append(filtered)
+
+    df = pd.concat(chunks, ignore_index=True)
+    print(f"      Loaded {len(df):,} rows for country selection")
+
+    # Process each country to get cumulative effects
+    results = []
+    for iso3, group in df.groupby('iso3'):
+        processed = process_group(group, 'approach0', loess_window)
+        # Get 2022 value
+        row_2022 = processed[processed['year'] == 2022]
+        if len(row_2022) > 0:
+            results.append({
+                'iso3': iso3,
+                'h_T_delta_cum': row_2022['h_T_delta_cum'].values[0]
+            })
+
+    df_results = pd.DataFrame(results)
+
+    # Calculate target percentile values
+    values = df_results['h_T_delta_cum'].values
+    targets = {p: np.percentile(values, p) for p in percentiles}
+
+    # Find country closest to each percentile
+    representatives = {}
+    for p, target in targets.items():
+        idx = np.argmin(np.abs(df_results['h_T_delta_cum'].values - target))
+        row = df_results.iloc[idx]
+        representatives[p] = {
+            'iso3': row['iso3'],
+            'value': row['h_T_delta_cum'],
+            'target': target
+        }
+
+    return representatives
+
+
+def process_representative_countries(
+    input_path: Path,
+    representative_iso3s: list,
+    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS
+) -> pd.DataFrame:
+    """Process bootstrap data for representative countries only.
+
+    Args:
+        input_path: Path to bootstrap_h_values.csv
+        representative_iso3s: List of ISO3 country codes to process
+        loess_window: Window size for LOESS smoothing
+
+    Returns:
+        DataFrame with cumulative effects for representative countries
+    """
+    print(f"      Loading data for {len(representative_iso3s)} representative countries...")
+
+    # Convert to set for faster lookup
+    iso3_set = set(representative_iso3s)
+
+    # Read CSV in chunks, filtering to only needed countries
+    chunks = []
+    for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
+        filtered = chunk[chunk['iso3'].isin(iso3_set)]
+        if len(filtered) > 0:
+            chunks.append(filtered)
+
+    df = pd.concat(chunks, ignore_index=True)
+    print(f"      Loaded {len(df):,} rows for representative countries")
+
+    # Process each (iteration, approach, iso3) group
+    groups = df.groupby(['iteration', 'approach', 'iso3'])
+    total_groups = len(groups)
+
+    results = []
+    for idx, ((iteration, approach, iso3), group) in enumerate(groups):
+        if idx % 1000 == 0:
+            print(f"      Progress: {idx:,}/{total_groups:,} groups...")
+
+        processed = process_group(group, approach, loess_window)
+        results.append(processed)
+
+    print(f"      Completed processing {total_groups:,} groups")
+    return pd.concat(results, ignore_index=True)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Calculate cumulative climate effects from bootstrap h(T) values"
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=str,
+        default="data/output/reference/bootstrap_20260216_090212",
+        help="Directory containing bootstrap_h_values.csv",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output directory (default: timestamped in data/output)",
+    )
+    parser.add_argument(
+        "--loess-window",
+        type=int,
+        default=DEFAULT_LOESS_WINDOW_YEARS,
+        help=f"Window size in years for LOESS smoothing (default: {DEFAULT_LOESS_WINDOW_YEARS})",
+    )
+
+    args = parser.parse_args()
+
+    print("=" * 70)
+    print("Calculate Cumulative Climate Effects")
+    print("=" * 70)
+
+    # Input file
+    input_dir = Path(args.input_dir)
+    input_path = input_dir / "bootstrap_h_values.csv"
+    input_file = str(input_path)
+
+    # Output directory
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = create_output_dir(prefix="cumulative_")
+
+    # Phase 1: Select representative countries using point estimate only
+    print("\n[1/4] Selecting representative countries (using point estimate)...")
+    representatives = select_representative_countries_from_file(
+        input_path, args.loess_window
+    )
+
+    # Print selected countries
+    print("      Selected countries:")
+    for p in sorted(representatives.keys()):
+        info = representatives[p]
+        print(f"        P{p}: {info['iso3']} (value={info['value']:.4f}, target={info['target']:.4f})")
+
+    # Save representative countries info
+    rep_rows = []
+    for p in sorted(representatives.keys()):
+        info = representatives[p]
+        rep_rows.append({
+            'percentile': p,
+            'iso3': info['iso3'],
+            'h_T_delta_cum_2022': info['value'],
+            'target_percentile_value': info['target']
+        })
+    rep_df = pd.DataFrame(rep_rows)
+    rep_path = output_dir / 'representative_countries.csv'
+    rep_df.to_csv(rep_path, index=False)
+    print(f"      Saved: {rep_path}")
+
+    # Phase 2: Process full bootstrap data for representative countries only
+    print("\n[2/4] Processing bootstrap data for representative countries...")
+    rep_iso3s = [representatives[p]['iso3'] for p in representatives]
+    df_summary = process_representative_countries(
+        input_path, rep_iso3s, args.loess_window
+    )
+
+    # Save cumulative effects summary
+    print("\n[3/4] Saving cumulative effects summary...")
+
+    # Add header comment to CSV
+    summary_path = output_dir / 'cumulative_h_values_summary.csv'
+    with open(summary_path, 'w') as f:
+        f.write(f"# Input data: {Path(input_file).name}\n")
+    df_summary.to_csv(summary_path, mode='a', index=False)
+    print(f"      Saved: {summary_path} ({len(df_summary):,} rows)")
+
+    # Create visualization
+    print("\n[4/4] Creating visualization...")
+    plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
+
+    print("\n" + "=" * 70)
+    print(f"Results saved to: {output_dir}")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
