@@ -1,0 +1,1711 @@
+Detrended Response Analysis - Comparison of Approaches
+======================================================================
+Input data: Maddison_CRU_dataset.csv
+======================================================================
+
+0: Conjoined OLS Fit
+--------------------------------------------------
+  h1 =     0.014202  (SE: 0.003087)
+  h2 =    -0.000434  (SE: 0.000099)
+  T_opt = 16.36 C
+  R² = 0.1962
+  Total R² = 0.1962
+  Adjusted R² = 0.1481
+  RMSE = 0.058098
+  RMS Imbalance = 0.034712
+  RMS h(T) = 0.088902
+  Imbalance Ratio = 0.3905
+  Observations: 9404
+  Parameters: 532
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1752   (climate response, full temperature)
+    h(T*) detrend: 0.1752   (climate response, detrended temperature)
+    j (trends):    0.3151   (country growth trends)
+    k (year FE):   0.1219   (year fixed effects)
+    cross terms:   -0.4159   (covariance remainder)
+    sum:           0.1962   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.088902
+    RMS j = 0.057302
+    RMS k = 0.111738
+    RMS epsilon = 0.058098
+    Var frac h_T = 0.1752
+    Var frac j = 0.3151
+    Var frac k = 0.1219
+    Var frac epsilon = 0.8038
+    Cov frac h_T-j = -0.3384
+    Cov frac h_T-k = -0.0046
+    Cov frac h_T-epsilon = -0.0000
+    Cov frac j-k = -0.0729
+    Cov frac j-epsilon = 0.0000
+    Cov frac k-epsilon = 0.0000
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0000)
+      C_v  = +0.000015   (share: +0.0037)
+      C_j  = +0.000460   (share: +0.1095)
+      C_k  = +0.000349   (share: +0.0831)
+      C_ε  = +0.003375   (share: +0.8038)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +0.000000e+00
+      Cov(ε, v)  = -7.662367e-17
+      Cov(ε, j)  = +1.045660e-16
+      Cov(ε, k)  = +3.699477e-18
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = +0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000736
+      Σ[v,j]   = -0.000711
+      Σ[v,k]   = -0.000010
+      Σ[v,ε]   = -0.000000
+      Σ[j,j]   = +0.001323
+      Σ[j,k]   = -0.000153
+      Σ[j,ε]   = +0.000000
+      Σ[k,k]   = +0.000512
+      Σ[k,ε]   = +0.000000
+      Σ[ε,ε]   = +0.003375
+
+1: Combined Detrending (Mixed)
+--------------------------------------------------
+  h1 =     0.013943  (SE: 0.002937)
+  h2 =    -0.000409  (SE: 0.000093)
+  T_opt = 17.07 C
+  R² = 0.0973
+  Total R² = 0.1938
+  Adjusted R² = 0.0912
+  RMSE = 0.058187
+  RMS Imbalance = 0.116897
+  RMS h(T) = 0.094350
+  Imbalance Ratio = 1.2390
+  Observations: 9404
+  Parameters: 64
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1670   (climate response, full temperature)
+    h(T*) detrend: 0.0077   (climate response, detrended temperature)
+    j (trends):    0.1069   (country growth trends)
+    k (year FE):   0.0868   (year fixed effects)
+    cross terms:   -0.1669   (covariance remainder)
+    sum:           0.1938   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.005682
+    RMS h_Ttrend = 0.094359
+    RMS h_cross = 0.005399
+    RMS j = 0.028803
+    RMS k = 0.019092
+    RMS epsilon = 0.110877
+    Var frac h_Tstar = 0.0077
+    Var frac h_Ttrend = 0.1645
+    Var frac h_cross = 0.0069
+    Var frac j = 0.1069
+    Var frac k = 0.0868
+    Var frac epsilon = 0.9718
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0123
+    Cov frac h_Tstar-j = 0.0013
+    Cov frac h_Tstar-k = 0.0006
+    Cov frac h_Tstar-epsilon = -0.0003
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = -0.0002
+    Cov frac h_Ttrend-k = 0.0009
+    Cov frac h_Ttrend-epsilon = -0.3301
+    Cov frac h_cross-j = -0.0006
+    Cov frac h_cross-k = -0.0028
+    Cov frac h_cross-epsilon = 0.0001
+    Cov frac j-k = 0.0031
+    Cov frac j-epsilon = -0.0035
+    Cov frac k-epsilon = -0.0009
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000006   (share: +0.0015)
+      C_v  = -0.000000   (share: -0.0001)
+      C_j  = +0.000449   (share: +0.1069)
+      C_k  = +0.000366   (share: +0.0872)
+      C_ε  = +0.003378   (share: +0.8045)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -3.964717e-07
+      Cov(ε, v)  = -6.931398e-04
+      Cov(ε, j)  = -7.393315e-06
+      Cov(ε, k)  = -1.785550e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000010
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000001
+      Σ[Δu,k]  = -0.000005
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000691
+      Σ[v,j]   = -0.000000
+      Σ[v,k]   = +0.000002
+      Σ[v,ε]   = -0.000693
+      Σ[j,j]   = +0.000449
+      Σ[j,k]   = +0.000006
+      Σ[j,ε]   = -0.000007
+      Σ[k,k]   = +0.000364
+      Σ[k,ε]   = -0.000002
+      Σ[ε,ε]   = +0.004081
+
+2: Linear Temperature Detrending
+--------------------------------------------------
+  h1 =     0.015525  (SE: 0.003115)
+  h2 =    -0.000453  (SE: 0.000099)
+  T_opt = 17.13 C
+  R² = 0.0927
+  Total R² = 0.0927
+  Adjusted R² = 0.0866
+  RMSE = 0.061727
+  RMS Imbalance = 0.126284
+  RMS h(T) = 0.105761
+  Imbalance Ratio = 1.1940
+  Observations: 9404
+  Parameters: 64
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.2075   (climate response, full temperature)
+    h(T*) detrend: 0.0095   (climate response, detrended temperature)
+    j (trends):    0.0000   (country growth trends)
+    k (year FE):   0.0921   (year fixed effects)
+    cross terms:   -0.2069   (covariance remainder)
+    sum:           0.0927   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.006327
+    RMS h_Ttrend = 0.105772
+    RMS h_cross = 0.005989
+    RMS j = 0.000000
+    RMS k = 0.027756
+    RMS epsilon = 0.122514
+    Var frac h_Tstar = 0.0095
+    Var frac h_Ttrend = 0.2044
+    Var frac h_cross = 0.0085
+    Var frac j = 0.0000
+    Var frac k = 0.0921
+    Var frac epsilon = 1.1145
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0152
+    Cov frac h_Tstar-j = 0.0000
+    Cov frac h_Tstar-k = 0.0017
+    Cov frac h_Tstar-epsilon = -0.0003
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = 0.0000
+    Cov frac h_Ttrend-k = 0.0018
+    Cov frac h_Ttrend-epsilon = -0.4116
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = -0.0039
+    Cov frac h_cross-epsilon = 0.0001
+    Cov frac j-k = 0.0000
+    Cov frac j-epsilon = 0.0000
+    Cov frac k-epsilon = -0.0018
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000007   (share: +0.0017)
+      C_v  = -0.000001   (share: -0.0003)
+      C_j  = +0.000000   (share: +0.0000)
+      C_k  = +0.000382   (share: +0.0910)
+      C_ε  = +0.003812   (share: +0.9076)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -5.091287e-07
+      Cov(ε, v)  = -8.642055e-04
+      Cov(ε, j)  = +0.000000e+00
+      Cov(ε, k)  = -3.819958e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000012
+      Σ[Δu,v]  = +0.000001
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000005
+      Σ[Δu,ε]  = -0.000001
+      Σ[v,v]   = +0.000858
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000004
+      Σ[v,ε]   = -0.000864
+      Σ[j,j]   = +0.000000
+      Σ[j,k]   = +0.000000
+      Σ[j,ε]   = +0.000000
+      Σ[k,k]   = +0.000387
+      Σ[k,ε]   = -0.000004
+      Σ[ε,ε]   = +0.004680
+
+3: Quadratic GDP Growth Detrending
+--------------------------------------------------
+  h1 =     0.000135  (SE: 0.000318)
+  h2 =    -0.000005  (SE: 0.000010)
+  T_opt = 14.85 C
+  R² = 0.0951
+  Total R² = 0.1918
+  Adjusted R² = 0.0890
+  RMSE = 0.058258
+  RMS Imbalance = 0.034296
+  RMS h(T) = 0.000689
+  Imbalance Ratio = 49.7537
+  Observations: 9404
+  Parameters: 64
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0000   (climate response, full temperature)
+    h(T*) detrend: 0.0000   (climate response, detrended temperature)
+    j (trends):    0.1069   (country growth trends)
+    k (year FE):   0.0849   (year fixed effects)
+    cross terms:   -0.0000   (covariance remainder)
+    sum:           0.1918   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.000689
+    RMS h_Ttrend = 0.000000
+    RMS h_cross = 0.000000
+    RMS j = 0.028803
+    RMS k = 0.018897
+    RMS epsilon = 0.058258
+    Var frac h_Tstar = 0.0000
+    Var frac h_Ttrend = 0.0000
+    Var frac h_cross = 0.0000
+    Var frac j = 0.1069
+    Var frac k = 0.0849
+    Var frac epsilon = 0.8082
+    Cov frac h_Tstar-h_Ttrend = 0.0000
+    Cov frac h_Tstar-h_cross = 0.0000
+    Cov frac h_Tstar-j = 0.0002
+    Cov frac h_Tstar-k = -0.0000
+    Cov frac h_Tstar-epsilon = 0.0000
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = 0.0000
+    Cov frac h_Ttrend-k = 0.0000
+    Cov frac h_Ttrend-epsilon = 0.0000
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = 0.0000
+    Cov frac h_cross-epsilon = 0.0000
+    Cov frac j-k = 0.0033
+    Cov frac j-epsilon = -0.0035
+    Cov frac k-epsilon = 0.0000
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0001)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000449   (share: +0.1069)
+      C_k  = +0.000364   (share: +0.0866)
+      C_ε  = +0.003387   (share: +0.8065)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +5.917053e-20
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = -7.245636e-06
+      Cov(ε, k)  = +1.336276e-18
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000449
+      Σ[j,k]   = +0.000007
+      Σ[j,ε]   = -0.000007
+      Σ[k,k]   = +0.000357
+      Σ[k,ε]   = +0.000000
+      Σ[ε,ε]   = +0.003394
+
+4: Combined Quadratic Detrending
+--------------------------------------------------
+  h1 =     0.014177  (SE: 0.003015)
+  h2 =    -0.000424  (SE: 0.000097)
+  T_opt = 16.72 C
+  R² = 0.0973
+  Total R² = 0.1938
+  Adjusted R² = 0.0912
+  RMSE = 0.058188
+  RMS Imbalance = 0.115022
+  RMS h(T) = 0.092411
+  Imbalance Ratio = 1.2447
+  Observations: 9404
+  Parameters: 64
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1722   (climate response, full temperature)
+    h(T*) detrend: 0.0074   (climate response, detrended temperature)
+    j (trends):    0.1069   (country growth trends)
+    k (year FE):   0.0869   (year fixed effects)
+    cross terms:   -0.1722   (covariance remainder)
+    sum:           0.1938   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.005560
+    RMS h_Ttrend = 0.092417
+    RMS h_cross = 0.005357
+    RMS j = 0.028803
+    RMS k = 0.019100
+    RMS epsilon = 0.109225
+    Var frac h_Tstar = 0.0074
+    Var frac h_Ttrend = 0.1698
+    Var frac h_cross = 0.0068
+    Var frac j = 0.1069
+    Var frac k = 0.0869
+    Var frac epsilon = 0.9768
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0119
+    Cov frac h_Tstar-j = 0.0000
+    Cov frac h_Tstar-k = 0.0009
+    Cov frac h_Tstar-epsilon = -0.0003
+    Cov frac h_Ttrend-h_cross = -0.0000
+    Cov frac h_Ttrend-j = 0.0026
+    Cov frac h_Ttrend-k = 0.0007
+    Cov frac h_Ttrend-epsilon = -0.3403
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = -0.0032
+    Cov frac h_cross-epsilon = 0.0001
+    Cov frac j-k = 0.0032
+    Cov frac j-epsilon = -0.0058
+    Cov frac k-epsilon = -0.0007
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000005   (share: +0.0012)
+      C_v  = +0.000006   (share: +0.0014)
+      C_j  = +0.000449   (share: +0.1069)
+      C_k  = +0.000367   (share: +0.0873)
+      C_ε  = +0.003373   (share: +0.8032)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -4.316422e-07
+      Cov(ε, v)  = -7.145937e-04
+      Cov(ε, j)  = -1.228285e-05
+      Cov(ε, k)  = -1.551480e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000010
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000005
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000713
+      Σ[v,j]   = +0.000006
+      Σ[v,k]   = +0.000002
+      Σ[v,ε]   = -0.000715
+      Σ[j,j]   = +0.000449
+      Σ[j,k]   = +0.000007
+      Σ[j,ε]   = -0.000012
+      Σ[k,k]   = +0.000365
+      Σ[k,ε]   = -0.000002
+      Σ[ε,ε]   = +0.004102
+
+5: Precomputed k Quadratic
+--------------------------------------------------
+  h1 =     0.012241  (SE: 0.002816)
+  h2 =    -0.000352  (SE: 0.000087)
+  T_opt = 17.37 C
+  R² = 0.0021
+  Total R² = 0.1958
+  Adjusted R² = 0.0020
+  RMSE = 0.058113
+  RMS Imbalance = 0.108118
+  RMS h(T) = 0.085411
+  Imbalance Ratio = 1.2659
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1304   (climate response, full temperature)
+    h(T*) detrend: 0.0055   (climate response, detrended temperature)
+    j (trends):    0.1039   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   -0.1288   (covariance remainder)
+    sum:           0.1958   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.004800
+    RMS h_Ttrend = 0.085417
+    RMS h_cross = 0.004452
+    RMS j = 0.020892
+    RMS k = 0.027563
+    RMS epsilon = 0.103272
+    Var frac h_Tstar = 0.0055
+    Var frac h_Ttrend = 0.1286
+    Var frac h_cross = 0.0047
+    Var frac j = 0.1039
+    Var frac k = 0.0902
+    Var frac epsilon = 0.9329
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0085
+    Cov frac h_Tstar-j = -0.0000
+    Cov frac h_Tstar-k = 0.0008
+    Cov frac h_Tstar-epsilon = -0.0002
+    Cov frac h_Ttrend-h_cross = -0.0000
+    Cov frac h_Ttrend-j = -0.0028
+    Cov frac h_Ttrend-k = 0.0017
+    Cov frac h_Ttrend-epsilon = -0.2573
+    Cov frac h_cross-j = -0.0000
+    Cov frac h_cross-k = -0.0020
+    Cov frac h_cross-epsilon = 0.0000
+    Cov frac j-k = -0.0014
+    Cov frac j-epsilon = 0.0028
+    Cov frac k-epsilon = 0.0010
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000004   (share: +0.0010)
+      C_v  = -0.000002   (share: -0.0005)
+      C_j  = +0.000433   (share: +0.1032)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003385   (share: +0.8061)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -4.281423e-07
+      Cov(ε, v)  = -5.403252e-04
+      Cov(ε, j)  = +5.973225e-06
+      Cov(ε, k)  = +2.038847e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000007
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000000
+      Σ[Δu,k]  = -0.000003
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000540
+      Σ[v,j]   = -0.000006
+      Σ[v,k]   = +0.000004
+      Σ[v,ε]   = -0.000540
+      Σ[j,j]   = +0.000436
+      Σ[j,k]   = -0.000003
+      Σ[j,ε]   = +0.000006
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000002
+      Σ[ε,ε]   = +0.003918
+
+5a: Precomputed k Linear Temp
+--------------------------------------------------
+  h1 =     0.013627  (SE: 0.002917)
+  h2 =    -0.000387  (SE: 0.000090)
+  T_opt = 17.62 C
+  R² = 0.0024
+  Total R² = 0.0924
+  Adjusted R² = 0.0023
+  RMSE = 0.061738
+  RMS Imbalance = 0.118036
+  RMS h(T) = 0.097456
+  Imbalance Ratio = 1.2112
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1646   (climate response, full temperature)
+    h(T*) detrend: 0.0073   (climate response, detrended temperature)
+    j (trends):    0.0000   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   -0.1624   (covariance remainder)
+    sum:           0.0924   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.005553
+    RMS h_Ttrend = 0.097466
+    RMS h_cross = 0.005109
+    RMS j = 0.000000
+    RMS k = 0.027563
+    RMS epsilon = 0.115424
+    Var frac h_Tstar = 0.0073
+    Var frac h_Ttrend = 0.1622
+    Var frac h_cross = 0.0062
+    Var frac j = 0.0000
+    Var frac k = 0.0902
+    Var frac epsilon = 1.0754
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0114
+    Cov frac h_Tstar-j = 0.0000
+    Cov frac h_Tstar-k = 0.0016
+    Cov frac h_Tstar-epsilon = -0.0003
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = 0.0000
+    Cov frac h_Ttrend-k = 0.0019
+    Cov frac h_Ttrend-epsilon = -0.3300
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = -0.0028
+    Cov frac h_cross-epsilon = 0.0001
+    Cov frac j-k = 0.0000
+    Cov frac j-epsilon = 0.0000
+    Cov frac k-epsilon = -0.0007
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000006   (share: +0.0015)
+      C_v  = -0.000007   (share: -0.0017)
+      C_j  = +0.000000   (share: +0.0000)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003821   (share: +0.9099)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -4.846642e-07
+      Cov(ε, v)  = -6.929158e-04
+      Cov(ε, j)  = +0.000000e+00
+      Cov(ε, k)  = -1.495981e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000009
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000003
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000681
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000004
+      Σ[v,ε]   = -0.000693
+      Σ[j,j]   = +0.000000
+      Σ[j,k]   = +0.000000
+      Σ[j,ε]   = +0.000000
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = -0.000001
+      Σ[ε,ε]   = +0.004516
+
+5b: Precomputed k GDP Only
+--------------------------------------------------
+  h1 =     0.000043  (SE: 0.000155)
+  h2 =    -0.000002  (SE: 0.000006)
+  T_opt = 12.21 C
+  R² = 0.0000
+  Total R² = 0.1942
+  Adjusted R² = -0.0001
+  RMSE = 0.058173
+  RMS Imbalance = 0.034499
+  RMS h(T) = 0.000166
+  Imbalance Ratio = 207.9871
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0000   (climate response, full temperature)
+    h(T*) detrend: 0.0000   (climate response, detrended temperature)
+    j (trends):    0.1039   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0000   (covariance remainder)
+    sum:           0.1942   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.000166
+    RMS h_Ttrend = 0.000000
+    RMS h_cross = 0.000000
+    RMS j = 0.020892
+    RMS k = 0.027563
+    RMS epsilon = 0.058173
+    Var frac h_Tstar = 0.0000
+    Var frac h_Ttrend = 0.0000
+    Var frac h_cross = 0.0000
+    Var frac j = 0.1039
+    Var frac k = 0.0902
+    Var frac epsilon = 0.8058
+    Cov frac h_Tstar-h_Ttrend = 0.0000
+    Cov frac h_Tstar-h_cross = 0.0000
+    Cov frac h_Tstar-j = 0.0001
+    Cov frac h_Tstar-k = -0.0000
+    Cov frac h_Tstar-epsilon = 0.0000
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = 0.0000
+    Cov frac h_Ttrend-k = 0.0000
+    Cov frac h_Ttrend-epsilon = 0.0000
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = 0.0000
+    Cov frac h_cross-epsilon = 0.0000
+    Cov frac j-k = -0.0014
+    Cov frac j-epsilon = -0.0001
+    Cov frac k-epsilon = 0.0015
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0001)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000433   (share: +0.1032)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003387   (share: +0.8065)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +4.535094e-09
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = -2.831872e-07
+      Cov(ε, k)  = +3.054788e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000436
+      Σ[j,k]   = -0.000003
+      Σ[j,ε]   = -0.000000
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000003
+      Σ[ε,ε]   = +0.003384
+
+5c: Precomputed k Combined
+--------------------------------------------------
+  h1 =     0.011727  (SE: 0.002746)
+  h2 =    -0.000337  (SE: 0.000085)
+  T_opt = 17.42 C
+  R² = 0.0020
+  Total R² = 0.1958
+  Adjusted R² = 0.0019
+  RMSE = 0.058116
+  RMS Imbalance = 0.105036
+  RMS h(T) = 0.082220
+  Imbalance Ratio = 1.2775
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.1201   (climate response, full temperature)
+    h(T*) detrend: 0.0054   (climate response, detrended temperature)
+    j (trends):    0.1039   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   -0.1185   (covariance remainder)
+    sum:           0.1958   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.004779
+    RMS h_Ttrend = 0.082228
+    RMS h_cross = 0.004449
+    RMS j = 0.020892
+    RMS k = 0.027563
+    RMS epsilon = 0.100652
+    Var frac h_Tstar = 0.0054
+    Var frac h_Ttrend = 0.1183
+    Var frac h_cross = 0.0047
+    Var frac j = 0.1039
+    Var frac k = 0.0902
+    Var frac epsilon = 0.9227
+    Cov frac h_Tstar-h_Ttrend = 0.0002
+    Cov frac h_Tstar-h_cross = -0.0085
+    Cov frac h_Tstar-j = 0.0005
+    Cov frac h_Tstar-k = 0.0013
+    Cov frac h_Tstar-epsilon = -0.0002
+    Cov frac h_Ttrend-h_cross = 0.0000
+    Cov frac h_Ttrend-j = -0.0035
+    Cov frac h_Ttrend-k = 0.0016
+    Cov frac h_Ttrend-epsilon = -0.2368
+    Cov frac h_cross-j = 0.0000
+    Cov frac h_cross-k = -0.0024
+    Cov frac h_cross-epsilon = 0.0000
+    Cov frac j-k = -0.0014
+    Cov frac j-epsilon = 0.0030
+    Cov frac k-epsilon = 0.0010
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000006   (share: +0.0013)
+      C_v  = -0.000004   (share: -0.0010)
+      C_j  = +0.000433   (share: +0.1032)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003386   (share: +0.8062)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -3.300057e-07
+      Cov(ε, v)  = -4.972116e-04
+      Cov(ε, j)  = +6.275878e-06
+      Cov(ε, k)  = +2.013055e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000007
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000001
+      Σ[Δu,k]  = -0.000002
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000497
+      Σ[v,j]   = -0.000007
+      Σ[v,k]   = +0.000003
+      Σ[v,ε]   = -0.000497
+      Σ[j,j]   = +0.000436
+      Σ[j,k]   = -0.000003
+      Σ[j,ε]   = +0.000006
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000002
+      Σ[ε,ε]   = +0.003875
+
+5d: Precomputed k GDP Response
+--------------------------------------------------
+  h1 =    -0.000000  (SE: 0.000000)
+  h2 =     0.000000  (SE: 0.000000)
+  f1 =     3.8421  (SE: 0.4388)  [GDP scaling]
+  Y_ref = 19834.65
+  T_opt = N/A
+  R² = 0.0038
+  Total R² = 0.1973
+  Adjusted R² = 0.0037
+  RMSE = 0.058062
+  RMS Imbalance = 0.034577
+  RMS h(T) = 0.003606
+  Imbalance Ratio = 9.5881
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0030   (climate response, full temperature)
+    j (trends):    0.1039   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0001   (covariance remainder)
+    sum:           0.1973   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS g_h = 0.003606
+    RMS j = 0.020892
+    RMS k = 0.027563
+    RMS epsilon = 0.058062
+    Var frac g_h = 0.0030
+    Var frac j = 0.1039
+    Var frac k = 0.0902
+    Var frac epsilon = 0.8026
+    Cov frac g_h-j = 0.0054
+    Cov frac g_h-k = -0.0004
+    Cov frac g_h-epsilon = 0.0003
+    Cov frac j-k = -0.0014
+    Cov frac j-epsilon = -0.0054
+    Cov frac k-epsilon = 0.0019
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0000)
+      C_v  = +0.000023   (share: +0.0056)
+      C_j  = +0.000433   (share: +0.1032)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003364   (share: +0.8010)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +0.000000e+00
+      Cov(ε, v)  = +5.283690e-07
+      Cov(ε, j)  = -1.129108e-05
+      Cov(ε, k)  = +3.909879e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = +0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000012
+      Σ[v,j]   = +0.000011
+      Σ[v,k]   = -0.000001
+      Σ[v,ε]   = +0.000001
+      Σ[j,j]   = +0.000436
+      Σ[j,k]   = -0.000003
+      Σ[j,ε]   = -0.000011
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000004
+      Σ[ε,ε]   = +0.003371
+
+6: Precomputed k LOESS
+--------------------------------------------------
+  h1 =     0.014978  (SE: 0.002794)
+  h2 =    -0.000469  (SE: 0.000088)
+  T_opt = 15.97 C
+  R² = 0.0007
+  Total R² = 0.2319
+  Adjusted R² = 0.0005
+  RMSE = 0.056796
+  RMS Imbalance = 0.115081
+  RMS h(T) = 0.089380
+  Imbalance Ratio = 1.2876
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.2019   (climate response, full temperature)
+    h(T*) detrend: 0.0078   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   -0.1916   (covariance remainder)
+    sum:           0.2319   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_Tstar = 0.005732
+    RMS h_Ttrend = 0.089431
+    RMS h_cross = 0.005675
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.108324
+    Var frac h_Tstar = 0.0078
+    Var frac h_Ttrend = 0.1993
+    Var frac h_cross = 0.0077
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.9739
+    Cov frac h_Tstar-h_Ttrend = -0.0007
+    Cov frac h_Tstar-h_cross = -0.0129
+    Cov frac h_Tstar-j = -0.0003
+    Cov frac h_Tstar-k = -0.0010
+    Cov frac h_Tstar-epsilon = 0.0006
+    Cov frac h_Ttrend-h_cross = 0.0008
+    Cov frac h_Ttrend-j = 0.0147
+    Cov frac h_Ttrend-k = 0.0005
+    Cov frac h_Ttrend-epsilon = -0.4069
+    Cov frac h_cross-j = 0.0001
+    Cov frac h_cross-k = -0.0001
+    Cov frac h_cross-epsilon = -0.0009
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = -0.0048
+    Cov frac k-epsilon = 0.0127
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000008   (share: +0.0018)
+      C_v  = +0.000015   (share: +0.0035)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003252   (share: +0.7743)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -5.610749e-07
+      Cov(ε, v)  = -8.543698e-04
+      Cov(ε, j)  = -9.981798e-06
+      Cov(ε, k)  = +2.663199e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000011
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000000
+      Σ[Δu,k]  = -0.000002
+      Σ[Δu,ε]  = -0.000001
+      Σ[v,v]   = +0.000837
+      Σ[v,j]   = +0.000031
+      Σ[v,k]   = +0.000001
+      Σ[v,ε]   = -0.000854
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = -0.000010
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000027
+      Σ[ε,ε]   = +0.004090
+
+6b: T Only LOESS
+--------------------------------------------------
+  h1 = -0.000684  (SE: 0.000152)  [actual T linear]
+  h2 = 0.000025  (SE: 0.000006)  [actual T quadratic]
+  h3 = 0.000000  (SE: 0.000000)  [departure linear]
+  h4 = 0.000000  (SE: 0.000000)  [departure quadratic]
+  T_opt = 13.86 C  [optimal actual T]
+  T_dep_opt = N/A
+  R² = 0.0002
+  Total R² = 0.2315
+  Adjusted R² = 0.0001
+  RMSE = 0.056809
+  RMS Imbalance = 0.035666
+  RMS h(T) = 0.003035
+  Imbalance Ratio = 11.7515
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0007   (climate response, full temperature)
+    h(T*) detrend: 0.0007   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0093   (covariance remainder)
+    sum:           0.2315   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.003035
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056809
+    Var frac h_T = 0.0007
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7684
+    Cov frac h_T-j = -0.0023
+    Cov frac h_T-k = 0.0001
+    Cov frac h_T-epsilon = -0.0005
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0122
+    Cov frac k-epsilon = 0.0118
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0000)
+      C_v  = -0.000003   (share: -0.0006)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003276   (share: +0.7802)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +0.000000e+00
+      Cov(ε, v)  = -1.098965e-06
+      Cov(ε, j)  = +2.555729e-05
+      Cov(ε, k)  = +2.485446e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = +0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000003
+      Σ[v,j]   = -0.000005
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = -0.000001
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000026
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000025
+      Σ[ε,ε]   = +0.003227
+
+6c: Departure/Trend LOESS
+--------------------------------------------------
+  h1 = 0.001699  (SE: 0.001562)  [departure linear]
+  h2 = -0.005479  (SE: 0.001654)  [departure quadratic]
+  h3 = 0.000000  (SE: 0.000000)  [trend T linear]
+  h4 = 0.000000  (SE: 0.000000)  [trend T quadratic]
+  T_dep_opt = 0.16 C  [optimal departure]
+  f2 = N/A
+  R² = -0.0012
+  Total R² = 0.2304
+  Adjusted R² = -0.0013
+  RMSE = 0.056849
+  RMS Imbalance = 0.037198
+  RMS h(T) = 0.002174
+  Imbalance Ratio = 17.1143
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0010   (climate response, full temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0079   (covariance remainder)
+    sum:           0.2304   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_response = 0.002174
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056849
+    Var frac h_response = 0.0010
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7685
+    Cov frac h_response-j = -0.0012
+    Cov frac h_response-k = 0.0004
+    Cov frac h_response-epsilon = -0.0008
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0110
+    Cov frac k-epsilon = 0.0115
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000001   (share: +0.0002)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003273   (share: +0.7793)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -1.714257e-06
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = +2.306234e-05
+      Cov(ε, k)  = +2.420968e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000004
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000002
+      Σ[Δu,k]  = +0.000001
+      Σ[Δu,ε]  = -0.000002
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000023
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000024
+      Σ[ε,ε]   = +0.003227
+
+6e: T/Quadratic Departure LOESS
+--------------------------------------------------
+  h1 = 0.013392  (SE: 0.002863)  [actual T linear]
+  h2 = -0.000434  (SE: 0.000089)  [actual T quadratic]
+  h3 = 0.000000  (SE: 0.000000)  [departure linear]
+  h4 = -0.004215  (SE: 0.001672)  [departure quadratic]
+  T_opt = 15.42 C  [optimal actual T]
+  T_dep_opt = 0.00 C  [optimal departure]
+  R² = 0.0013
+  Total R² = 0.2324
+  Adjusted R² = 0.0011
+  RMSE = 0.056777
+  RMS Imbalance = 0.037198
+  RMS h(T) = 0.003586
+  Imbalance Ratio = 10.3723
+  Observations: 9404
+  Parameters: 3
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0029   (climate response, full temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0079   (covariance remainder)
+    sum:           0.2324   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_response = 0.003586
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056777
+    Var frac h_response = 0.0029
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7665
+    Cov frac h_response-j = -0.0010
+    Cov frac h_response-k = -0.0006
+    Cov frac h_response-epsilon = -0.0008
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0108
+    Cov frac k-epsilon = 0.0126
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000007   (share: +0.0018)
+      C_v  = +0.000021   (share: +0.0049)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003246   (share: +0.7729)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -1.907360e-06
+      Cov(ε, v)  = -7.533802e-04
+      Cov(ε, j)  = -2.097624e-05
+      Cov(ε, k)  = +2.659789e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000012
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000002
+      Σ[Δu,k]  = -0.000001
+      Σ[Δu,ε]  = -0.000002
+      Σ[v,v]   = +0.000730
+      Σ[v,j]   = +0.000044
+      Σ[v,k]   = -0.000000
+      Σ[v,ε]   = -0.000753
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = -0.000021
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000027
+      Σ[ε,ε]   = +0.003995
+
+8: Piecewise Quadratic LOESS
+--------------------------------------------------
+  h2 = -0.000262  (SE: 0.000060)  [curvature below T_opt]
+  h4 = -0.001713  (SE: 0.000448)  [curvature above T_opt]
+  T_opt = 22.7255  (SE: 0.8696)
+  R² = 0.0009
+  Total R² = 0.2321
+  Adjusted R² = 0.0007
+  RMSE = 0.056789
+  RMS Imbalance = 0.043245
+  RMS h(T) = 0.003398
+  Imbalance Ratio = 12.7275
+  Observations: 9404
+  Parameters: 3
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0027   (climate response, full temperature)
+    h(T*) detrend: 0.0027   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0078   (covariance remainder)
+    sum:           0.2321   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.003398
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056789
+    Var frac h_T = 0.0027
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7661
+    Cov frac h_T-j = -0.0001
+    Cov frac h_T-k = -0.0013
+    Cov frac h_T-epsilon = -0.0002
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0099
+    Cov frac k-epsilon = 0.0133
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000008   (share: +0.0020)
+      C_v  = -0.000022   (share: -0.0052)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003287   (share: +0.7828)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -2.563653e-06
+      Cov(ε, v)  = -1.009912e-03
+      Cov(ε, j)  = +7.382739e-05
+      Cov(ε, k)  = +2.073810e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000012
+      Σ[Δu,v]  = +0.000002
+      Σ[Δu,j]  = -0.000000
+      Σ[Δu,k]  = -0.000003
+      Σ[Δu,ε]  = -0.000003
+      Σ[v,v]   = +0.001032
+      Σ[v,j]   = -0.000053
+      Σ[v,k]   = +0.000007
+      Σ[v,ε]   = -0.001010
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000074
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000021
+      Σ[ε,ε]   = +0.004205
+
+8a: Shared T_opt Total/Trend LOESS
+--------------------------------------------------
+  h2 = -0.000469  (SE: 0.000084)  [curvature below T_opt]
+  h4 = 0.000000  (SE: 0.000000)  [curvature above T_opt]
+  T_opt = 15.9661  (SE: 1.7185)
+  R² = 0.0007
+  Total R² = 0.2319
+  Adjusted R² = 0.0005
+  RMSE = 0.056796
+  RMS Imbalance = 0.037198
+  RMS h(T) = 0.003268
+  Imbalance Ratio = 11.3814
+  Observations: 9404
+  Parameters: 2
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0025   (climate response, full temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0078   (covariance remainder)
+    sum:           0.2319   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_response = 0.003268
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056796
+    Var frac h_response = 0.0025
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7663
+    Cov frac h_response-j = -0.0001
+    Cov frac h_response-k = -0.0012
+    Cov frac h_response-epsilon = -0.0002
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0099
+    Cov frac k-epsilon = 0.0132
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000008   (share: +0.0018)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003266   (share: +0.7777)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -3.383768e-07
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = +2.086679e-05
+      Cov(ε, k)  = +2.764546e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000011
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000000
+      Σ[Δu,k]  = -0.000002
+      Σ[Δu,ε]  = -0.000000
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000021
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000028
+      Σ[ε,ε]   = +0.003218
+
+8b: Modulated Response LOESS
+--------------------------------------------------
+  f1 =   -18.879684  (SE: nan)  [linear modulation]
+  f2 =    20.000000  (SE: nan)  [quadratic modulation]
+  h1 =    -0.000079  (SE: 0.000012)
+  h2 =     0.000004  (SE: 0.000001)
+  T_opt = 10.09 C
+  R² = 0.0023
+  Total R² = 0.2331
+  Adjusted R² = 0.0020
+  RMSE = 0.056749
+  RMS Imbalance = 0.037255
+  RMS h(T) = 0.004009
+  Imbalance Ratio = 9.2937
+  Observations: 9404
+  Parameters: 4
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0038   (climate response, full temperature)
+    h(T*) detrend: 0.0038   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0078   (covariance remainder)
+    sum:           0.2331   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.004009
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056749
+    Var frac h_T = 0.0038
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7650
+    Cov frac h_T-j = -0.0032
+    Cov frac h_T-k = -0.0006
+    Cov frac h_T-epsilon = -0.0002
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0130
+    Cov frac k-epsilon = 0.0126
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000009   (share: +0.0020)
+      C_v  = -0.000001   (share: -0.0002)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003266   (share: +0.7777)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -5.072178e-07
+      Cov(ε, v)  = +1.317652e-07
+      Cov(ε, j)  = +2.725475e-05
+      Cov(ε, k)  = +2.640892e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000015
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = -0.000005
+      Σ[Δu,k]  = -0.000001
+      Σ[Δu,ε]  = -0.000001
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = -0.000002
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000027
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000026
+      Σ[ε,ε]   = +0.003213
+
+8c: Linear Modulated LOESS
+--------------------------------------------------
+  f1 =    -1.606236  (SE: 0.736155)  [linear modulation]
+  h1 =    -0.000717  (SE: 0.000124)
+  h2 =     0.000028  (SE: 0.000005)
+  T_opt = 12.74 C
+  R² = 0.0011
+  Total R² = 0.2322
+  Adjusted R² = 0.0008
+  RMSE = 0.056785
+  RMS Imbalance = 0.036096
+  RMS h(T) = 0.003461
+  Imbalance Ratio = 10.4309
+  Observations: 9404
+  Parameters: 3
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0022   (climate response, full temperature)
+    h(T*) detrend: 0.0022   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0085   (covariance remainder)
+    sum:           0.2322   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.003461
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056785
+    Var frac h_T = 0.0022
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7675
+    Cov frac h_T-j = -0.0035
+    Cov frac h_T-k = -0.0005
+    Cov frac h_T-epsilon = -0.0010
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0133
+    Cov frac k-epsilon = 0.0125
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000002   (share: +0.0005)
+      C_v  = -0.000004   (share: -0.0009)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003275   (share: +0.7799)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -6.016113e-07
+      Cov(ε, v)  = -1.482453e-06
+      Cov(ε, j)  = +2.791778e-05
+      Cov(ε, k)  = +2.617692e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000004
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = -0.000001
+      Σ[Δu,ε]  = -0.000001
+      Σ[v,v]   = +0.000005
+      Σ[v,j]   = -0.000008
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = -0.000001
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000028
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000026
+      Σ[ε,ε]   = +0.003223
+
+8d: Quadratic Modulated LOESS
+--------------------------------------------------
+  f2 =     1.556371  (SE: 1.028515)  [quadratic modulation]
+  h1 =    -0.000556  (SE: 0.000108)
+  h2 =     0.000021  (SE: 0.000005)
+  T_opt = 13.51 C
+  R² = 0.0007
+  Total R² = 0.2319
+  Adjusted R² = 0.0005
+  RMSE = 0.056796
+  RMS Imbalance = 0.036048
+  RMS h(T) = 0.003275
+  Imbalance Ratio = 11.0062
+  Observations: 9404
+  Parameters: 3
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0013   (climate response, full temperature)
+    h(T*) detrend: 0.0013   (climate response, detrended temperature)
+    j (trends):    0.1313   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0090   (covariance remainder)
+    sum:           0.2319   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS h_T = 0.003275
+    RMS j = 0.023665
+    RMS k = 0.027563
+    RMS epsilon = 0.056796
+    Var frac h_T = 0.0013
+    Var frac j = 0.1313
+    Var frac k = 0.0902
+    Var frac epsilon = 0.7680
+    Cov frac h_T-j = -0.0032
+    Cov frac h_T-k = 0.0005
+    Cov frac h_T-epsilon = -0.0007
+    Cov frac j-k = -0.0120
+    Cov frac j-epsilon = 0.0130
+    Cov frac k-epsilon = 0.0114
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000001   (share: +0.0001)
+      C_v  = -0.000002   (share: -0.0005)
+      C_j  = +0.000547   (share: +0.1302)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003275   (share: +0.7799)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = -7.402044e-07
+      Cov(ε, v)  = -7.290349e-07
+      Cov(ε, j)  = +2.739804e-05
+      Cov(ε, k)  = +2.402151e-05
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000002
+      Σ[Δu,v]  = +0.000001
+      Σ[Δu,j]  = -0.000002
+      Σ[Δu,k]  = +0.000001
+      Σ[Δu,ε]  = -0.000001
+      Σ[v,v]   = +0.000002
+      Σ[v,j]   = -0.000005
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = -0.000001
+      Σ[j,j]   = +0.000551
+      Σ[j,k]   = -0.000025
+      Σ[j,ε]   = +0.000027
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000024
+      Σ[ε,ε]   = +0.003225
+
+nocr0: No Climate Response (Joint)
+--------------------------------------------------
+  h1 =     0.000000  (SE: 0.000000)
+  h2 =     0.000000  (SE: 0.000000)
+  T_opt = N/A
+  R² = 0.1942
+  Total R² = 0.1942
+  Adjusted R² = 0.1462
+  RMSE = 0.058171
+  Observations: 9404
+  Parameters: 530
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0000   (climate response, full temperature)
+    j (trends):    0.1566   (country growth trends)
+    k (year FE):   0.1263   (year fixed effects)
+    cross terms:   -0.0886   (covariance remainder)
+    sum:           0.1942   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS j = 0.031721
+    RMS k = 0.023045
+    RMS epsilon = 0.058171
+    Var frac j = 0.1566
+    Var frac k = 0.1263
+    Var frac epsilon = 0.8058
+    Cov frac j-k = -0.0886
+    Cov frac j-epsilon = -0.0000
+    Cov frac k-epsilon = 0.0000
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0000)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000471   (share: +0.1123)
+      C_k  = +0.000344   (share: +0.0820)
+      C_ε  = +0.003384   (share: +0.8058)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +0.000000e+00
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = -3.227634e-18
+      Cov(ε, k)  = +6.126134e-18
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = +0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000658
+      Σ[j,k]   = -0.000186
+      Σ[j,ε]   = -0.000000
+      Σ[k,k]   = +0.000530
+      Σ[k,ε]   = +0.000000
+      Σ[ε,ε]   = +0.003384
+
+nocr5: No Climate Response (Precomputed k)
+--------------------------------------------------
+  h1 =     0.000000  (SE: 0.000000)
+  h2 =     0.000000  (SE: 0.000000)
+  T_opt = N/A
+  R² = 0.1942
+  Total R² = 0.1942
+  Adjusted R² = 0.1458
+  RMSE = 0.058173
+  Observations: 9404
+  Parameters: 533
+  Key Variance Ratios (Var(component) / Var(dy)):
+    h(T) total:    0.0000   (climate response, full temperature)
+    j (trends):    0.1039   (country growth trends)
+    k (year FE):   0.0902   (year fixed effects)
+    cross terms:   0.0000   (covariance remainder)
+    sum:           0.1942   (= Total R²)
+  Detailed Variance Decomposition:
+    RMS dy = 0.064804
+    RMS j = 0.020892
+    RMS k = 0.027563
+    RMS epsilon = 0.058173
+    Var frac j = 0.1039
+    Var frac k = 0.0902
+    Var frac epsilon = 0.8058
+    Cov frac j-k = -0.0014
+    Cov frac j-epsilon = -0.0000
+    Cov frac k-epsilon = 0.0014
+    Sum check = 1.000000
+  Variance Attribution (5-component with covariance allocation):
+    Identity: Δy = Δu + v + j + k + ε  (exact, in-sample)
+    Components:
+      Δu = h(T) - h(T_trend)  [increment from actual vs trended T]
+      v  = h(T_trend)         [baseline climate at trended T]
+      j  = j_i(t)             [country growth trends]
+      k  = k(t)               [time fixed effects]
+      ε  = residuals          [unexplained variation]
+    Var(Δy) = 0.004200
+    Contributions (C_x = row-sum of covariance matrix Σ):
+      C_Δu = +0.000000   (share: +0.0000)
+      C_v  = +0.000000   (share: +0.0000)
+      C_j  = +0.000433   (share: +0.1032)
+      C_k  = +0.000379   (share: +0.0902)
+      C_ε  = +0.003387   (share: +0.8066)
+      Sum  = 0.004200   (should equal Var(Δy) exactly)
+    Orthogonality checks (residual vs fitted, should be ~0 for OLS):
+      Cov(ε, Δu) = +0.000000e+00
+      Cov(ε, v)  = +0.000000e+00
+      Cov(ε, j)  = -5.806085e-20
+      Cov(ε, k)  = +3.021389e-06
+    Covariance matrix Σ (all 15 unique entries, ddof=0 for exact sum):
+      Σ[Δu,Δu] = +0.000000
+      Σ[Δu,v]  = +0.000000
+      Σ[Δu,j]  = +0.000000
+      Σ[Δu,k]  = +0.000000
+      Σ[Δu,ε]  = +0.000000
+      Σ[v,v]   = +0.000000
+      Σ[v,j]   = +0.000000
+      Σ[v,k]   = +0.000000
+      Σ[v,ε]   = +0.000000
+      Σ[j,j]   = +0.000436
+      Σ[j,k]   = -0.000003
+      Σ[j,ε]   = -0.000000
+      Σ[k,k]   = +0.000379
+      Σ[k,ε]   = +0.000003
+      Σ[ε,ε]   = +0.003384
+

@@ -222,21 +222,17 @@ def generate_variance_decomposition_table(
 
     # Define the metrics to include in the table (in order)
     # These correspond to var_attrib keys, normalized by var_dy
+    # Using combined h(T) instead of separated h(T)-h(Ttr) and h(Ttr)
     variance_metrics = [
-        ('Sigma_Delta_u_Delta_u', 'Var(h(T)-h(Ttr))/Var(Δy)'),
-        ('Sigma_v_v', 'Var(h(Ttr))/Var(Δy)'),
+        ('Sigma_h_h', 'Var(h(T))/Var(Δy)'),
         ('Sigma_j_j', 'Var(j)/Var(Δy)'),
         ('Sigma_k_k', 'Var(k)/Var(Δy)'),
         ('Sigma_epsilon_epsilon', 'Var(ε)/Var(Δy)'),
     ]
     covariance_metrics = [
-        ('Sigma_Delta_u_v', '2Cov(h(T)-h(Ttr),h(Ttr))/Var(Δy)'),
-        ('Sigma_Delta_u_j', '2Cov(h(T)-h(Ttr),j)/Var(Δy)'),
-        ('Sigma_Delta_u_k', '2Cov(h(T)-h(Ttr),k)/Var(Δy)'),
-        ('Sigma_Delta_u_epsilon', '2Cov(h(T)-h(Ttr),ε)/Var(Δy)'),
-        ('Sigma_v_j', '2Cov(h(Ttr),j)/Var(Δy)'),
-        ('Sigma_v_k', '2Cov(h(Ttr),k)/Var(Δy)'),
-        ('Sigma_v_epsilon', '2Cov(h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_h_j', '2Cov(h(T),j)/Var(Δy)'),
+        ('Sigma_h_k', '2Cov(h(T),k)/Var(Δy)'),
+        ('Sigma_h_epsilon', '2Cov(h(T),ε)/Var(Δy)'),
         ('Sigma_j_k', '2Cov(j,k)/Var(Δy)'),
         ('Sigma_j_epsilon', '2Cov(j,ε)/Var(Δy)'),
         ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
@@ -259,6 +255,35 @@ def generate_variance_decomposition_table(
             'p75': np.percentile(valid_samples, 75),
             'p95': np.percentile(valid_samples, 95),
         }
+
+    def get_metric_samples(approach_data: pd.DataFrame, key: str) -> np.ndarray:
+        """Get metric samples, computing combined h(T) terms from separated terms if needed."""
+        # If the key exists directly, use it
+        if key in approach_data.columns:
+            return approach_data[key].values
+
+        # Compute combined h(T) terms from separated Delta_u and v terms
+        # Sigma_h_h = Sigma_Delta_u_Delta_u + Sigma_v_v + 2*Sigma_Delta_u_v
+        # Sigma_h_j = Sigma_Delta_u_j + Sigma_v_j
+        # Sigma_h_k = Sigma_Delta_u_k + Sigma_v_k
+        # Sigma_h_epsilon = Sigma_Delta_u_epsilon + Sigma_v_epsilon
+        if key == 'Sigma_h_h':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_Delta_u', 'Sigma_v_v', 'Sigma_Delta_u_v']):
+                return (approach_data['Sigma_Delta_u_Delta_u'].values +
+                        approach_data['Sigma_v_v'].values +
+                        2 * approach_data['Sigma_Delta_u_v'].values)
+        elif key == 'Sigma_h_j':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_j', 'Sigma_v_j']):
+                return approach_data['Sigma_Delta_u_j'].values + approach_data['Sigma_v_j'].values
+        elif key == 'Sigma_h_k':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_k', 'Sigma_v_k']):
+                return approach_data['Sigma_Delta_u_k'].values + approach_data['Sigma_v_k'].values
+        elif key == 'Sigma_h_epsilon':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_epsilon', 'Sigma_v_epsilon']):
+                return approach_data['Sigma_Delta_u_epsilon'].values + approach_data['Sigma_v_epsilon'].values
+
+        # Key not available
+        return None
 
     # Get approach display names
     approach_names = {}
@@ -302,7 +327,9 @@ def generate_variance_decomposition_table(
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            if key not in approach_data.columns or 'var_dy' not in approach_data.columns:
+            # Get metric samples (may compute combined h(T) terms from separated terms)
+            metric_samples = get_metric_samples(approach_data, key)
+            if metric_samples is None or 'var_dy' not in approach_data.columns:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -314,8 +341,7 @@ def generate_variance_decomposition_table(
             # Get var_dy for normalization
             var_dy_samples = approach_data['var_dy'].values
 
-            # Get the metric samples and normalize
-            metric_samples = approach_data[key].values
+            # Normalize by var_dy
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
@@ -338,7 +364,9 @@ def generate_variance_decomposition_table(
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            if key not in approach_data.columns or 'var_dy' not in approach_data.columns:
+            # Get metric samples (may compute combined h(T) terms from separated terms)
+            metric_samples = get_metric_samples(approach_data, key)
+            if metric_samples is None or 'var_dy' not in approach_data.columns:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -350,8 +378,8 @@ def generate_variance_decomposition_table(
             # Get var_dy for normalization
             var_dy_samples = approach_data['var_dy'].values
 
-            # Get the metric samples, multiply by 2, and normalize
-            metric_samples = approach_data[key].values * 2  # 2*Cov term
+            # Multiply by 2 (2*Cov term) and normalize
+            metric_samples = metric_samples * 2
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
@@ -384,14 +412,16 @@ def generate_variance_decomposition_table(
 
         var_dy_samples = approach_data['var_dy'].values
 
-        # Sum all variance and covariance terms
+        # Sum all variance and covariance terms (using get_metric_samples for combined h(T) terms)
         total_sum = np.zeros(len(approach_data))
         for key, _ in variance_metrics:
-            if key in approach_data.columns:
-                total_sum += approach_data[key].values
+            samples = get_metric_samples(approach_data, key)
+            if samples is not None:
+                total_sum += samples
         for key, _ in covariance_metrics:
-            if key in approach_data.columns:
-                total_sum += 2 * approach_data[key].values  # 2*Cov terms
+            samples = get_metric_samples(approach_data, key)
+            if samples is not None:
+                total_sum += 2 * samples  # 2*Cov terms
 
         with np.errstate(divide='ignore', invalid='ignore'):
             sum_normalized = total_sum / var_dy_samples
@@ -652,7 +682,7 @@ def generate_figures(
         output_dir,
         filename='fig_temperature_derivative_4panel_variants.pdf',
         T_range=(0, 30),
-        T_dep_range=(-2, 2),
+        T_dep_range=(-1.5, 1.5),
         input_file=None,
     )
     print("      [Figures] Saved fig_temperature_derivative_4panel_variants.pdf")
@@ -727,7 +757,7 @@ def generate_figures(
         output_dir,
         filename='fig_temperature_response_4panel_variants.pdf',
         T_range=(0, 30),
-        T_dep_range=(-2, 2),
+        T_dep_range=(-1.5, 1.5),
         input_file=None,
     )
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")

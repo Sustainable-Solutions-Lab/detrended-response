@@ -195,7 +195,8 @@ def run_bootstrap(
     verbose: bool = True,
     Y_ref: float = None,
     loess_window: int = None,
-) -> Tuple[Dict[str, BootstrapResult], np.ndarray]:
+    h_T_approaches: list = None,
+) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray]]:
     """Run bootstrap analysis for all approaches.
 
     For each bootstrap iteration:
@@ -204,6 +205,7 @@ def run_bootstrap(
     3. Recompute country trends for bootstrap sample
     4. Fit all approaches (including GDP-dependent if Y_ref provided)
     5. Store h1, h2, T_opt, R², Total R², and f1/h3/h4/f2 (for approach-specific coefficients)
+    6. Optionally compute h(T) for selected approaches
 
     Args:
         data: Original AnalysisData
@@ -215,12 +217,17 @@ def run_bootstrap(
         Y_ref: Reference GDP for GDP-dependent approaches (computed once on full dataset)
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
+        h_T_approaches: List of approach names to compute h(T) for (default: None means skip)
+            Example: ['approach0', 'approach5c', 'approach6', 'approach6e', 'approach8']
 
     Returns:
         Tuple of:
         - Dict mapping approach name to BootstrapResult
         - country_samples: np.ndarray of shape (n_bootstrap, n_countries) with
           the original country indices selected in each bootstrap iteration
+        - h_T_samples: Dict mapping approach name to array of shape (n_bootstrap, n_obs)
+          containing h(T) values for each observation in each bootstrap iteration.
+          Empty dict if h_T_approaches is None.
     """
     # Handle default for loess_window
     if loess_window is None:
@@ -275,6 +282,19 @@ def run_bootstrap(
         name: {yr: np.full(n_bootstrap, np.nan) for yr in unique_years}
         for name in approach_names
     }
+
+    # h(T) samples for selected approaches - initialized if h_T_approaches is provided
+    # h_T_samples[approach] has shape (n_bootstrap, n_obs) with h(T) for each observation
+    # Note: h(T) is computed for the ORIGINAL data observations using bootstrap coefficients
+    h_T_samples = {}
+    if h_T_approaches is not None:
+        for name in h_T_approaches:
+            if name in approach_names:
+                h_T_samples[name] = np.full((n_bootstrap, data.n_obs), np.nan)
+        # Precompute original data's LOESS trends for 6e computation
+        # (needed to compute h(T) for original observations with bootstrap coefficients)
+        original_year_means = compute_year_means(data)
+        original_trends_loess = compute_country_trends_loess(data, original_year_means, loess_window)
 
     n_successful = 0
 
@@ -352,6 +372,34 @@ def run_bootstrap(
                     for yr in unique_years:
                         if yr in r.k:
                             k_samples[name][yr][b] = r.k[yr]
+
+            # Compute h(T) for selected approaches using ORIGINAL data observations
+            # (with bootstrap coefficients) to enable tracking h(T) by (country, year)
+            for name in h_T_samples:
+                if name not in boot_results:
+                    continue
+                r = boot_results[name]
+
+                if name in ['approach0', 'approach5c', 'approach6']:
+                    # Standard quadratic: h(T) = h1*T + h2*T²
+                    h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
+
+                elif name == 'approach6e':
+                    # Full model: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
+                    # Use original data's Ttrend to compute for original observations
+                    Ttrend = original_trends_loess.T_loess
+                    h_T_samples[name][b] = (r.h1 * data.temp + r.h2 * data.temp**2
+                                            + r.h4 * (data.temp - Ttrend)**2)
+
+                elif name == 'approach8':
+                    # Piecewise: h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+                    T_opt = r.T_opt
+                    below = data.temp <= T_opt
+                    h_T_samples[name][b] = np.where(
+                        below,
+                        r.h2 * (data.temp - T_opt)**2,
+                        r.h4 * (data.temp - T_opt)**2
+                    )
 
             n_successful += 1
 
@@ -473,7 +521,7 @@ def run_bootstrap(
             k_samples=k_samples[name],
         )
 
-    return results, country_samples
+    return results, country_samples, h_T_samples
 
 
 def compute_bootstrap_statistics(

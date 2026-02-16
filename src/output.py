@@ -328,7 +328,7 @@ def save_summary_table(
         df.to_csv(f, index=False)
 
     # Build variance decomposition DataFrame
-    # Decomposition: dy = [h(T)-h(Ttr)] + h(Ttr) + j + k + err
+    # Decomposition: dy = h(T) + j + k + err
     # All terms divided by Var(dy) so they sum to 1.0
     vd_rows = []
     for name, result in results.items():
@@ -341,18 +341,13 @@ def save_summary_table(
         vd_row = {
             'Approach': result.approach,
             'Var(dy)': var_dy,
-            'Var(h(T)-h(Ttr))/Var(dy)': va['Sigma_Delta_u_Delta_u'] / var_dy,
-            'Var(h(Ttr))/Var(dy)': va['Sigma_v_v'] / var_dy,
+            'Var(h(T))/Var(dy)': va['Sigma_h_h'] / var_dy,
             'Var(j)/Var(dy)': va['Sigma_j_j'] / var_dy,
             'Var(k)/Var(dy)': va['Sigma_k_k'] / var_dy,
             'Var(err)/Var(dy)': va['Sigma_epsilon_epsilon'] / var_dy,
-            '2Cov(h(T)-h(Ttr),h(Ttr))/Var(dy)': 2 * va['Sigma_Delta_u_v'] / var_dy,
-            '2Cov(h(T)-h(Ttr),j)/Var(dy)': 2 * va['Sigma_Delta_u_j'] / var_dy,
-            '2Cov(h(T)-h(Ttr),k)/Var(dy)': 2 * va['Sigma_Delta_u_k'] / var_dy,
-            '2Cov(h(T)-h(Ttr),err)/Var(dy)': 2 * va['Sigma_Delta_u_epsilon'] / var_dy,
-            '2Cov(h(Ttr),j)/Var(dy)': 2 * va['Sigma_v_j'] / var_dy,
-            '2Cov(h(Ttr),k)/Var(dy)': 2 * va['Sigma_v_k'] / var_dy,
-            '2Cov(h(Ttr),err)/Var(dy)': 2 * va['Sigma_v_epsilon'] / var_dy,
+            '2Cov(h(T),j)/Var(dy)': 2 * va['Sigma_h_j'] / var_dy,
+            '2Cov(h(T),k)/Var(dy)': 2 * va['Sigma_h_k'] / var_dy,
+            '2Cov(h(T),err)/Var(dy)': 2 * va['Sigma_h_epsilon'] / var_dy,
             '2Cov(j,k)/Var(dy)': 2 * va['Sigma_j_k'] / var_dy,
             '2Cov(j,err)/Var(dy)': 2 * va['Sigma_j_epsilon'] / var_dy,
             '2Cov(k,err)/Var(dy)': 2 * va['Sigma_k_epsilon'] / var_dy,
@@ -1589,22 +1584,17 @@ def save_variance_decomposition_table(
 
     This table includes ALL approaches in the bootstrap results.
     """
-    # Define variance metrics
+    # Define variance metrics (using combined h(T) instead of separated h(T)-h(Ttr) and h(Ttr))
     variance_metrics = [
-        ('Sigma_Delta_u_Delta_u', 'Var(h(T)-h(Ttr))/Var(Δy)'),
-        ('Sigma_v_v', 'Var(h(Ttr))/Var(Δy)'),
+        ('Sigma_h_h', 'Var(h(T))/Var(Δy)'),
         ('Sigma_j_j', 'Var(j)/Var(Δy)'),
         ('Sigma_k_k', 'Var(k)/Var(Δy)'),
         ('Sigma_epsilon_epsilon', 'Var(ε)/Var(Δy)'),
     ]
     covariance_metrics = [
-        ('Sigma_Delta_u_v', '2Cov(h(T)-h(Ttr),h(Ttr))/Var(Δy)'),
-        ('Sigma_Delta_u_j', '2Cov(h(T)-h(Ttr),j)/Var(Δy)'),
-        ('Sigma_Delta_u_k', '2Cov(h(T)-h(Ttr),k)/Var(Δy)'),
-        ('Sigma_Delta_u_epsilon', '2Cov(h(T)-h(Ttr),ε)/Var(Δy)'),
-        ('Sigma_v_j', '2Cov(h(Ttr),j)/Var(Δy)'),
-        ('Sigma_v_k', '2Cov(h(Ttr),k)/Var(Δy)'),
-        ('Sigma_v_epsilon', '2Cov(h(Ttr),ε)/Var(Δy)'),
+        ('Sigma_h_j', '2Cov(h(T),j)/Var(Δy)'),
+        ('Sigma_h_k', '2Cov(h(T),k)/Var(Δy)'),
+        ('Sigma_h_epsilon', '2Cov(h(T),ε)/Var(Δy)'),
         ('Sigma_j_k', '2Cov(j,k)/Var(Δy)'),
         ('Sigma_j_epsilon', '2Cov(j,ε)/Var(Δy)'),
         ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
@@ -1623,6 +1613,30 @@ def save_variance_decomposition_table(
             'p75': np.percentile(valid_samples, 75),
             'p95': np.percentile(valid_samples, 95),
         }
+
+    def get_metric_samples(var_attrib: dict, key: str) -> np.ndarray:
+        """Get metric samples, computing combined h(T) terms from separated terms if needed."""
+        # If the key exists directly, use it
+        if key in var_attrib:
+            return var_attrib[key]
+
+        # Compute combined h(T) terms from separated Delta_u and v terms
+        if key == 'Sigma_h_h':
+            if all(k in var_attrib for k in ['Sigma_Delta_u_Delta_u', 'Sigma_v_v', 'Sigma_Delta_u_v']):
+                return (var_attrib['Sigma_Delta_u_Delta_u'] +
+                        var_attrib['Sigma_v_v'] +
+                        2 * var_attrib['Sigma_Delta_u_v'])
+        elif key == 'Sigma_h_j':
+            if all(k in var_attrib for k in ['Sigma_Delta_u_j', 'Sigma_v_j']):
+                return var_attrib['Sigma_Delta_u_j'] + var_attrib['Sigma_v_j']
+        elif key == 'Sigma_h_k':
+            if all(k in var_attrib for k in ['Sigma_Delta_u_k', 'Sigma_v_k']):
+                return var_attrib['Sigma_Delta_u_k'] + var_attrib['Sigma_v_k']
+        elif key == 'Sigma_h_epsilon':
+            if all(k in var_attrib for k in ['Sigma_Delta_u_epsilon', 'Sigma_v_epsilon']):
+                return var_attrib['Sigma_Delta_u_epsilon'] + var_attrib['Sigma_v_epsilon']
+
+        return None
 
     # Get approaches that have var_attrib_samples
     available_approaches = [name for name, result in results.items()
@@ -1660,7 +1674,9 @@ def save_variance_decomposition_table(
             result = results[approach]
             var_attrib = result.var_attrib_samples
 
-            if key not in var_attrib or 'var_dy' not in var_attrib:
+            # Get metric samples (may compute combined h(T) terms from separated terms)
+            metric_samples = get_metric_samples(var_attrib, key)
+            if metric_samples is None or 'var_dy' not in var_attrib:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -1670,7 +1686,6 @@ def save_variance_decomposition_table(
                 continue
 
             var_dy_samples = var_attrib['var_dy']
-            metric_samples = var_attrib[key]
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
             normalized = np.where(np.isfinite(normalized), normalized, np.nan)
@@ -1691,7 +1706,9 @@ def save_variance_decomposition_table(
             result = results[approach]
             var_attrib = result.var_attrib_samples
 
-            if key not in var_attrib or 'var_dy' not in var_attrib:
+            # Get metric samples (may compute combined h(T) terms from separated terms)
+            metric_samples = get_metric_samples(var_attrib, key)
+            if metric_samples is None or 'var_dy' not in var_attrib:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -1701,7 +1718,7 @@ def save_variance_decomposition_table(
                 continue
 
             var_dy_samples = var_attrib['var_dy']
-            metric_samples = var_attrib[key] * 2  # 2*Cov term
+            metric_samples = metric_samples * 2  # 2*Cov term
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
             normalized = np.where(np.isfinite(normalized), normalized, np.nan)
@@ -1734,12 +1751,15 @@ def save_variance_decomposition_table(
         n_samples = len(var_dy_samples)
         total_sum = np.zeros(n_samples)
 
+        # Sum all variance and covariance terms (using get_metric_samples for combined h(T) terms)
         for key, _ in variance_metrics:
-            if key in var_attrib:
-                total_sum += var_attrib[key]
+            samples = get_metric_samples(var_attrib, key)
+            if samples is not None:
+                total_sum += samples
         for key, _ in covariance_metrics:
-            if key in var_attrib:
-                total_sum += 2 * var_attrib[key]
+            samples = get_metric_samples(var_attrib, key)
+            if samples is not None:
+                total_sum += 2 * samples
 
         with np.errstate(divide='ignore', invalid='ignore'):
             sum_normalized = total_sum / var_dy_samples
@@ -1805,6 +1825,95 @@ def save_bootstrap_country_samples_csv(
             f.write(f"# Values are original country indices (0 to {n_countries-1})\n")
         df.to_csv(f, index=False)
     print(f"  Saved bootstrap_country_samples.csv ({n_bootstrap} x {n_countries})")
+
+
+def save_bootstrap_h_values(
+    h_T_samples: Dict[str, np.ndarray],
+    data: AnalysisData,
+    output_dir: Path,
+    input_file: str = None,
+    original_results: Dict[str, FitResult] = None,
+    trends_loess: CountryTrendsLoess = None,
+) -> None:
+    """Save h(T) values by observation for each bootstrap iteration.
+
+    Creates: bootstrap_h_values.csv with columns:
+    - iteration: bootstrap iteration number (-1 for point estimate, 0+ for bootstrap)
+    - approach: approach key (e.g., 'approach0')
+    - iso3: country ISO3 code
+    - year: calendar year
+    - temp: temperature value
+    - h_T: computed h(T) value
+
+    The h(T) formula varies by approach:
+    - approach0, approach5c, approach6: h(T) = h1*T + h2*T²
+    - approach6e: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
+    - approach8: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+
+    Note: This file can be large (~2GB for 1000 iterations × 5 approaches × 9405 obs).
+    Consider gzip compression after generation if needed.
+
+    Args:
+        h_T_samples: Dict mapping approach name to array of shape (n_bootstrap, n_obs)
+        data: AnalysisData with country/year info
+        output_dir: Output directory
+        input_file: Input data filename for header comment
+        original_results: Dict of FitResult for point estimates (iteration=-1)
+        trends_loess: CountryTrendsLoess for approach6e T_loess values
+    """
+    if not h_T_samples:
+        print("  No h(T) samples to save")
+        return
+
+    output_path = output_dir / 'bootstrap_h_values.csv'
+
+    # Count total rows for progress reporting
+    total_rows = sum(arr.shape[0] * arr.shape[1] for arr in h_T_samples.values())
+    if original_results is not None:
+        total_rows += len(h_T_samples) * data.n_obs
+
+    with open(output_path, 'w') as f:
+        if input_file:
+            f.write(f'# Input data: {Path(input_file).name}\n')
+        f.write('iteration,approach,iso3,year,temp,h_T\n')
+
+        # Write point estimates (iteration = -1)
+        if original_results is not None:
+            for name in h_T_samples.keys():
+                if name not in original_results:
+                    continue
+                r = original_results[name]
+
+                # Compute h(T) for each observation based on approach type
+                if name in ['approach0', 'approach5c', 'approach6']:
+                    h_T_point = r.h1 * data.temp + r.h2 * data.temp**2
+                elif name == 'approach6e':
+                    T_loess = trends_loess.T_loess
+                    h_T_point = r.h1 * data.temp + r.h2 * data.temp**2 + r.h4 * (data.temp - T_loess)**2
+                elif name == 'approach8':
+                    below = data.temp <= r.T_opt
+                    h_T_point = np.where(below, r.h2 * (data.temp - r.T_opt)**2, r.h4 * (data.temp - r.T_opt)**2)
+                else:
+                    continue
+
+                for i in range(data.n_obs):
+                    iso3 = data.idx_to_iso[data.country_idx[i]]
+                    year = data.year[i]
+                    temp = data.temp[i]
+                    f.write(f'-1,{name},{iso3},{year},{temp:.4f},{h_T_point[i]:.8f}\n')
+
+        # Write bootstrap samples (iteration = 0, 1, ..., N-1)
+        for name, arr in h_T_samples.items():
+            n_bootstrap, n_obs = arr.shape
+            for b in range(n_bootstrap):
+                for i in range(n_obs):
+                    iso3 = data.idx_to_iso[data.country_idx[i]]
+                    year = data.year[i]
+                    temp = data.temp[i]
+                    h_T = arr[b, i]
+                    f.write(f'{b},{name},{iso3},{year},{temp:.4f},{h_T:.8f}\n')
+
+    print(f"  Saved bootstrap_h_values.csv ({total_rows} rows)")
 
 
 def plot_year_effects_bootstrap(
@@ -4354,7 +4463,7 @@ def plot_temperature_response_4panel_variants(
     output_dir: Path,
     filename: str = 'fig_temperature_response_4panel_variants.pdf',
     T_range: tuple = (0, 30),
-    T_dep_range: tuple = (-2, 2),
+    T_dep_range: tuple = (-1.5, 1.5),
     input_file: str = None,
 ) -> None:
     """Plot 4-panel temperature response figure with approach 6, 8, and 6e components.
@@ -4565,10 +4674,13 @@ def plot_temperature_response_4panel_variants(
     ax.set_ylabel('h₄T²_dep', fontsize=10)
     ax.set_title('Approach 6e: Departure component (h₄T²_dep)', fontsize=11)
     ax.set_xlim(T_dep_range)
-    ax.set_xticks([-2, -1, 0, 1, 2])
-    ax.set_xticks([-1.5, -0.5, 0.5, 1.5], minor=True)
-    ax.set_ylim(y_min, y_max)
-    ax.set_yticks(y_ticks)
+    ax.set_xticks([-1.5, -1, -0.5, 0, 0.5, 1, 1.5])
+    ax.set_xticks([-1.25, -0.75, -0.25, 0.25, 0.75, 1.25], minor=True)
+    # Use 1/10 scale for y-axis on departure panel (matching 1/10 x-axis zoom)
+    y_min_dep, y_max_dep = -0.025, 0.00
+    y_ticks_dep = np.arange(-0.025, 0.001, 0.005)
+    ax.set_ylim(y_min_dep, y_max_dep)
+    ax.set_yticks(y_ticks_dep)
     ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=8, loc='lower right')
 
@@ -4584,7 +4696,7 @@ def plot_temperature_derivative_4panel_variants(
     output_dir: Path,
     filename: str = 'fig_temperature_derivative_4panel_variants.pdf',
     T_range: tuple = (0, 30),
-    T_dep_range: tuple = (-2, 2),
+    T_dep_range: tuple = (-1.5, 1.5),
     input_file: str = None,
 ) -> None:
     """Plot 4-panel temperature derivative figure with approach 6, 8, and 6e components.
@@ -4715,8 +4827,8 @@ def plot_temperature_derivative_4panel_variants(
     ax.set_ylabel('dh/dT_dep', fontsize=10)
     ax.set_title('Approach 6e: Departure component (2h₄T_dep)', fontsize=11)
     ax.set_xlim(T_dep_range)
-    ax.set_xticks([-2, -1, 0, 1, 2])
-    ax.set_xticks([-1.5, -0.5, 0.5, 1.5], minor=True)
+    ax.set_xticks([-1.5, -1, -0.5, 0, 0.5, 1, 1.5])
+    ax.set_xticks([-1.25, -0.75, -0.25, 0.25, 0.75, 1.25], minor=True)
     ax.grid(True, alpha=0.3, which='both')
     ax.legend(fontsize=8, loc='lower left')
 

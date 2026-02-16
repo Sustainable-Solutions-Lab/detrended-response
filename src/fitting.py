@@ -286,6 +286,11 @@ def compute_variance_attribution(
         'Sigma_k_k': Sigma[3, 3],
         'Sigma_k_epsilon': Sigma[3, 4],
         'Sigma_epsilon_epsilon': Sigma[4, 4],
+        # Combined h(T) = Delta_u + v terms (h(T) instead of separating h(T)-h(Ttr) and h(Ttr))
+        'Sigma_h_h': Sigma[0, 0] + Sigma[1, 1] + 2 * Sigma[0, 1],  # Var(h(T)) = Var(Delta_u + v)
+        'Sigma_h_j': Sigma[0, 2] + Sigma[1, 2],  # Cov(h(T), j)
+        'Sigma_h_k': Sigma[0, 3] + Sigma[1, 3],  # Cov(h(T), k)
+        'Sigma_h_epsilon': Sigma[0, 4] + Sigma[1, 4],  # Cov(h(T), epsilon)
         # Orthogonality checks (residual should be orthogonal to fitted components for OLS)
         'cov_epsilon_Delta_u': Sigma[4, 0],
         'cov_epsilon_v': Sigma[4, 1],
@@ -2347,9 +2352,12 @@ def fit_approach6e_quadratic_departure_loess(
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution
-    Delta_u = h_response
-    v = np.zeros_like(h_response)
-    epsilon = data.growth_pcGDP - (Delta_u + j_trend + k_values)
+    # Split h(T) into baseline at trend + departure
+    # h(T_trend) = h1*Ttrend + h2*Ttrend² (since h4*(0)² = 0 at trend)
+    h_Ttrend = h1_linear * Ttrend + h2_T * Ttrend**2
+    Delta_u = h_response  # h(T) - h(Ttrend)
+    v = h_Ttrend          # h(Ttrend)
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach6ab(

@@ -31,6 +31,7 @@ from src.output import (
     save_bootstrap_k_samples_csv,
     save_bootstrap_var_attrib_csv,
     save_bootstrap_country_samples_csv,
+    save_bootstrap_h_values,
     save_bootstrap_summary_txt,
     save_bootstrap_summary_table,
     save_variance_decomposition_table,
@@ -162,7 +163,9 @@ def main():
 
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
-    bootstrap_results, country_samples = run_bootstrap(
+    # Specify approaches for h(T) computation
+    h_T_approaches = ['approach0', 'approach5c', 'approach6', 'approach6e', 'approach8']
+    bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
         trends=trends,
         original_results=original_results,
@@ -171,6 +174,7 @@ def main():
         verbose=verbose,
         Y_ref=Y_ref,
         loess_window=args.loess_window,
+        h_T_approaches=h_T_approaches,
     )
     print("      Done.")
 
@@ -193,6 +197,13 @@ def main():
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_var_attrib_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_country_samples_csv(country_samples, data, output_dir, input_file=input_file)
+    if h_T_samples:
+        save_bootstrap_h_values(
+            h_T_samples, data, output_dir,
+            input_file=input_file,
+            original_results=original_results,
+            trends_loess=trends_loess
+        )
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_variance_decomposition_table(bootstrap_results, output_dir, input_file=input_file)

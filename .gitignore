@@ -41,3 +41,4 @@ Thumbs.db
 # Output data (ignore generated output, but keep reference)
 data/output/*
 !data/output/reference/
+data/output/reference/bootstrap*/bootstrap_h_values.csv
