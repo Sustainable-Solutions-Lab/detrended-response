@@ -212,7 +212,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include (publication set)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach6', 'approach8', 'approach6e']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -483,7 +483,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (publication set, same as variance decomposition table)
     if approaches is None:
-        approaches = ['approach0', 'nocr0', 'approach5c', 'nocr5', 'approach6', 'approach8', 'approach6e']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -496,7 +496,7 @@ def generate_bootstrap_comparison_table(
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
     # Additional parameters for approach 6b/6c/6e (departure/trend coefficients: h3, h4)
     trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
-    # Note: For piecewise approach8, h2 = curvature below T_opt, h4 = curvature above T_opt
+    # Note: For piecewise method3, h2 = curvature below T_opt, h4 = curvature above T_opt
     # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
 
     # Percentiles to include
@@ -643,9 +643,9 @@ def generate_figures(
 
     # Define approach patterns for publication figures
     # 4-panel layout: [[row0: 0, 5c], [row1: 5a, 5b]]
-    approaches_4panel = ['approach0', 'approach5c', 'approach5a', 'approach5b']
+    approaches_4panel = ['method0', 'method1', 'approach5a', 'approach5b']
     # 2-panel layout: [col0: 6, col1: 8]
-    approaches_2panel = ['approach6', 'approach8']
+    approaches_2panel = ['method2', 'method3']
 
     # Figure 1a: Temperature response (2 panels)
     if data is not None:
@@ -654,7 +654,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['approach0', 'approach5c'],
+            approaches=['method0', 'method1'],
             filename='fig_temperature_response_main.pdf',
             T_range=(0, 30),
             input_file=None,
@@ -667,7 +667,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['approach0', 'approach6'],
+            approaches=['method0', 'method2'],
             filename='fig_year_effects_main.pdf',
             input_file=None,
         )
@@ -721,12 +721,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
 
-    # Figure 7: h2 coefficient histograms - 4 panels [[approach0, approach5c], [approach5a, approach5b]]
+    # Figure 7: h2 coefficient histograms - 4 panels [[method0, method1], [approach5a, approach5b]]
     print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['approach0', 'approach5c', 'approach5a', 'approach5b'],
+        approaches=['method0', 'method1', 'approach5a', 'approach5b'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         filename='fig_h2_histogram_4panel.pdf',
@@ -734,12 +734,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
 
-    # Figure 8: h2 coefficient histograms - 3 panels (approach6 h2, approach8 h2_low, approach8 h2_high)
+    # Figure 8: h2 coefficient histograms - 3 panels (method2 h2, method3 h2_low, method3 h2_high)
     print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['approach6', 'approach8'],
+        approaches=['method2', 'method3'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         x_range_h2_high=(-0.01, 0.001),
@@ -763,7 +763,7 @@ def generate_figures(
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
 
     # Keep the 3-panel variants for 6b, 6e, 8a
-    approaches_variants = ['approach6b', 'approach6e', 'approach8a']
+    approaches_variants = ['method2b', 'method4', 'method3a']
 
     # Figure 10: Temperature derivative - 3 panels for variant approaches (6b, 6e, 8a)
     print("      [Figures] Generating temperature derivative figure (3 panels - variants)...")
@@ -793,7 +793,7 @@ def generate_figures(
     plot_climate_response_contours(
         results,
         output_dir,
-        approaches=['approach6e', 'approach8a'],
+        approaches=['method4', 'method3a'],
         filename='fig_climate_response_contours.pdf',
         Ttrend_range=(0, 30),
         deltaT_range=(-5, 5),

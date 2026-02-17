@@ -28,7 +28,7 @@ from src.detrending import (
 )
 import numpy as np
 from src.fitting import (
-    fit_approach0_no_detrending,
+    fit_method0_no_detrending,
     fit_approach2_temperature_detrending,
     fit_approach3_growth_detrending,
     fit_approach1_combined_detrending,
@@ -36,19 +36,19 @@ from src.fitting import (
     fit_approach5_precomputed_k_quadratic,
     fit_approach5a_precomputed_k_linear_temp,
     fit_approach5b_precomputed_k_gdp_only,
-    fit_approach5c_precomputed_k_combined,
+    fit_method1_precomputed_k_combined,
     fit_approach5d_precomputed_k_gdp_response,
-    fit_approach6_precomputed_k_loess,
-    fit_approach6b_low_only_loess,
-    fit_approach6c_departure_trend_loess,
-    fit_approach6e_quadratic_departure_loess,
-    fit_approach8_gaussian_loess,
-    fit_approach8a_shared_Topt_loess,
-    fit_approach8b_modulated_loess,
-    fit_approach8c_linear_modulated_loess,
-    fit_approach8d_quadratic_modulated_loess,
-    fit_nocr0_joint,
-    fit_nocr5_precomputed_k,
+    fit_method2_precomputed_k_loess,
+    fit_method2b_low_only_loess,
+    fit_method2c_departure_trend_loess,
+    fit_method4_quadratic_departure_loess,
+    fit_method3_gaussian_loess,
+    fit_method3a_shared_Topt_loess,
+    fit_method3b_modulated_loess,
+    fit_method3c_linear_modulated_loess,
+    fit_method3d_quadratic_modulated_loess,
+    fit_method0h0_joint,
+    fit_method1h0_precomputed_k,
 )
 from src.output import save_all_outputs, create_output_dir
 
@@ -160,7 +160,7 @@ def main():
     results = {}
 
     print("\n[5/11] Fitting Approach 0: Conjoined OLS fit...")
-    results['approach0'] = fit_approach0_no_detrending(data)
+    results['method0'] = fit_method0_no_detrending(data)
     print("      Done.")
 
     print("\n[6/11] Fitting Approaches 1-4: Detrending approaches...")
@@ -177,25 +177,25 @@ def main():
     print("\n[8/11] Fitting Approaches 5a, 5b, 5c, 5d: Precomputed k variants...")
     results['approach5a'] = fit_approach5a_precomputed_k_linear_temp(data, trends_with_k, year_means)
     results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(data, trends_with_k, year_means)
-    results['approach5c'] = fit_approach5c_precomputed_k_combined(data, trends_with_k, year_means)
+    results['method1'] = fit_method1_precomputed_k_combined(data, trends_with_k, year_means)
     results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
     print("      Done.")
 
     print("\n[9/11] Fitting Approaches 6, 6b, 6c, 6e, 8, 8a-8d: LOESS detrending...")
-    results['approach6'] = fit_approach6_precomputed_k_loess(data, trends_loess, year_means)
-    results['approach6b'] = fit_approach6b_low_only_loess(data, trends_loess, year_means)
-    results['approach6c'] = fit_approach6c_departure_trend_loess(data, trends_loess, year_means)
-    results['approach6e'] = fit_approach6e_quadratic_departure_loess(data, trends_loess, year_means)
-    results['approach8'] = fit_approach8_gaussian_loess(data, trends_loess, year_means)
-    results['approach8a'] = fit_approach8a_shared_Topt_loess(data, trends_loess, year_means)
-    results['approach8b'] = fit_approach8b_modulated_loess(data, trends_loess, year_means)
-    results['approach8c'] = fit_approach8c_linear_modulated_loess(data, trends_loess, year_means)
-    results['approach8d'] = fit_approach8d_quadratic_modulated_loess(data, trends_loess, year_means)
+    results['method2'] = fit_method2_precomputed_k_loess(data, trends_loess, year_means)
+    results['method2b'] = fit_method2b_low_only_loess(data, trends_loess, year_means)
+    results['method2c'] = fit_method2c_departure_trend_loess(data, trends_loess, year_means)
+    results['method4'] = fit_method4_quadratic_departure_loess(data, trends_loess, year_means)
+    results['method3'] = fit_method3_gaussian_loess(data, trends_loess, year_means)
+    results['method3a'] = fit_method3a_shared_Topt_loess(data, trends_loess, year_means)
+    results['method3b'] = fit_method3b_modulated_loess(data, trends_loess, year_means)
+    results['method3c'] = fit_method3c_linear_modulated_loess(data, trends_loess, year_means)
+    results['method3d'] = fit_method3d_quadratic_modulated_loess(data, trends_loess, year_means)
     print("      Done.")
 
     print("\n[10/11] Fitting null models (no climate response)...")
-    results['nocr0'] = fit_nocr0_joint(data)
-    results['nocr5'] = fit_nocr5_precomputed_k(data, trends_with_k, year_means)
+    results['method0h0'] = fit_method0h0_joint(data)
+    results['method1h0'] = fit_method1h0_precomputed_k(data, trends_with_k, year_means)
     print("      Done.")
 
     # Print summary
@@ -208,7 +208,7 @@ def main():
         print("-" * 50)
 
         # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt
-        if name in ['approach6b', 'approach6e'] and hasattr(r, 'h3'):
+        if name in ['method2b', 'method4'] and hasattr(r, 'h3'):
             print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h3 (departure) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
@@ -223,7 +223,7 @@ def main():
                 print(f"  T_dep_opt (departure opt) = N/A")
 
         # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt, f2
-        elif name == 'approach6c' and hasattr(r, 'T_dep_opt') and hasattr(r, 'f2'):
+        elif name == 'method2c' and hasattr(r, 'T_dep_opt') and hasattr(r, 'f2'):
             print(f"  h1 (departure) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (departure) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
@@ -238,13 +238,13 @@ def main():
                 print(f"  f2 (trend T_opt) = N/A")
 
         # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
-        elif name == 'approach8a' and hasattr(r, 'h4') and not hasattr(r, 'h3'):
+        elif name == 'method3a' and hasattr(r, 'h4') and not hasattr(r, 'h3'):
             print(f"  h2 (total curvature) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (trend curvature) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
-        elif name == 'approach8' and hasattr(r, 'h4'):
+        elif name == 'method3' and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")

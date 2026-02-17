@@ -218,7 +218,7 @@ def run_bootstrap(
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
         h_T_approaches: List of approach names to compute h(T) for (default: None means skip)
-            Example: ['approach0', 'approach5c', 'approach6', 'approach6e', 'approach8']
+            Example: ['method0', 'method1', 'method2', 'method4', 'method3']
 
     Returns:
         Tuple of:
@@ -380,18 +380,18 @@ def run_bootstrap(
                     continue
                 r = boot_results[name]
 
-                if name in ['approach0', 'approach5c', 'approach6']:
+                if name in ['method0', 'method1', 'method2']:
                     # Standard quadratic: h(T) = h1*T + h2*T²
                     h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
 
-                elif name == 'approach6e':
+                elif name == 'method4':
                     # Full model: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
                     # Use original data's Ttrend to compute for original observations
                     Ttrend = original_trends_loess.T_loess
                     h_T_samples[name][b] = (r.h1 * data.temp + r.h2 * data.temp**2
                                             + r.h4 * (data.temp - Ttrend)**2)
 
-                elif name == 'approach8':
+                elif name == 'method3':
                     # Piecewise: h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
                     T_opt = r.T_opt
                     below = data.temp <= T_opt
@@ -427,13 +427,13 @@ def run_bootstrap(
     if verbose:
         print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")
 
-    # For approach0 and nocr0, detrend k_samples by subtracting best-fit quadratic
+    # For method0 and method0h0, detrend k_samples by subtracting best-fit quadratic
     # from each bootstrap. This removes the arbitrary quadratic that can shift between
     # bootstrap samples due to different country identification constraints.
     # These approaches set the first country's j terms to zero, which means k(t) can
     # absorb any arbitrary quadratic; different bootstrap samples have different countries
     # as "first", causing systematic quadratic shifts in k(t).
-    approaches_to_detrend = ['approach0', 'nocr0']
+    approaches_to_detrend = ['method0', 'method0h0']
     years_array = np.array(unique_years, dtype=float)
     # Center years for numerical stability
     year_center = years_array.mean()
@@ -457,7 +457,7 @@ def run_bootstrap(
             for i, yr in enumerate(unique_years):
                 k_samples[approach_name][yr][b] = k_vals[i] - k_fitted[i]
 
-    # Also detrend k_point for approach0 and nocr0 to match the detrended samples
+    # Also detrend k_point for method0 and method0h0 to match the detrended samples
     k_point_detrended = {}
     for approach_name in approaches_to_detrend:
         if approach_name in original_results and original_results[approach_name].k is not None:
@@ -480,7 +480,7 @@ def run_bootstrap(
         f2_point = getattr(orig, 'f2', None)
         T_dep_opt_point = getattr(orig, 'T_dep_opt', None)
 
-        # Use detrended k_point for approach0 and nocr0
+        # Use detrended k_point for method0 and method0h0
         if name in k_point_detrended:
             k_point_to_use = k_point_detrended[name]
         else:

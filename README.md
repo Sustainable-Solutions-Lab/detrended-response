@@ -537,8 +537,8 @@ Two null models for comparison:
 
 | Model | Description |
 |-------|-------------|
-| **nocr0** | Joint OLS with country trends and year effects, but h₁=h₂=0 |
-| **nocr5** | Precomputed k with country trends, but h₁=h₂=0 |
+| **method0h0** | Joint OLS with country trends and year effects, but h₁=h₂=0 |
+| **method1h0** | Precomputed k with country trends, but h₁=h₂=0 |
 
 ## Imbalance Metrics
 
@@ -733,7 +733,7 @@ python scripts/run_influence_analysis.py
 **Default coefficients by approach:**
 | Approach | Coefficients |
 |----------|--------------|
-| Standard (0-5, 5a-5d, 6, nocr0, nocr5) | h₁, h₂, T_opt |
+| Standard (0-5, 5a-5d, 6, method0h0, method1h0) | h₁, h₂, T_opt |
 | Approach 6b | h₁, h₂, h₃, h₄, T_opt, T_dep_opt |
 | Approach 6c | h₁, h₂, h₃, h₄, T_dep_opt, f₂ |
 | Approach 6e | h₁, h₂, h₄, T_opt, T_dep_opt |
@@ -742,7 +742,7 @@ python scripts/run_influence_analysis.py
 
 **Example:**
 ```bash
-python scripts/run_influence_analysis.py --approaches "approach5 approach6" --n-top 15
+python scripts/run_influence_analysis.py --approaches "approach5 method2" --n-top 15
 ```
 
 **Interpretation:**
@@ -752,10 +752,10 @@ python scripts/run_influence_analysis.py --approaches "approach5 approach6" --n-
 
 ### Approach 0 vs 5c Parameter Comparison
 
-The `compare_approach0_5c.py` script generates scatter plots comparing parameters from Approach 0 (conjoined OLS) against parameters predicted from Approach 5c's pre-computed trends combined with Approach 0's h₁ and h₂.
+The `compare_method0_5c.py` script generates scatter plots comparing parameters from Approach 0 (conjoined OLS) against parameters predicted from Approach 5c's pre-computed trends combined with Approach 0's h₁ and h₂.
 
 ```bash
-python scripts/compare_approach0_5c.py
+python scripts/compare_method0_5c.py
 ```
 
 **What it does:**
@@ -768,13 +768,13 @@ python scripts/compare_approach0_5c.py
 **Options:**
 ```
 --data-file PATH   Input CSV file (default: data/input/Maddison_CRU_dataset.csv)
---output-dir DIR   Output directory (default: data/output/approach0_vs_5c)
+--output-dir DIR   Output directory (default: data/output/method0_vs_5c)
 ```
 
 **Outputs:**
-- `approach0_vs_5c_scatter.pdf` — 2×2 scatter plot with 1:1 reference and best-fit lines
-- `approach0_vs_5c_scatter_data.csv` — Underlying scatter data for all panels
-- `approach0_vs_5c_derivation.tex` — LaTeX derivation of the equations used
+- `method0_vs_5c_scatter.pdf` — 2×2 scatter plot with 1:1 reference and best-fit lines
+- `method0_vs_5c_scatter_data.csv` — Underlying scatter data for all panels
+- `method0_vs_5c_derivation.tex` — LaTeX derivation of the equations used
 
 For a detailed step-by-step mathematical derivation of this analysis, see [METHODS_DETAIL.md](METHODS_DETAIL.md).
 
@@ -840,7 +840,7 @@ detrended-response/
 │   ├── run_analysis.py              # Main entry point
 │   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
 │   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
-│   ├── compare_approach0_5c.py         # Scatter plots comparing Approach 0 vs 5c parameters
+│   ├── compare_method0_5c.py         # Scatter plots comparing Approach 0 vs 5c parameters
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt

@@ -1543,7 +1543,7 @@ def fit_approach5b_precomputed_k_gdp_only(
     )
 
 
-def fit_approach5c_precomputed_k_combined(
+def fit_method1_precomputed_k_combined(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
     """Approach 5c: Pre-computed k[t] with linear temp + quadratic GDP detrending.
@@ -2040,7 +2040,7 @@ def compute_3d_se_numerical(
     return T_opt_se, sigma_se, alpha_se
 
 
-def fit_approach6_precomputed_k_loess(
+def fit_method2_precomputed_k_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
     """Approach 6: Pre-computed k[t] with LOESS country/temperature trends.
@@ -2150,7 +2150,7 @@ def fit_approach6_precomputed_k_loess(
     )
 
 
-def fit_approach6b_low_only_loess(
+def fit_method2b_low_only_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6ab:
     """Approach 6b: T-only temperature response with LOESS detrending.
@@ -2266,7 +2266,7 @@ def fit_approach6b_low_only_loess(
     )
 
 
-def fit_approach6e_quadratic_departure_loess(
+def fit_method4_quadratic_departure_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6ab:
     """Approach 6e: T response with quadratic departure term only (LOESS detrending).
@@ -2388,7 +2388,7 @@ def fit_approach6e_quadratic_departure_loess(
     )
 
 
-def fit_approach6c_departure_trend_loess(
+def fit_method2c_departure_trend_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6c:
     """Approach 6c: Departure/trend decomposition with LOESS detrending.
@@ -2507,7 +2507,7 @@ def fit_approach6c_departure_trend_loess(
     )
 
 
-def fit_approach8a_shared_Topt_loess(
+def fit_method3a_shared_Topt_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -2786,7 +2786,7 @@ def compute_2d_se_numerical(
     return f1_se, f2_se
 
 
-def fit_approach8b_modulated_loess(
+def fit_method3b_modulated_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -2953,7 +2953,7 @@ def fit_approach8b_modulated_loess(
     )
 
 
-def fit_approach8c_linear_modulated_loess(
+def fit_method3c_linear_modulated_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -3114,7 +3114,7 @@ def fit_approach8c_linear_modulated_loess(
     )
 
 
-def fit_approach8d_quadratic_modulated_loess(
+def fit_method3d_quadratic_modulated_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -3275,7 +3275,7 @@ def fit_approach8d_quadratic_modulated_loess(
     )
 
 
-def fit_approach8_piecewise_loess(
+def fit_method3_piecewise_loess(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -3442,10 +3442,10 @@ def fit_approach8_piecewise_loess(
 
 
 # Keep backward-compatible alias
-fit_approach8_gaussian_loess = fit_approach8_piecewise_loess
+fit_method3_gaussian_loess = fit_method3_piecewise_loess
 
 
-def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
+def fit_method0_no_detrending(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
     Δy_i(t) = h1*T + h2*T² + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -3587,7 +3587,7 @@ def fit_approach0_no_detrending(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_nocr0_joint(data: AnalysisData) -> FitResult:
+def fit_method0h0_joint(data: AnalysisData) -> FitResult:
     """Null model: No climate response, joint OLS fit with country trends and year effects.
 
     Δy_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -3680,7 +3680,7 @@ def fit_nocr0_joint(data: AnalysisData) -> FitResult:
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="nocr0: No Climate Response (Joint)",
+        approach="method0h0: No Climate Response (Joint)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -3702,7 +3702,7 @@ def fit_nocr0_joint(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_nocr5_precomputed_k(
+def fit_method1h0_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
     """Null model: No climate response, precomputed k with quadratic country trends.
@@ -3761,7 +3761,7 @@ def fit_nocr5_precomputed_k(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="nocr5: No Climate Response (Precomputed k)",
+        approach="method1h0: No Climate Response (Precomputed k)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -3791,7 +3791,7 @@ def fit_all_approaches(
     """Fit all approaches and return results.
 
     Returns dict with keys:
-        'approach0': Conjoined OLS fit, with j terms and year fixed effects
+        'method0': Conjoined OLS fit, with j terms and year fixed effects
         'approach1': Combined detrending (linear T trend, quadratic GDP trend)
         'approach2': Temperature detrending (linear T trend)
         'approach3': GDP growth detrending (quadratic GDP trend)
@@ -3799,19 +3799,19 @@ def fit_all_approaches(
         'approach5': Pre-computed k with quadratic trends (if trends_with_k and year_means provided)
         'approach5a': Pre-computed k with linear temp only (if trends_with_k and year_means provided)
         'approach5b': Pre-computed k with GDP only (if trends_with_k and year_means provided)
-        'approach5c': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
+        'method1': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'approach5d': Pre-computed k with GDP-only response (if trends_with_k, year_means, and Y_ref provided)
-        'approach6': Pre-computed k with LOESS trends (if trends_loess provided)
-        'approach6b': Low frequency only response with LOESS (if trends_loess provided)
-        'approach6c': Departure/trend decomposition with LOESS (if trends_loess provided)
-        'approach6e': T response with quadratic departure only (if trends_loess provided)
-        'approach8': Piecewise quadratic response with LOESS (if trends_loess provided)
-        'approach8a': Shared T_opt for total/trend with LOESS (if trends_loess provided)
-        'approach8b': Modulated temperature response with LOESS (if trends_loess provided)
-        'approach8c': Linear-only modulated response with LOESS (if trends_loess provided)
-        'approach8d': Quadratic-only modulated response with LOESS (if trends_loess provided)
-        'nocr0': No climate response, joint OLS (country trends + year effects only)
-        'nocr5': No climate response, precomputed k (if trends_with_k and year_means provided)
+        'method2': Pre-computed k with LOESS trends (if trends_loess provided)
+        'method2b': Low frequency only response with LOESS (if trends_loess provided)
+        'method2c': Departure/trend decomposition with LOESS (if trends_loess provided)
+        'method4': T response with quadratic departure only (if trends_loess provided)
+        'method3': Piecewise quadratic response with LOESS (if trends_loess provided)
+        'method3a': Shared T_opt for total/trend with LOESS (if trends_loess provided)
+        'method3b': Modulated temperature response with LOESS (if trends_loess provided)
+        'method3c': Linear-only modulated response with LOESS (if trends_loess provided)
+        'method3d': Quadratic-only modulated response with LOESS (if trends_loess provided)
+        'method0h0': No climate response, joint OLS (country trends + year effects only)
+        'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
 
     Args:
         data: AnalysisData object
@@ -3822,12 +3822,12 @@ def fit_all_approaches(
         trends_loess: CountryTrendsLoess for approaches 6-8a (LOESS detrending)
     """
     results = {
-        'approach0': fit_approach0_no_detrending(data),
+        'method0': fit_method0_no_detrending(data),
         'approach1': fit_approach1_combined_detrending(data, trends),
         'approach2': fit_approach2_temperature_detrending(data, trends),
         'approach3': fit_approach3_growth_detrending(data, trends),
         'approach4': fit_approach4_combined_quadratic_detrending(data, trends),
-        'nocr0': fit_nocr0_joint(data),
+        'method0h0': fit_method0h0_joint(data),
     }
 
     # Add approach 5 and variants if trends_with_k and year_means are provided
@@ -3841,7 +3841,7 @@ def fit_all_approaches(
         results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(
             data, trends_with_k, year_means
         )
-        results['approach5c'] = fit_approach5c_precomputed_k_combined(
+        results['method1'] = fit_method1_precomputed_k_combined(
             data, trends_with_k, year_means
         )
         # Add approach 5d if Y_ref is provided
@@ -3849,39 +3849,39 @@ def fit_all_approaches(
             results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(
                 data, trends_with_k, year_means, Y_ref
             )
-        results['nocr5'] = fit_nocr5_precomputed_k(
+        results['method1h0'] = fit_method1h0_precomputed_k(
             data, trends_with_k, year_means
         )
 
     # Add approaches 6, 6a, 6b, 8, 8a if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
-        results['approach6'] = fit_approach6_precomputed_k_loess(
+        results['method2'] = fit_method2_precomputed_k_loess(
             data, trends_loess, year_means
         )
-        results['approach6b'] = fit_approach6b_low_only_loess(
+        results['method2b'] = fit_method2b_low_only_loess(
             data, trends_loess, year_means
         )
-        results['approach6c'] = fit_approach6c_departure_trend_loess(
+        results['method2c'] = fit_method2c_departure_trend_loess(
             data, trends_loess, year_means
         )
-        results['approach6e'] = fit_approach6e_quadratic_departure_loess(
+        results['method4'] = fit_method4_quadratic_departure_loess(
             data, trends_loess, year_means
         )
 
         # Add approach 8, 8a, and 8b (piecewise/shared T_opt/modulated)
-        results['approach8'] = fit_approach8_gaussian_loess(
+        results['method3'] = fit_method3_gaussian_loess(
             data, trends_loess, year_means
         )
-        results['approach8a'] = fit_approach8a_shared_Topt_loess(
+        results['method3a'] = fit_method3a_shared_Topt_loess(
             data, trends_loess, year_means
         )
-        results['approach8b'] = fit_approach8b_modulated_loess(
+        results['method3b'] = fit_method3b_modulated_loess(
             data, trends_loess, year_means
         )
-        results['approach8c'] = fit_approach8c_linear_modulated_loess(
+        results['method3c'] = fit_method3c_linear_modulated_loess(
             data, trends_loess, year_means
         )
-        results['approach8d'] = fit_approach8d_quadratic_modulated_loess(
+        results['method3d'] = fit_method3d_quadratic_modulated_loess(
             data, trends_loess, year_means
         )
 

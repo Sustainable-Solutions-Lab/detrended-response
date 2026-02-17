@@ -22,7 +22,7 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.detrending import fit_quadratic_trend, DEFAULT_LOESS_WINDOW_YEARS
-from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annotation
+from src.output import METHOD_COLORS, create_output_dir, add_input_file_annotation
 
 
 # ==============================================================================
@@ -30,13 +30,13 @@ from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annota
 # ==============================================================================
 
 # Approaches that use quadratic OLS for h(T) trend
-QUADRATIC_APPROACHES = {'approach0', 'approach5c'}
+QUADRATIC_METHODS = {'method0', 'method1'}
 
 # Approaches that use LOESS for h(T) trend
-LOESS_APPROACHES = {'approach6', 'approach6e', 'approach8'}
+LOESS_METHODS = {'method2', 'method4', 'method3'}
 
 # Central approaches for analysis (in display order)
-CENTRAL_APPROACHES = ['approach0', 'approach5c', 'approach6', 'approach8', 'approach6e']
+CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -57,8 +57,8 @@ def fit_h_T_trend_1961(
 ) -> float:
     """Fit trend to h(T) and evaluate at 1961.
 
-    For quadratic approaches (approach0, approach5c): fit h_T ~ year + year²
-    For LOESS approaches (approach6, approach6e, approach8): use LOESS smoothing
+    For quadratic approaches (method0, method1): fit h_T ~ year + year²
+    For LOESS approaches (method2, method4, method3): use LOESS smoothing
 
     Args:
         years: Array of year values
@@ -69,7 +69,7 @@ def fit_h_T_trend_1961(
     Returns:
         Trend value at 1961
     """
-    if approach in QUADRATIC_APPROACHES:
+    if approach in QUADRATIC_METHODS:
         # Fit quadratic: h_T = a + b*year + c*year²
         a, b, c = fit_quadratic_trend(years, h_T_values)
         return a + b * BASE_YEAR + c * BASE_YEAR ** 2
@@ -152,7 +152,7 @@ def plot_cumulative_effects_boxplot(
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # Use central approaches in consistent order
-    approaches = CENTRAL_APPROACHES
+    approaches = CENTRAL_METHODS
     n_approaches = len(approaches)
 
     # Sort percentiles for x-axis ordering
@@ -189,7 +189,7 @@ def plot_cumulative_effects_boxplot(
             pos = cluster_center + (j - (n_approaches - 1) / 2) * box_width
 
             # Draw box
-            color = APPROACH_COLORS.get(approach, 'gray')
+            color = METHOD_COLORS.get(approach, 'gray')
             box = ax.boxplot(
                 [bootstrap_values],
                 positions=[pos],
@@ -230,7 +230,7 @@ def plot_cumulative_effects_boxplot(
 
     # Legend for approaches
     legend_handles = [
-        plt.Rectangle((0, 0), 1, 1, facecolor=APPROACH_COLORS.get(a, 'gray'), alpha=0.7)
+        plt.Rectangle((0, 0), 1, 1, facecolor=METHOD_COLORS.get(a, 'gray'), alpha=0.7)
         for a in approaches
     ]
     ax.legend(legend_handles, approaches, loc='best', fontsize=8)
@@ -344,7 +344,7 @@ def plot_cumulative_effects_by_approach(
     """
     fig, axes = plt.subplots(1, 5, figsize=(15, 4), sharey=True)
 
-    for ax, approach in zip(axes, CENTRAL_APPROACHES):
+    for ax, approach in zip(axes, CENTRAL_METHODS):
         # Filter to this approach
         df_approach = df[df['approach'] == approach]
 
@@ -368,7 +368,7 @@ def plot_cumulative_effects_by_approach(
 
         df_pct = pd.DataFrame(percentiles_by_year)
 
-        color = APPROACH_COLORS.get(approach, 'gray')
+        color = METHOD_COLORS.get(approach, 'gray')
 
         # Transform percentiles to log scale
         p5_log = log_transform(df_pct['p5'])
@@ -434,7 +434,7 @@ def select_representative_countries_from_file(
 ) -> dict:
     """Select representative countries using only point estimate data.
 
-    Loads only iteration=-1, approach=approach0 to minimize memory usage.
+    Loads only iteration=-1, approach=method0 to minimize memory usage.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -444,12 +444,12 @@ def select_representative_countries_from_file(
     Returns:
         Dictionary mapping percentile -> {'iso3': str, 'value': float, 'target': float}
     """
-    print("      Loading point estimate data (iteration=-1, approach0)...")
+    print("      Loading point estimate data (iteration=-1, method0)...")
 
     # Read CSV in chunks, filtering to only needed rows
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'approach0')]
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'method0')]
         if len(filtered) > 0:
             chunks.append(filtered)
 
@@ -459,7 +459,7 @@ def select_representative_countries_from_file(
     # Process each country to get cumulative effects
     results = []
     for iso3, group in df.groupby('iso3'):
-        processed = process_group(group, 'approach0', loess_window)
+        processed = process_group(group, 'method0', loess_window)
         # Get 2022 value
         row_2022 = processed[processed['year'] == 2022]
         if len(row_2022) > 0:

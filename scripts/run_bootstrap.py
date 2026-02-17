@@ -164,7 +164,7 @@ def main():
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
     # Specify approaches for h(T) computation
-    h_T_approaches = ['approach0', 'approach5c', 'approach6', 'approach6e', 'approach8']
+    h_T_approaches = ['method0', 'method1', 'method2', 'method4', 'method3']
     bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -226,7 +226,7 @@ def main():
         print("-" * 50)
 
         # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (departure opt)
-        if name in ['approach6b', 'approach6e'] and result.h3_point is not None:
+        if name in ['method2b', 'method4'] and result.h3_point is not None:
             print(f"  h1 (T): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2 (T): {result.h2_point:.6f}")
@@ -247,7 +247,7 @@ def main():
                 print(f"  T_dep_opt (departure opt): N/A")
 
         # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt (departure opt), f2 (trend T_opt)
-        elif name == 'approach6c' and result.T_dep_opt_point is not None and result.f2_point is not None:
+        elif name == 'method2c' and result.T_dep_opt_point is not None and result.f2_point is not None:
             print(f"  h1 (departure): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2 (departure): {result.h2_point:.6f}")
@@ -268,7 +268,7 @@ def main():
                 print(f"  f2 (trend T_opt): N/A")
 
         # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
-        elif name == 'approach8a' and result.h4_point is not None and result.h3_point is None:
+        elif name == 'method3a' and result.h4_point is not None and result.h3_point is None:
             print(f"  h2 (total curvature): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (trend curvature): {result.h4_point:.6f}")
@@ -277,7 +277,7 @@ def main():
             print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
 
         # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
-        elif name == 'approach8' and result.h4_point is not None:
+        elif name == 'method3' and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (above T_opt): {result.h4_point:.6f}")

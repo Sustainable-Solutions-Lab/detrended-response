@@ -1,13 +1,13 @@
 # Claude Code Style Guide for Detrended Response Analysis
 
 ## Project Goal
-This project investigates how the country-specific quadratic time trend in the Burke et al. (2015) climate-GDP equation can be interpreted as explicit detrending of temperature and/or GDP growth. It implements multiple approaches (0-8) with varying detrending strategies and compares their climate response estimates.
+This project investigates how the country-specific quadratic time trend in the Burke et al. (2015) climate-GDP equation can be interpreted as explicit detrending of temperature and/or GDP growth. It implements multiple methods (0-4) with varying detrending strategies and compares their climate response estimates.
 
 When implementing new analysis features:
-- Maintain consistency with the existing approach numbering and naming conventions
-- Ensure new approaches follow the established pattern of precomputing trends vs joint estimation
-- Document the degrees of freedom and interpretation for any new approach
-- Preserve comparability across approaches by using consistent data filtering and year ranges
+- Maintain consistency with the existing method numbering and naming conventions
+- Ensure new methods follow the established pattern of precomputing trends vs joint estimation
+- Document the degrees of freedom and interpretation for any new method
+- Preserve comparability across methods by using consistent data filtering and year ranges
 
 ## Coding Philosophy
 This project prioritizes elegant, fail-fast code that surfaces errors quickly rather than hiding them.
@@ -51,7 +51,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 - Reference outputs in `./data/output/reference/` should only be updated deliberately when establishing new baselines
 
 ### Naming Conventions
-- **Approaches**: Use `approach0`, `approach5c`, `approach6a`, etc. consistently throughout
+- **Methods**: Use `method0`, `method1`, `method2`, `method3`, `method4` consistently throughout
 - **Coefficients**: Use `h1`, `h2`, `T_optimal`, `h2_low`, `h2_high` consistently
 - **Bootstrap results**: Use `_samples` suffix for arrays of bootstrap values, `_point` for point estimates
 - Descriptive names preferred - long, clear names are better than short, ambiguous ones
@@ -63,15 +63,14 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 
 ### Plotting Conventions
 - **Temperature axis range**: Always use 0°C to 30°C for temperature axes in climate-growth plots
-- **Approach colors**: Use consistent color scheme defined in `APPROACH_COLORS` in output.py:
-  - approach0: black
-  - approach5c: red
-  - approach5a: green
-  - approach5b: blue
-  - approach6: orange
-  - approach8: magenta
+- **Method colors**: Use consistent color scheme defined in `METHOD_COLORS` in output.py:
+  - method0: black
+  - method1: red
+  - method2: orange
+  - method3: magenta
+  - method4: salmon
 - **Uncertainty bands**: Show 90% CI (lighter) and IQR (darker) for bootstrap results
-- **Year effects**: Plot k(t) with bootstrap uncertainty bands, shared y-axis across approaches
+- **Year effects**: Plot k(t) with bootstrap uncertainty bands, shared y-axis across methods
 - **Diverging colormaps**: For difference plots or any plot using a diverging colormap (e.g., RdBu_r where white is in the middle), always use symmetric bounds with equal magnitude and opposite sign, so that white represents zero. Example: if data ranges from -0.03 to 0.05, use bounds of (-0.05, 0.05) not the raw data range.
 
 ### Bootstrap Analysis
@@ -84,10 +83,10 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 
 ### Response Function Centering
 - Always plot `h(T) - h(T_opt)` so curves pass through zero at optimal temperature
-- For piecewise models (approach8), ensure continuity at T_optimal
+- For piecewise models (method3), ensure continuity at T_optimal
 
 ### Detrending Order
-1. Compute year means k(t) first (for approaches 5+)
+1. Compute year means k(t) first (for methods 1+)
 2. Fit country GDP trends on `Δy - k`
 3. Fit country temperature trends
 4. Final OLS on residuals

@@ -1,6 +1,6 @@
 # Methods Detail: Approach 0 vs 5c Parameter Comparison
 
-This document provides a detailed mathematical derivation of the analysis performed by `scripts/compare_approach0_5c.py`, which demonstrates the equivalence between Approach 0 (conjoined OLS) and Approach 5c (precomputed k) under specific identification constraints.
+This document provides a detailed mathematical derivation of the analysis performed by `scripts/compare_method0_5c.py`, which demonstrates the equivalence between Approach 0 (conjoined OLS) and Approach 5c (precomputed k) under specific identification constraints.
 
 ## Overview
 
@@ -57,8 +57,8 @@ trends_with_k = compute_country_trends_with_k(data, year_means)
 ### Step 2: Fit Both Approaches
 
 ```python
-result0 = fit_approach0_no_detrending(data)
-result5c = fit_approach5c_precomputed_k_combined(data, trends_with_k, year_means)
+result0 = fit_method0_no_detrending(data)
+result5c = fit_method1_precomputed_k_combined(data, trends_with_k, year_means)
 ```
 
 Both approaches yield h₁ and h₂ estimates. Approach 0 also directly provides k(t) and implicitly defines jᵢ(t) through its residuals.
@@ -173,8 +173,8 @@ The script generates:
 
 | File | Description |
 |------|-------------|
-| `approach0_vs_5c_scatter.pdf` | 2×2 scatter plot with 1:1 reference lines, best-fit regression, R², and correlation |
-| `approach0_vs_5c_scatter_data.csv` | Raw data for all scatter panels |
+| `method0_vs_5c_scatter.pdf` | 2×2 scatter plot with 1:1 reference lines, best-fit regression, R², and correlation |
+| `method0_vs_5c_scatter_data.csv` | Raw data for all scatter panels |
 
 ## Mathematical Summary
 
