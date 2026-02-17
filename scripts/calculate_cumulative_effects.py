@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import glob
 import sys
 from pathlib import Path
 
@@ -23,6 +24,25 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.detrending import fit_quadratic_trend, DEFAULT_LOESS_WINDOW_YEARS
 from src.output import METHOD_COLORS, create_output_dir, add_input_file_annotation
+
+
+def find_most_recent_dir(pattern: str) -> str:
+    """Find the most recent directory matching a glob pattern.
+
+    Parameters
+    ----------
+    pattern : str
+        Glob pattern to match directories (e.g., 'data/output/reference/bootstrap_*')
+
+    Returns
+    -------
+    str
+        Path to the most recent matching directory, or None if no match found
+    """
+    matches = sorted(glob.glob(pattern))
+    if matches:
+        return matches[-1]
+    return None
 
 
 # ==============================================================================
@@ -535,14 +555,17 @@ def process_representative_countries(
 
 
 def main():
+    # Find most recent bootstrap directory for default
+    default_bootstrap_dir = find_most_recent_dir("data/output/reference/bootstrap_*")
+
     parser = argparse.ArgumentParser(
         description="Calculate cumulative climate effects from bootstrap h(T) values"
     )
     parser.add_argument(
         "--input-dir",
         type=str,
-        default="data/output/reference/bootstrap_20260216_090212",
-        help="Directory containing bootstrap_h_values.csv",
+        default=default_bootstrap_dir,
+        help="Directory containing bootstrap_h_values.csv (default: most recent in data/output/reference/bootstrap_*)",
     )
     parser.add_argument(
         "--output-dir",
@@ -563,9 +586,24 @@ def main():
     print("Calculate Cumulative Climate Effects")
     print("=" * 70)
 
+    # Validate input directory
+    if args.input_dir is None:
+        print("ERROR: No bootstrap directory found matching data/output/reference/bootstrap_*")
+        print("       Please specify --input-dir explicitly")
+        sys.exit(1)
+
     # Input file
     input_dir = Path(args.input_dir)
+    if not input_dir.exists():
+        print(f"ERROR: Input directory does not exist: {input_dir}")
+        sys.exit(1)
+
     input_path = input_dir / "bootstrap_h_values.csv"
+    if not input_path.exists():
+        print(f"ERROR: bootstrap_h_values.csv not found in {input_dir}")
+        sys.exit(1)
+
+    print(f"      Input dir: {input_dir}")
     input_file = str(input_path)
 
     # Output directory

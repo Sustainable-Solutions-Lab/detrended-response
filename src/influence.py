@@ -17,13 +17,16 @@ import pycountry
 
 # Default coefficients to analyze for each method type
 STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_opt']
+# Null models have h1=h2=0 by construction, only r_squared varies
+NULL_MODEL_COEFFICIENTS = ['r_squared']
 APPROACH_COEFFICIENTS = {
     # Standard methods (quadratic response)
     'method0': STANDARD_COEFFICIENTS,
     'method1': STANDARD_COEFFICIENTS,
     'method2': STANDARD_COEFFICIENTS,
-    'method0h0': STANDARD_COEFFICIENTS,
-    'method1h0': STANDARD_COEFFICIENTS,
+    # Null models (h1=h2=0, no climate response)
+    'method0h0': NULL_MODEL_COEFFICIENTS,
+    'method1h0': NULL_MODEL_COEFFICIENTS,
     # method4: h1,h2 (actual T), h4 (quadratic departure only), T_opt, T_dep_opt
     'method4': ['h1', 'h2', 'h4', 'T_opt', 'T_dep_opt'],
     # method3: h2 (below T_opt), h4 (above T_opt), T_opt
