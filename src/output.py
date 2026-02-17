@@ -32,60 +32,34 @@ CONFIDENCE_Z_SCORE = 1.96
 # Color scheme for approaches (degree of detrending)
 # - Conjoined OLS fit: black
 # - Mixed (linear T + quadratic GDP): red
-# - Linear: green
-# - Quadratic: blue
-# - GDP-dependent: purple
-# - LOESS: orange/brown
+# Color scheme for methods:
+# - method0 (Conjoined OLS): black
+# - method1 (Precomputed k): red
+# - method2 (LOESS): orange
+# - method3 (Piecewise): magenta
+# - method4 (Departure): salmon
+# - Null models: gray
 METHOD_COLORS = {
     'method0': 'black',
-    'approach1': 'red',
-    'approach2': 'green',
-    'approach3': 'blue',
-    'approach4': 'blue',
-    'approach5': 'blue',
-    'approach5a': 'green',
-    'approach5b': 'blue',
     'method1': 'red',
-    'approach5d': 'purple',
     'method2': 'orange',
-    'method2b': 'coral',
-    'method2c': 'tomato',
-    'method4': 'salmon',
     'method3': 'magenta',
-    'method3a': 'darkviolet',
-    'method3b': 'mediumorchid',
-    'method3c': 'orchid',
-    'method3d': 'plum',
+    'method4': 'salmon',
     'method0h0': 'gray',
     'method1h0': 'gray',
 }
 
-# Line style scheme for approaches
-# - Conjoined OLS or combined (both): solid
-# - GDP growth detrending only: dashed
-# - Temperature detrending only: dotted
-# - Precomputed k approaches: dash-dot
-# - LOESS approaches: densely dashed
+# Line style scheme for methods:
+# - method0 (Conjoined OLS): solid
+# - method1 (Precomputed k): dash-dot
+# - LOESS methods (2-4): densely dashed
+# - Null models: dashed/dotted
 METHOD_LINESTYLES = {
     'method0': '-',
-    'approach1': '-',
-    'approach2': ':',
-    'approach3': '--',
-    'approach4': '-',
-    'approach5': '-.',
-    'approach5a': '-.',
-    'approach5b': '-.',
     'method1': '-.',
-    'approach5d': '-.',
     'method2': (0, (5, 1)),   # densely dashed
-    'method2b': (0, (5, 1)),  # densely dashed
-    'method2c': (0, (5, 1)),  # densely dashed
-    'method4': (0, (5, 1)),  # densely dashed
     'method3': (0, (5, 1)),   # densely dashed
-    'method3a': (0, (5, 1)),  # densely dashed
-    'method3b': (0, (5, 1)),  # densely dashed
-    'method3c': (0, (5, 1)),  # densely dashed
-    'method3d': (0, (5, 1)),  # densely dashed
+    'method4': (0, (5, 1)),   # densely dashed
     'method0h0': '--',
     'method1h0': ':',
 }
@@ -634,31 +608,31 @@ def plot_temperature_response(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
     input_file: str = None
 ) -> None:
-    """Plot h(T) - h(T*) for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-4 (basic approaches)
+    """Plot h(T) - h(T*) for methods, generating three separate plots."""
+    # Plot 1: Basic methods (method0, method1)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['method0', 'approach1', 'approach2', 'approach3', 'approach4'],
+        approaches=['method0', 'method1'],
         filename='temperature_response_all.pdf',
-        title_suffix='Approaches 0-4',
+        title_suffix='Basic Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 5, 5a, 5b, 5c (precomputed k approaches)
+    # Plot 2: Precomputed k methods (method1)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['method0', 'approach5', 'approach5a', 'approach5b', 'method1'],
+        approaches=['method0', 'method1'],
         filename='temperature_response_precomputed_k.pdf',
-        title_suffix='Precomputed k Variants',
+        title_suffix='Precomputed k Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6b, 6c, 6e, 8, 8a-8d)
+    # Plot 3: LOESS methods (method2, method3, method4)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach5', 'method2', 'method2b', 'method2c', 'method4', 'method3', 'method3a', 'method3b', 'method3c', 'method3d'],
+        approaches=['method2', 'method3', 'method4'],
         filename='temperature_response_loess.pdf',
-        title_suffix='Quadratic vs LOESS',
+        title_suffix='LOESS Methods',
         T_range=T_range,
         input_file=input_file
     )
@@ -711,31 +685,31 @@ def plot_temperature_derivative(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
     input_file: str = None
 ) -> None:
-    """Plot dh/dT for approaches, generating three separate plots."""
-    # Plot 1: Approaches 0-4 (basic approaches)
+    """Plot dh/dT for methods, generating three separate plots."""
+    # Plot 1: Basic methods (method0, method1)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['method0', 'approach1', 'approach2', 'approach3', 'approach4'],
+        approaches=['method0', 'method1'],
         filename='temperature_derivative_all.pdf',
-        title_suffix='Approaches 0-4',
+        title_suffix='Basic Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Approaches 0, 5, 5a, 5b, 5c (precomputed k approaches)
+    # Plot 2: Precomputed k methods (method1)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['method0', 'approach5', 'approach5a', 'approach5b', 'method1'],
+        approaches=['method0', 'method1'],
         filename='temperature_derivative_precomputed_k.pdf',
-        title_suffix='Precomputed k Variants',
+        title_suffix='Precomputed k Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: Quadratic vs LOESS comparison (5 vs 6, 6b, 6c, 6e, 8, 8a-8d)
+    # Plot 3: LOESS methods (method2, method3, method4)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach5', 'method2', 'method2b', 'method2c', 'method4', 'method3', 'method3a', 'method3b', 'method3c', 'method3d'],
+        approaches=['method2', 'method3', 'method4'],
         filename='temperature_derivative_loess.pdf',
-        title_suffix='Quadratic vs LOESS',
+        title_suffix='LOESS Methods',
         T_range=T_range,
         input_file=input_file
     )
@@ -841,17 +815,17 @@ def plot_year_effects(
 
     fig, ax = plt.subplots(figsize=(12, 6))
 
-    # Plot year means k[t] used by approaches 5, 6, 7, 8 as a heavy line
-    for name in ('approach5', 'method2', 'method3'):
+    # Plot year means k[t] used by methods 1-4 as a heavy line
+    for name in ('method1', 'method2', 'method3'):
         if name in results:
             k_year_means = np.array([results[name].k[yr] for yr in unique_years])
             ax.plot(unique_years, k_year_means, color='black', linestyle='-', linewidth=3,
-                    label='Year means k[t] (Approaches 5, 6, 7, 8)')
-            break  # Only plot once since all three share the same k
+                    label='Year means k[t] (Methods 1-4)')
+            break  # Only plot once since all share the same k
 
     for name, result in results.items():
-        # Skip approaches that use the same k values as approach5 (already plotted above)
-        if name in ('approach5', 'approach5a', 'approach5b', 'method1', 'approach5d', 'method2', 'method3'):
+        # Skip methods that use the same k values as method1 (already plotted above)
+        if name in ('method1', 'method2', 'method3', 'method4'):
             continue
 
         # k is stored with actual year as key
@@ -1961,11 +1935,10 @@ def plot_year_effects_bootstrap(
         filename: Output filename (default: 'year_effects_bootstrap.pdf')
         show_title: Whether to show the figure title (default: True)
     """
-    # Default to approaches that typically have meaningful year effects
+    # Default to methods that have meaningful year effects
     if approaches_to_plot is None:
         approaches_to_plot = [
-            'method0', 'approach1', 'approach2', 'approach3', 'approach4',
-            'approach5', 'method2', 'method3'
+            'method0', 'method1', 'method2', 'method3', 'method4'
         ]
 
     # Filter to approaches that exist and have k_samples
@@ -2562,7 +2535,7 @@ def plot_climate_response_contours(
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        approaches: List of approach keys to include (default: ['method4', 'method3a'])
+        approaches: List of approach keys to include (default: ['method4'])
         filename: Output filename
         Ttrend_range: Trend temperature range for x-axis (default: (0, 30))
         deltaT_range: Temperature deviation (T - Ttrend) range for y-axis (default: (-5, 5))
@@ -2572,7 +2545,7 @@ def plot_climate_response_contours(
     from matplotlib.backends.backend_pdf import PdfPages
 
     if approaches is None:
-        approaches = ['method4', 'method3a']
+        approaches = ['method4']
 
     # Filter to approaches that exist
     available = [a for a in approaches if a in results]
@@ -4422,10 +4395,10 @@ def save_all_bootstrap_plots(
     plot_all_bootstrap_distributions(results, all_stats, output_dir, input_file=input_file)
     print("      Saved bootstrap_distributions.pdf")
 
-    # Temperature response PDF 1: Basic approaches (2x2: row1=[0,1], row2=[2,3])
+    # Temperature response PDF 1: Basic methods (method0, method1)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['method0', 'approach1', 'approach2', 'approach3'],
+        approaches=['method0', 'method1'],
         filename='bootstrap_temperature_response_basic.pdf',
         T_range=T_range,
         data=data,
@@ -4433,10 +4406,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_basic.pdf")
 
-    # Temperature response PDF 2: Precomputed k approaches (including 5a, 5b, 5c)
+    # Temperature response PDF 2: Precomputed k methods (method1, method2)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach4', 'approach5', 'approach5a', 'approach5b', 'method1', 'method2'],
+        approaches=['method1', 'method2'],
         filename='bootstrap_temperature_response_precomputed.pdf',
         T_range=T_range,
         data=data,
@@ -4444,10 +4417,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS approaches (6, 6b, 6c, 6e, 8, 8a-8d)
+    # Temperature response PDF 3: LOESS methods (method2, method3, method4)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['method2', 'method2b', 'method2c', 'method4', 'method3', 'method3a', 'method3b', 'method3c', 'method3d'],
+        approaches=['method2', 'method3', 'method4'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4455,12 +4428,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_loess.pdf")
 
-    # Temperature derivative plot - all approaches in one PDF
+    # Temperature derivative plot - all methods in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
-        approaches=['method0', 'approach1', 'approach2', 'approach3',
-                    'approach4', 'approach5', 'approach5a', 'approach5b', 'method1',
-                    'method2', 'method2b', 'method2c', 'method4', 'method3', 'method3a', 'method3b', 'method3c', 'method3d'],
+        approaches=['method0', 'method1', 'method2', 'method3', 'method4'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

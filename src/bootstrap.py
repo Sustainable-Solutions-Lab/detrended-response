@@ -193,31 +193,29 @@ def run_bootstrap(
     n_bootstrap: int = DEFAULT_N_BOOTSTRAP,
     random_seed: int = DEFAULT_RANDOM_SEED,
     verbose: bool = True,
-    Y_ref: float = None,
     loess_window: int = None,
     h_T_approaches: list = None,
 ) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray]]:
-    """Run bootstrap analysis for all approaches.
+    """Run bootstrap analysis for all methods.
 
     For each bootstrap iteration:
     1. Sample M countries with replacement
     2. Create bootstrap dataset
     3. Recompute country trends for bootstrap sample
-    4. Fit all approaches (including GDP-dependent if Y_ref provided)
-    5. Store h1, h2, T_opt, R², Total R², and f1/h3/h4/f2 (for approach-specific coefficients)
-    6. Optionally compute h(T) for selected approaches
+    4. Fit all methods
+    5. Store h1, h2, T_opt, R², Total R², and h4 (for method-specific coefficients)
+    6. Optionally compute h(T) for selected methods
 
     Args:
         data: Original AnalysisData
         trends: Original CountryTrends (used for point estimates)
-        original_results: Dict of original FitResult for each approach
+        original_results: Dict of original FitResult for each method
         n_bootstrap: Number of bootstrap iterations
         random_seed: Random seed for reproducibility
         verbose: Print progress messages
-        Y_ref: Reference GDP for GDP-dependent approaches (computed once on full dataset)
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
-        h_T_approaches: List of approach names to compute h(T) for (default: None means skip)
+        h_T_approaches: List of method names to compute h(T) for (default: None means skip)
             Example: ['method0', 'method1', 'method2', 'method4', 'method3']
 
     Returns:
@@ -321,12 +319,11 @@ def run_bootstrap(
             # Compute LOESS trends for approaches 6-8a
             boot_trends_loess = compute_country_trends_loess(boot_data, boot_year_means, loess_window)
 
-            # Fit all approaches (pass Y_ref for GDP-dependent approaches)
+            # Fit all methods
             boot_results = fit_all_approaches(
                 boot_data, boot_trends,
                 trends_with_k=boot_trends_with_k,
                 year_means=boot_year_means,
-                Y_ref=Y_ref,
                 trends_loess=boot_trends_loess
             )
 

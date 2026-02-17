@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Main script for detrended response analysis.
 
-This script implements and compares three approaches to making explicit
-the time trend terms in the Burke et al. (2015) climate-economy relationship:
+This script implements and compares multiple methods for analyzing
+the climate-economy relationship with explicit time trend detrending.
 
-1. Linear temperature detrending
-2. Quadratic GDP growth detrending
-3. Combined detrending
+Methods:
+    method0: Conjoined OLS with country time trends and year fixed effects
+    method1: Pre-computed k with linear T + quadratic GDP detrending
+    method2: Pre-computed k with LOESS trends
+    method3: Piecewise quadratic response with LOESS
+    method4: T response with quadratic departure term
+    method0h0: Null model (h1=h2=0) for method0
+    method1h0: Null model (h1=h2=0) for method1
 
 Usage:
     python scripts/run_analysis.py [--year-min YEAR] [--year-max YEAR] [--output-dir DIR]
@@ -27,29 +32,7 @@ from src.detrending import (
     compute_country_trends_loess,
 )
 import numpy as np
-from src.fitting import (
-    fit_method0_no_detrending,
-    fit_approach2_temperature_detrending,
-    fit_approach3_growth_detrending,
-    fit_approach1_combined_detrending,
-    fit_approach4_combined_quadratic_detrending,
-    fit_approach5_precomputed_k_quadratic,
-    fit_approach5a_precomputed_k_linear_temp,
-    fit_approach5b_precomputed_k_gdp_only,
-    fit_method1_precomputed_k_combined,
-    fit_approach5d_precomputed_k_gdp_response,
-    fit_method2_precomputed_k_loess,
-    fit_method2b_low_only_loess,
-    fit_method2c_departure_trend_loess,
-    fit_method4_quadratic_departure_loess,
-    fit_method3_gaussian_loess,
-    fit_method3a_shared_Topt_loess,
-    fit_method3b_modulated_loess,
-    fit_method3c_linear_modulated_loess,
-    fit_method3d_quadratic_modulated_loess,
-    fit_method0h0_joint,
-    fit_method1h0_precomputed_k,
-)
+from src.fitting import fit_all_approaches
 from src.output import save_all_outputs, create_output_dir
 
 
@@ -111,7 +94,7 @@ def main():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
         input_file = str(csv_path)
-        print(f"\n[1/11] Loading data from {csv_path}...")
+        print(f"\n[1/5] Loading data from {csv_path}...")
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
@@ -122,7 +105,7 @@ def main():
         year_min = args.year_min if args.year_min is not None else 1960
         year_max = args.year_max if args.year_max is not None else 2022
         input_file = f"{args.maddison} + {args.cru}"
-        print(f"\n[1/11] Loading data from {args.maddison} and {args.cru}...")
+        print(f"\n[1/5] Loading data from {args.maddison} and {args.cru}...")
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
@@ -135,67 +118,25 @@ def main():
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
 
     # Compute country-level trends
-    print("\n[2/11] Computing country-level trends...")
+    print("\n[2/5] Computing country-level trends...")
     trends = compute_country_trends(data)
-    print("      Done.")
-
-    # Compute year means and country trends with k for Approach 5
-    print("\n[3/11] Computing year means k[t] and adjusted country trends...")
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     print("      Done.")
 
-    # Compute LOESS trends for Approaches 6 and 7
-    print(f"\n[4/11] Computing LOESS trends (window={args.loess_window} years)...")
+    # Compute LOESS trends
+    print(f"\n[3/5] Computing LOESS trends (window={args.loess_window} years)...")
     trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
     print("      Done.")
 
-    # Compute Y_ref for Approach 7 (based on most recent year)
-    max_year = data.year_range[1]
-    mask_recent = data.year == max_year
-    Y_ref = np.mean(data.pcGDP[mask_recent])
-    print(f"      Y_ref (mean pcGDP in {max_year}): {Y_ref:.2f}")
-
-    # Fit all approaches
-    results = {}
-
-    print("\n[5/11] Fitting Approach 0: Conjoined OLS fit...")
-    results['method0'] = fit_method0_no_detrending(data)
-    print("      Done.")
-
-    print("\n[6/11] Fitting Approaches 1-4: Detrending approaches...")
-    results['approach1'] = fit_approach1_combined_detrending(data, trends)
-    results['approach2'] = fit_approach2_temperature_detrending(data, trends)
-    results['approach3'] = fit_approach3_growth_detrending(data, trends)
-    results['approach4'] = fit_approach4_combined_quadratic_detrending(data, trends)
-    print("      Done.")
-
-    print("\n[7/11] Fitting Approach 5: Precomputed k (quadratic)...")
-    results['approach5'] = fit_approach5_precomputed_k_quadratic(data, trends_with_k, year_means)
-    print("      Done.")
-
-    print("\n[8/11] Fitting Approaches 5a, 5b, 5c, 5d: Precomputed k variants...")
-    results['approach5a'] = fit_approach5a_precomputed_k_linear_temp(data, trends_with_k, year_means)
-    results['approach5b'] = fit_approach5b_precomputed_k_gdp_only(data, trends_with_k, year_means)
-    results['method1'] = fit_method1_precomputed_k_combined(data, trends_with_k, year_means)
-    results['approach5d'] = fit_approach5d_precomputed_k_gdp_response(data, trends_with_k, year_means, Y_ref)
-    print("      Done.")
-
-    print("\n[9/11] Fitting Approaches 6, 6b, 6c, 6e, 8, 8a-8d: LOESS detrending...")
-    results['method2'] = fit_method2_precomputed_k_loess(data, trends_loess, year_means)
-    results['method2b'] = fit_method2b_low_only_loess(data, trends_loess, year_means)
-    results['method2c'] = fit_method2c_departure_trend_loess(data, trends_loess, year_means)
-    results['method4'] = fit_method4_quadratic_departure_loess(data, trends_loess, year_means)
-    results['method3'] = fit_method3_gaussian_loess(data, trends_loess, year_means)
-    results['method3a'] = fit_method3a_shared_Topt_loess(data, trends_loess, year_means)
-    results['method3b'] = fit_method3b_modulated_loess(data, trends_loess, year_means)
-    results['method3c'] = fit_method3c_linear_modulated_loess(data, trends_loess, year_means)
-    results['method3d'] = fit_method3d_quadratic_modulated_loess(data, trends_loess, year_means)
-    print("      Done.")
-
-    print("\n[10/11] Fitting null models (no climate response)...")
-    results['method0h0'] = fit_method0h0_joint(data)
-    results['method1h0'] = fit_method1h0_precomputed_k(data, trends_with_k, year_means)
+    # Fit all methods
+    print("\n[4/5] Fitting all methods...")
+    results = fit_all_approaches(
+        data, trends,
+        trends_with_k=trends_with_k,
+        year_means=year_means,
+        trends_loess=trends_loess
+    )
     print("      Done.")
 
     # Print summary
@@ -207,59 +148,28 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt
-        if name in ['method2b', 'method4'] and hasattr(r, 'h3'):
+        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt
+        if name == 'method4' and hasattr(r, 'h4'):
             print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h3 (departure) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
             print(f"  h4 (departure) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             if not np.isnan(r.T_opt):
                 print(f"  T_opt = {r.T_opt:.2f} C")
             else:
                 print(f"  T_opt = N/A")
-            if not np.isnan(r.T_dep_opt):
+            if hasattr(r, 'T_dep_opt') and not np.isnan(r.T_dep_opt):
                 print(f"  T_dep_opt (departure opt) = {r.T_dep_opt:.2f} C")
             else:
                 print(f"  T_dep_opt (departure opt) = N/A")
 
-        # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt, f2
-        elif name == 'method2c' and hasattr(r, 'T_dep_opt') and hasattr(r, 'f2'):
-            print(f"  h1 (departure) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
-            print(f"  h2 (departure) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h3 (trend) = {r.h3:.6f}  (SE: {r.h3_se:.6f})")
-            print(f"  h4 (trend) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            if not np.isnan(r.T_dep_opt):
-                print(f"  T_dep_opt (departure opt) = {r.T_dep_opt:.2f} C")
-            else:
-                print(f"  T_dep_opt (departure opt) = N/A")
-            if not np.isnan(r.f2):
-                print(f"  f2 (trend T_opt) = {r.f2:.2f} C")
-            else:
-                print(f"  f2 (trend T_opt) = N/A")
-
-        # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
-        elif name == 'method3a' and hasattr(r, 'h4') and not hasattr(r, 'h3'):
-            print(f"  h2 (total curvature) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h4 (trend curvature) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
-
-        # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
+        # method3: h2 (below T_opt), h4 (above T_opt), T_opt
         elif name == 'method3' and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:
-            # Standard approaches (0-5, 5a-c, 5d, 6, 8b, 8c, 8d, etc.)
-            # Print f1 for Approach 8b/8c (linear modulation) or 5d (GDP scaling exponent)
-            if hasattr(r, 'f1') and r.f1 is not None:
-                print(f"  f1 = {r.f1:12.6f}  (SE: {r.f1_se:.6f})")
-            # Print f2 for Approach 8b/8d (quadratic modulation)
-            if hasattr(r, 'f2') and r.f2 is not None:
-                print(f"  f2 = {r.f2:12.6f}  (SE: {r.f2_se:.6f})")
-            # Print Y_ref for Approach 5d
-            if hasattr(r, 'Y_ref') and r.Y_ref is not None:
-                print(f"  Y_ref = {r.Y_ref:.2f}")
+            # Standard methods (method0, method1, method2, null models)
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):
@@ -278,7 +188,7 @@ def main():
             print(f"  Imbalance Ratio = {r.imbalance_ratio:.4f}")
 
     # Save outputs
-    print("\n[11/11] Saving outputs...")
+    print("\n[5/5] Saving outputs...")
     if args.output_dir:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)

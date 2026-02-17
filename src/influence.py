@@ -15,35 +15,19 @@ import pandas as pd
 import pycountry
 
 
-# Default coefficients to analyze for each approach type
+# Default coefficients to analyze for each method type
 STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_opt']
 APPROACH_COEFFICIENTS = {
-    # Standard approaches (0-5, 5a-5d, 6, method0h0, method1h0)
+    # Standard methods (quadratic response)
     'method0': STANDARD_COEFFICIENTS,
-    'approach1': STANDARD_COEFFICIENTS,
-    'approach2': STANDARD_COEFFICIENTS,
-    'approach3': STANDARD_COEFFICIENTS,
-    'approach4': STANDARD_COEFFICIENTS,
-    'approach5': STANDARD_COEFFICIENTS,
-    'approach5a': STANDARD_COEFFICIENTS,
-    'approach5b': STANDARD_COEFFICIENTS,
     'method1': STANDARD_COEFFICIENTS,
-    'approach5d': STANDARD_COEFFICIENTS,
     'method2': STANDARD_COEFFICIENTS,
     'method0h0': STANDARD_COEFFICIENTS,
     'method1h0': STANDARD_COEFFICIENTS,
-    # Approach 6b: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (optimal departure)
-    'method2b': ['h1', 'h2', 'h3', 'h4', 'T_opt', 'T_dep_opt'],
-    # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt (departure opt), f2 (trend T_opt)
-    'method2c': ['h1', 'h2', 'h3', 'h4', 'T_dep_opt', 'f2'],
-    # Approach 6e: h1,h2 (actual T), h4 (quadratic departure only), T_opt, T_dep_opt
+    # method4: h1,h2 (actual T), h4 (quadratic departure only), T_opt, T_dep_opt
     'method4': ['h1', 'h2', 'h4', 'T_opt', 'T_dep_opt'],
-    # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
+    # method3: h2 (below T_opt), h4 (above T_opt), T_opt
     'method3': ['h2', 'h4', 'T_opt'],
-    # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
-    'method3a': ['h2', 'h4', 'T_opt'],
-    # Approach 8b: f1 (linear modulation), f2 (quadratic modulation), h1, h2, T_opt
-    'method3b': ['f1', 'f2', 'h1', 'h2', 'T_opt'],
 }
 
 

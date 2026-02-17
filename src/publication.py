@@ -642,9 +642,9 @@ def generate_figures(
     print(f"      [Figures] Reconstructed {len(results)} approaches")
 
     # Define approach patterns for publication figures
-    # 4-panel layout: [[row0: 0, 5c], [row1: 5a, 5b]]
-    approaches_4panel = ['method0', 'method1', 'approach5a', 'approach5b']
-    # 2-panel layout: [col0: 6, col1: 8]
+    # 4-panel layout: [[row0: method0, method1], [row1: method2, method4]]
+    approaches_4panel = ['method0', 'method1', 'method2', 'method4']
+    # 2-panel layout: [col0: method2, col1: method3]
     approaches_2panel = ['method2', 'method3']
 
     # Figure 1a: Temperature response (2 panels)
@@ -721,12 +721,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
 
-    # Figure 7: h2 coefficient histograms - 4 panels [[method0, method1], [approach5a, approach5b]]
+    # Figure 7: h2 coefficient histograms - 4 panels [[method0, method1], [method2, method4]]
     print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['method0', 'method1', 'approach5a', 'approach5b'],
+        approaches=['method0', 'method1', 'method2', 'method4'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         filename='fig_h2_histogram_4panel.pdf',
@@ -762,38 +762,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
 
-    # Keep the 3-panel variants for 6b, 6e, 8a
-    approaches_variants = ['method2b', 'method4', 'method3a']
-
-    # Figure 10: Temperature derivative - 3 panels for variant approaches (6b, 6e, 8a)
-    print("      [Figures] Generating temperature derivative figure (3 panels - variants)...")
-    plot_bootstrap_temperature_derivative(
-        results,
-        output_dir,
-        approaches=approaches_variants,
-        filename='fig_temperature_derivative_3panel_variants.pdf',
-        T_range=(0, 30),
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_temperature_derivative_3panel_variants.pdf")
-
-    # Figure 11: T_optimal histograms - 3 panels for variant approaches (6b, 6e, 8a)
-    print("      [Figures] Generating T_optimal histogram figure (3 panels - variants)...")
-    plot_T_optimal_histograms(
-        results,
-        output_dir,
-        approaches=approaches_variants,
-        filename='fig_T_optimal_histogram_3panel_variants.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_T_optimal_histogram_3panel_variants.pdf")
-
-    # Figure 12: Climate response contours for approaches 6e and 8a
-    print("      [Figures] Generating climate response contour figure (6e, 8a)...")
+    # Figure 10: Climate response contours for method4 (departure term)
+    print("      [Figures] Generating climate response contour figure (method4)...")
     plot_climate_response_contours(
         results,
         output_dir,
-        approaches=['method4', 'method3a'],
+        approaches=['method4'],
         filename='fig_climate_response_contours.pdf',
         Ttrend_range=(0, 30),
         deltaT_range=(-5, 5),

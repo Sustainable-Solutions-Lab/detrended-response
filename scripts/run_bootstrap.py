@@ -2,7 +2,7 @@
 """Run bootstrap analysis for uncertainty quantification.
 
 This script performs country-level cluster bootstrap resampling to compute
-confidence intervals for h1, h2, and T_opt across all approaches.
+confidence intervals for h1, h2, and T_opt across all methods.
 
 Usage:
     python scripts/run_bootstrap.py [--n-bootstrap N] [--random-seed SEED] [--output-dir DIR]
@@ -140,13 +140,8 @@ def main():
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
-    # Compute LOESS trends for approaches 9 and 10
+    # Compute LOESS trends for methods 2-4
     trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
-    # Compute Y_ref based on most recent year (used for all bootstrap iterations)
-    max_year = data.year_range[1]
-    mask_recent = data.year == max_year
-    Y_ref = np.mean(data.pcGDP[mask_recent])
-    print(f"      Y_ref (mean pcGDP in {max_year}): {Y_ref:.2f}")
     print(f"      LOESS window: {args.loess_window} years")
     print("      Done.")
 
@@ -156,14 +151,13 @@ def main():
         data, trends,
         trends_with_k=trends_with_k,
         year_means=year_means,
-        Y_ref=Y_ref,
         trends_loess=trends_loess
     )
     print("      Done.")
 
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
-    # Specify approaches for h(T) computation
+    # Specify methods for h(T) computation
     h_T_approaches = ['method0', 'method1', 'method2', 'method4', 'method3']
     bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
@@ -172,7 +166,6 @@ def main():
         n_bootstrap=args.n_bootstrap,
         random_seed=args.random_seed,
         verbose=verbose,
-        Y_ref=Y_ref,
         loess_window=args.loess_window,
         h_T_approaches=h_T_approaches,
     )
@@ -210,7 +203,7 @@ def main():
 
     # Generate bootstrap plots
     print("\n[7/7] Generating bootstrap plots...")
-    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, Y_ref=Y_ref, data=data, input_file=input_file)
+    save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, data=data, input_file=input_file)
     print("      Done.")
 
     print(f"      Output saved to: {output_dir}")
@@ -225,14 +218,12 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # Approach 6b/6e: h1,h2 (actual T), h3,h4 (departure), T_opt, T_dep_opt (departure opt)
-        if name in ['method2b', 'method4'] and result.h3_point is not None:
+        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt
+        if name == 'method4' and result.h4_point is not None:
             print(f"  h1 (T): {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2 (T): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            print(f"  h3 (departure): {result.h3_point:.6f}")
-            print(f"    90% CI: [{stats['h3']['p5']:.6f}, {stats['h3']['p95']:.6f}]")
             print(f"  h4 (departure): {result.h4_point:.6f}")
             print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
             if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
@@ -246,37 +237,7 @@ def main():
             else:
                 print(f"  T_dep_opt (departure opt): N/A")
 
-        # Approach 6c: h1,h2 (departure), h3,h4 (trend), T_dep_opt (departure opt), f2 (trend T_opt)
-        elif name == 'method2c' and result.T_dep_opt_point is not None and result.f2_point is not None:
-            print(f"  h1 (departure): {result.h1_point:.6f}")
-            print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
-            print(f"  h2 (departure): {result.h2_point:.6f}")
-            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            print(f"  h3 (trend): {result.h3_point:.6f}")
-            print(f"    90% CI: [{stats['h3']['p5']:.6f}, {stats['h3']['p95']:.6f}]")
-            print(f"  h4 (trend): {result.h4_point:.6f}")
-            print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
-            if not np.isnan(result.T_dep_opt_point):
-                print(f"  T_dep_opt (departure opt): {result.T_dep_opt_point:.2f} C")
-                print(f"    90% CI: [{stats['T_dep_opt']['p5']:.2f}, {stats['T_dep_opt']['p95']:.2f}]")
-            else:
-                print(f"  T_dep_opt (departure opt): N/A")
-            if not np.isnan(result.f2_point):
-                print(f"  f2 (trend T_opt): {result.f2_point:.2f} C")
-                print(f"    90% CI: [{stats['f2']['p5']:.2f}, {stats['f2']['p95']:.2f}]")
-            else:
-                print(f"  f2 (trend T_opt): N/A")
-
-        # Approach 8a: h2 (total curvature), h4 (trend curvature), T_opt
-        elif name == 'method3a' and result.h4_point is not None and result.h3_point is None:
-            print(f"  h2 (total curvature): {result.h2_point:.6f}")
-            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            print(f"  h4 (trend curvature): {result.h4_point:.6f}")
-            print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
-            print(f"  T_opt: {result.T_opt_point:.2f} C")
-            print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
-
-        # Approach 8: h2 (below T_opt), h4 (above T_opt), T_opt
+        # method3: h2 (below T_opt), h4 (above T_opt), T_opt
         elif name == 'method3' and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
@@ -286,7 +247,7 @@ def main():
             print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
 
         else:
-            # Standard approaches (0, 5, 5a-c, 6, 8b, etc.)
+            # Standard methods (method0, method1, method2, null models)
             if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
                 print(f"  T_opt: {result.T_opt_point:.2f} C")
                 print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
@@ -297,14 +258,6 @@ def main():
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            # Print f1 for Approach 8b/8c (linear modulation) or 5d (GDP scaling exponent)
-            if result.f1_point is not None and 'f1' in stats:
-                print(f"  f1: {result.f1_point:.4f}")
-                print(f"    90% CI: [{stats['f1']['p5']:.4f}, {stats['f1']['p95']:.4f}]")
-            # Print f2 for Approach 8b/8d (quadratic modulation)
-            if result.f2_point is not None and 'f2' in stats:
-                print(f"  f2: {result.f2_point:.4f}")
-                print(f"    90% CI: [{stats['f2']['p5']:.4f}, {stats['f2']['p95']:.4f}]")
 
         print(f"  Successful iterations: {result.n_successful}/{result.n_bootstrap}")
 
