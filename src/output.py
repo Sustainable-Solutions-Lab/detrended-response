@@ -1872,6 +1872,15 @@ def save_bootstrap_h_values(
     if original_results is not None:
         total_rows += len(h_T_samples) * data.n_obs
 
+    # Pre-compute metadata arrays once (avoids repeated lookups in inner loops)
+    iso3_arr = np.array([data.idx_to_iso[idx] for idx in data.country_idx])
+    year_arr = data.year.astype(int)
+    temp_arr = data.temp
+    n_obs = data.n_obs
+
+    # Chunk size for buffered writing (balance memory vs I/O overhead)
+    CHUNK_SIZE = 50000
+
     with open(output_path, 'w') as f:
         if input_file:
             f.write(f'# Input data: {Path(input_file).name}\n')
@@ -1886,32 +1895,42 @@ def save_bootstrap_h_values(
 
                 # Compute h(T) for each observation based on approach type
                 if name in ['method0', 'method1', 'method2']:
-                    h_T_point = r.h1 * data.temp + r.h2 * data.temp**2
+                    h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
                 elif name == 'method4':
                     T_loess = trends_loess.T_loess
-                    h_T_point = r.h1 * data.temp + r.h2 * data.temp**2 + r.h4 * (data.temp - T_loess)**2
+                    h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2 + r.h4 * (temp_arr - T_loess)**2
                 elif name == 'method3':
-                    below = data.temp <= r.T_opt
-                    h_T_point = np.where(below, r.h2 * (data.temp - r.T_opt)**2, r.h4 * (data.temp - r.T_opt)**2)
+                    below = temp_arr <= r.T_opt
+                    h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
                 else:
                     continue
 
-                for i in range(data.n_obs):
-                    iso3 = data.idx_to_iso[data.country_idx[i]]
-                    year = data.year[i]
-                    temp = data.temp[i]
-                    f.write(f'-1,{name},{iso3},{year},{temp:.4f},{h_T_point[i]:.8f}\n')
+                # Vectorized formatting for point estimates
+                lines = [
+                    f'-1,{name},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_point[i]:.8f}\n'
+                    for i in range(n_obs)
+                ]
+                f.write(''.join(lines))
 
         # Write bootstrap samples (iteration = 0, 1, ..., N-1)
         for name, arr in h_T_samples.items():
-            n_bootstrap, n_obs = arr.shape
+            n_bootstrap = arr.shape[0]
+            buffer = []
+
             for b in range(n_bootstrap):
+                h_T_row = arr[b]
+                # Build lines for this bootstrap iteration
                 for i in range(n_obs):
-                    iso3 = data.idx_to_iso[data.country_idx[i]]
-                    year = data.year[i]
-                    temp = data.temp[i]
-                    h_T = arr[b, i]
-                    f.write(f'{b},{name},{iso3},{year},{temp:.4f},{h_T:.8f}\n')
+                    buffer.append(f'{b},{name},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_row[i]:.8f}\n')
+
+                # Flush buffer when it reaches chunk size
+                if len(buffer) >= CHUNK_SIZE:
+                    f.write(''.join(buffer))
+                    buffer = []
+
+            # Flush remaining buffer for this approach
+            if buffer:
+                f.write(''.join(buffer))
 
     print(f"  Saved bootstrap_h_values.csv ({total_rows} rows)")
 
