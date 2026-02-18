@@ -153,6 +153,46 @@ def inv_log_transform(y):
     return (np.exp(y) - 1) * 100
 
 
+def get_country_ordering(representatives: dict) -> list:
+    """Get ordered list of country keys: min, P5, P25, P50, P75, P95, max.
+
+    Args:
+        representatives: Dictionary from select_representative_countries
+
+    Returns:
+        List of keys in proper order
+    """
+    # Define the display order
+    ordering = []
+    if 'min' in representatives:
+        ordering.append('min')
+    # Add percentiles in sorted order
+    percentile_keys = sorted([k for k in representatives.keys() if isinstance(k, int)])
+    ordering.extend(percentile_keys)
+    if 'max' in representatives:
+        ordering.append('max')
+    return ordering
+
+
+def get_country_label(key, representatives: dict) -> str:
+    """Get display label for a country key.
+
+    Args:
+        key: Either 'min', 'max', or an integer percentile
+        representatives: Dictionary with country info
+
+    Returns:
+        Formatted label string
+    """
+    iso3 = representatives[key]['iso3']
+    if key == 'min':
+        return f"{iso3}\n(Min)"
+    elif key == 'max':
+        return f"{iso3}\n(Max)"
+    else:
+        return f"{iso3}\n(P{key})"
+
+
 def plot_cumulative_effects_boxplot(
     df: pd.DataFrame,
     representatives: dict,
@@ -162,6 +202,7 @@ def plot_cumulative_effects_boxplot(
     """Create clustered box-and-whisker plot of cumulative effects.
 
     Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
+    Groups by country (min, P5, P25, P50, P75, P95, max) with 5 method bars per country.
 
     Args:
         df: DataFrame with cumulative effects for representative countries
@@ -169,15 +210,15 @@ def plot_cumulative_effects_boxplot(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(14, 6))
 
     # Use central approaches in consistent order
     approaches = CENTRAL_METHODS
     n_approaches = len(approaches)
 
-    # Sort percentiles for x-axis ordering
-    percentiles_sorted = sorted(representatives.keys())
-    n_clusters = len(percentiles_sorted)
+    # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
+    country_keys = get_country_ordering(representatives)
+    n_clusters = len(country_keys)
 
     # Spacing parameters
     cluster_width = 0.8
@@ -187,8 +228,8 @@ def plot_cumulative_effects_boxplot(
     df_2022 = df[df['year'] == 2022].copy()
 
     # Create box plots
-    for i, percentile in enumerate(percentiles_sorted):
-        iso3 = representatives[percentile]['iso3']
+    for i, country_key in enumerate(country_keys):
+        iso3 = representatives[country_key]['iso3']
         cluster_center = i
 
         for j, approach in enumerate(approaches):
@@ -230,7 +271,7 @@ def plot_cumulative_effects_boxplot(
                     markeredgecolor='black', markeredgewidth=1, zorder=10)
 
     # X-axis labels (country codes with percentile info)
-    x_labels = [f"{representatives[p]['iso3']}\n(P{p})" for p in percentiles_sorted]
+    x_labels = [get_country_label(k, representatives) for k in country_keys]
     ax.set_xticks(range(n_clusters))
     ax.set_xticklabels(x_labels)
 
@@ -266,6 +307,140 @@ def plot_cumulative_effects_boxplot(
 
     # Save
     output_path = output_dir / 'cumulative_effects_boxplot.pdf'
+    fig.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    print(f"      Saved: {output_path}")
+
+
+# Colors for representative countries (min to max)
+COUNTRY_COLORS = {
+    'min': '#1f77b4',    # Blue
+    5: '#ff7f0e',        # Orange
+    25: '#2ca02c',       # Green
+    50: '#d62728',       # Red
+    75: '#9467bd',       # Purple
+    95: '#8c564b',       # Brown
+    'max': '#e377c2',    # Pink
+}
+
+
+def plot_cumulative_effects_by_method(
+    df: pd.DataFrame,
+    representatives: dict,
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Create clustered box-and-whisker plot grouped by method.
+
+    Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
+    Groups by method (5 clusters) with 7 country bars per method.
+
+    Args:
+        df: DataFrame with cumulative effects for representative countries
+        representatives: Dictionary from select_representative_countries
+        output_dir: Directory to save plot
+        input_file: Input file for annotation
+    """
+    fig, ax = plt.subplots(figsize=(14, 6))
+
+    # Use central approaches in consistent order
+    approaches = CENTRAL_METHODS
+    n_approaches = len(approaches)
+
+    # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
+    country_keys = get_country_ordering(representatives)
+    n_countries = len(country_keys)
+
+    # Spacing parameters
+    cluster_width = 0.85
+    box_width = cluster_width / (n_countries + 1)  # Extra space between clusters
+
+    # Filter to year 2022 for final values
+    df_2022 = df[df['year'] == 2022].copy()
+
+    # Create box plots - grouped by method
+    for i, approach in enumerate(approaches):
+        cluster_center = i
+
+        for j, country_key in enumerate(country_keys):
+            iso3 = representatives[country_key]['iso3']
+
+            # Get bootstrap samples (iterations 0-999) for this country/approach
+            mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
+            bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
+
+            # Transform to log scale
+            bootstrap_values = log_transform(bootstrap_values_pct)
+
+            # Get point estimate (iteration -1)
+            mask_point = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] == -1)
+            point_estimate_pct = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate_pct = point_estimate_pct[0] * 100 if len(point_estimate_pct) > 0 else np.nan
+            point_estimate = log_transform(point_estimate_pct)
+
+            # Position for this box
+            pos = cluster_center + (j - (n_countries - 1) / 2) * box_width
+
+            # Draw box - color by country
+            color = COUNTRY_COLORS.get(country_key, 'gray')
+            box = ax.boxplot(
+                [bootstrap_values],
+                positions=[pos],
+                widths=box_width * 0.8,
+                patch_artist=True,
+                showfliers=False,
+                whis=[5, 95],  # Whiskers at 5th and 95th percentile
+                medianprops=dict(color='black', linewidth=1),
+            )
+
+            # Color the box
+            for patch in box['boxes']:
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
+
+            # Add point estimate as diamond marker
+            ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
+                    markeredgecolor='black', markeredgewidth=1, zorder=10)
+
+    # X-axis labels (methods)
+    ax.set_xticks(range(n_approaches))
+    ax.set_xticklabels(approaches)
+
+    # Y-axis: set ticks at nice percentage values, but plot at log-transformed positions
+    tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
+    tick_positions = [log_transform(p) for p in tick_pcts]
+    tick_labels = [f'{p}%' for p in tick_pcts]
+    ax.set_yticks(tick_positions)
+    ax.set_yticklabels(tick_labels)
+
+    # Formatting
+    ax.set_ylabel('Cumulative Climate Effect')
+    ax.set_xlabel('Approach')
+    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022) by Approach')
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+
+    # Legend for countries
+    legend_handles = []
+    legend_labels = []
+    for country_key in country_keys:
+        color = COUNTRY_COLORS.get(country_key, 'gray')
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.7))
+        iso3 = representatives[country_key]['iso3']
+        if country_key == 'min':
+            legend_labels.append(f'{iso3} (Min)')
+        elif country_key == 'max':
+            legend_labels.append(f'{iso3} (Max)')
+        else:
+            legend_labels.append(f'{iso3} (P{country_key})')
+    ax.legend(legend_handles, legend_labels, loc='best', fontsize=8)
+
+    plt.tight_layout()
+
+    # Add input file annotation
+    add_input_file_annotation(fig, input_file)
+
+    # Save
+    output_path = output_dir / 'cumulative_effects_by_method.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
@@ -450,7 +625,8 @@ def plot_cumulative_effects_by_approach(
 def select_representative_countries_from_file(
     input_path: Path,
     loess_window: int = DEFAULT_LOESS_WINDOW_YEARS,
-    percentiles: tuple = REPRESENTATIVE_PERCENTILES
+    percentiles: tuple = REPRESENTATIVE_PERCENTILES,
+    include_min_max: bool = True
 ) -> dict:
     """Select representative countries using only point estimate data.
 
@@ -460,9 +636,10 @@ def select_representative_countries_from_file(
         input_path: Path to bootstrap_h_values.csv
         loess_window: Window size for LOESS smoothing
         percentiles: Percentiles for selecting representatives
+        include_min_max: Whether to include min and max countries
 
     Returns:
-        Dictionary mapping percentile -> {'iso3': str, 'value': float, 'target': float}
+        Dictionary mapping percentile (or 'min'/'max') -> {'iso3': str, 'value': float, 'target': float}
     """
     print("      Loading point estimate data (iteration=-1, method0)...")
 
@@ -503,6 +680,21 @@ def select_representative_countries_from_file(
             'iso3': row['iso3'],
             'value': row['h_T_delta_cum'],
             'target': target
+        }
+
+    # Add min and max countries
+    if include_min_max:
+        min_idx = np.argmin(values)
+        max_idx = np.argmax(values)
+        representatives['min'] = {
+            'iso3': df_results.iloc[min_idx]['iso3'],
+            'value': values[min_idx],
+            'target': values[min_idx]
+        }
+        representatives['max'] = {
+            'iso3': df_results.iloc[max_idx]['iso3'],
+            'value': values[max_idx],
+            'target': values[max_idx]
         }
 
     return representatives
@@ -614,7 +806,7 @@ def main():
         output_dir = create_output_dir(prefix="cumulative_")
 
     # Phase 1: Process all countries with point estimate
-    print("\n[1/6] Processing all countries (point estimate only)...")
+    print("\n[1/7] Processing all countries (point estimate only)...")
     df_all_countries = process_all_countries_point_estimate(input_path, args.loess_window)
 
     # Save all countries cumulative effects
@@ -626,27 +818,34 @@ def main():
     print(f"      Saved: {all_countries_path} ({len(df_all_countries):,} rows)")
 
     # Phase 2: Create multi-panel visualization by approach
-    print("\n[2/6] Creating cumulative effects by approach visualization...")
+    print("\n[2/7] Creating cumulative effects by approach visualization...")
     plot_cumulative_effects_by_approach(df_all_countries, output_dir, input_file)
 
     # Phase 3: Select representative countries using point estimate only
-    print("\n[3/6] Selecting representative countries (using point estimate)...")
+    print("\n[3/7] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
         input_path, args.loess_window
     )
 
     # Print selected countries
     print("      Selected countries:")
-    for p in sorted(representatives.keys()):
-        info = representatives[p]
-        print(f"        P{p}: {info['iso3']} (value={info['value']:.4f}, target={info['target']:.4f})")
+    country_order = get_country_ordering(representatives)
+    for key in country_order:
+        info = representatives[key]
+        if key == 'min':
+            label = "Min"
+        elif key == 'max':
+            label = "Max"
+        else:
+            label = f"P{key}"
+        print(f"        {label}: {info['iso3']} (value={info['value']:.4f}, target={info['target']:.4f})")
 
     # Save representative countries info
     rep_rows = []
-    for p in sorted(representatives.keys()):
-        info = representatives[p]
+    for key in country_order:
+        info = representatives[key]
         rep_rows.append({
-            'percentile': p,
+            'percentile': key,
             'iso3': info['iso3'],
             'h_T_delta_cum_2022': info['value'],
             'target_percentile_value': info['target']
@@ -657,14 +856,14 @@ def main():
     print(f"      Saved: {rep_path}")
 
     # Phase 4: Process full bootstrap data for representative countries only
-    print("\n[4/6] Processing bootstrap data for representative countries...")
+    print("\n[4/7] Processing bootstrap data for representative countries...")
     rep_iso3s = [representatives[p]['iso3'] for p in representatives]
     df_summary = process_representative_countries(
         input_path, rep_iso3s, args.loess_window
     )
 
     # Save cumulative effects summary
-    print("\n[5/6] Saving cumulative effects summary...")
+    print("\n[5/7] Saving cumulative effects summary...")
 
     # Add header comment to CSV
     summary_path = output_dir / 'cumulative_h_values_summary.csv'
@@ -673,9 +872,12 @@ def main():
     df_summary.to_csv(summary_path, mode='a', index=False)
     print(f"      Saved: {summary_path} ({len(df_summary):,} rows)")
 
-    # Create visualization
-    print("\n[6/6] Creating box plot visualization...")
+    # Create visualizations
+    print("\n[6/7] Creating box plot visualization (grouped by country)...")
     plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
+
+    print("\n[7/7] Creating box plot visualization (grouped by method)...")
+    plot_cumulative_effects_by_method(df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
