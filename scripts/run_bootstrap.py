@@ -221,6 +221,24 @@ def main():
     save_all_bootstrap_plots(bootstrap_results, all_stats, output_dir, data=data, input_file=input_file)
     print("      Done.")
 
+    # Save run metadata for post-processing scripts
+    import json
+    metadata = {
+        'loess_window': loess_window,
+        'mean_weight_distance': args.mean_weight_distance,
+        'input_file': input_file,
+        'year_min': data.year_range[0],
+        'year_max': data.year_range[1],
+        'n_countries': data.n_countries,
+        'n_obs': data.n_obs,
+        'n_bootstrap': args.n_bootstrap,
+        'random_seed': args.random_seed,
+    }
+    metadata_path = output_dir / 'run_metadata.json'
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    print(f"      Saved: {metadata_path}")
+
     print(f"      Output saved to: {output_dir}")
 
     # Print summary
@@ -274,6 +292,26 @@ def main():
                 print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
             else:
                 print(f"  T_opt: N/A")
+
+            # Add filtered statistics for method5
+            from src.bootstrap import compute_method5_filtered_statistics
+            filtered_stats = compute_method5_filtered_statistics(result)
+            n_filtered = int(filtered_stats['n_filtered'])
+            filter_frac = filtered_stats['filter_fraction']
+
+            print(f"\n{result.approach} (Filtered: h4 > 0.001)")
+            print("-" * 50)
+            print(f"  Note: {n_filtered} samples ({100*filter_frac:.1f}%) with h4 > 0.001")
+            print(f"  h1: {result.h1_point:.6f}")
+            print(f"    90% CI: [{filtered_stats['h1']['p5']:.6f}, {filtered_stats['h1']['p95']:.6f}]")
+            print(f"  h2: {result.h2_point:.6f}")
+            print(f"    90% CI: [{filtered_stats['h2']['p5']:.6f}, {filtered_stats['h2']['p95']:.6f}]")
+            if 'h4' in filtered_stats:
+                print(f"  h4 (persistence decay): {result.h4_point:.6f}")
+                print(f"    90% CI: [{filtered_stats['h4']['p5']:.6f}, {filtered_stats['h4']['p95']:.6f}]")
+            if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
+                print(f"  T_opt: {result.T_opt_point:.2f} C")
+                print(f"    90% CI: [{filtered_stats['T_opt']['p5']:.2f}, {filtered_stats['T_opt']['p95']:.2f}]")
 
         else:
             # Standard methods (method0, method1, method2, null models)

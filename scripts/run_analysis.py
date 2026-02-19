@@ -223,6 +223,22 @@ def main():
 
     save_all_outputs(data, trends, results, output_dir, input_file=input_file)
 
+    # Save run metadata for post-processing scripts
+    import json
+    metadata = {
+        'loess_window': loess_window,
+        'mean_weight_distance': args.mean_weight_distance,
+        'input_file': input_file,
+        'year_min': data.year_range[0],
+        'year_max': data.year_range[1],
+        'n_countries': data.n_countries,
+        'n_obs': data.n_obs,
+    }
+    metadata_path = output_dir / 'run_metadata.json'
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    print(f"      Saved: {metadata_path}")
+
     print(f"\nOutput saved to: {output_dir}")
     print("=" * 70)
 

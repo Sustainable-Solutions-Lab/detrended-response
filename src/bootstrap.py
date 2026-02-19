@@ -300,12 +300,17 @@ def run_bootstrap(
         original_trends_loess = compute_country_trends_loess(data, original_year_means, loess_window)
 
     n_successful = 0
+    n_attempts = 0
+    max_attempts = n_bootstrap * 10  # Safety limit to prevent infinite loops
 
     if verbose:
         print(f"Running cluster bootstrap with {n_bootstrap} iterations...")
         print(f"  Resampling {n_countries} countries with replacement")
 
-    for b in range(n_bootstrap):
+    while n_successful < n_bootstrap and n_attempts < max_attempts:
+        b = n_successful  # Current slot to fill
+        n_attempts += 1
+
         try:
             # Sample countries with replacement
             selected_countries = rng.integers(0, n_countries, size=n_countries)
@@ -417,27 +422,25 @@ def run_bootstrap(
 
         except Exception as e:
             if verbose:
-                print(f"  Bootstrap {b} failed: {e}")
-            # Mark as NaN
-            for name in approach_names:
-                h1_samples[name][b] = np.nan
-                h2_samples[name][b] = np.nan
-                T_opt_samples[name][b] = np.nan
-                r_squared_samples[name][b] = np.nan
-                total_r_squared_samples[name][b] = np.nan
-                f1_samples[name][b] = np.nan
-                h3_samples[name][b] = np.nan
-                h4_samples[name][b] = np.nan
-                f2_samples[name][b] = np.nan
-                T_dep_opt_samples[name][b] = np.nan
+                print(f"  Bootstrap attempt {n_attempts} failed: {e} (retrying...)")
+            # Don't increment n_successful; the slot will be reused
 
         # Progress reporting
-        if verbose and (b + 1) % 10 == 0:
-            print(f"  Completed {b + 1}/{n_bootstrap} iterations "
-                  f"({n_successful} successful)", flush=True)
+        if verbose and n_successful > 0 and n_successful % 10 == 0 and n_successful != (n_successful - 1):
+            # Only print when we cross a multiple of 10
+            pass
+        if verbose and n_attempts % 10 == 0:
+            n_failed = n_attempts - n_successful
+            print(f"  Completed {n_successful}/{n_bootstrap} iterations "
+                  f"({n_failed} failed attempts)", flush=True)
 
     if verbose:
-        print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")
+        n_failed = n_attempts - n_successful
+        if n_failed > 0:
+            print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations "
+                  f"({n_failed} failed attempts retried)")
+        else:
+            print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")
 
     # For method0 and method0h0, detrend k_samples by subtracting best-fit quadratic
     # from each bootstrap. This removes the arbitrary quadratic that can shift between
@@ -599,5 +602,66 @@ def compute_bootstrap_statistics(
                 point_val = result.var_decomp_point.get(key, np.nan)
                 if isinstance(point_val, (int, float)):
                     stats[f'vd_{key}'] = get_percentile_stats(samples, point_val)
+
+    return stats
+
+
+def compute_method5_filtered_statistics(
+    result: BootstrapResult,
+    h4_threshold: float = 0.001,
+    percentiles: Tuple[float, ...] = DEFAULT_PERCENTILES
+) -> Dict[str, Dict[str, float]]:
+    """Compute bootstrap statistics for method5 filtered to h4 > threshold.
+
+    When h4 ≈ 0, method5 behaves like method2 (no persistence), so filtering
+    to h4 > threshold represents cases where persistence decay is genuinely estimated.
+
+    Args:
+        result: BootstrapResult for method5
+        h4_threshold: Minimum h4 value to include (default: 0.001)
+        percentiles: Percentiles to compute (default: 5, 25, 50, 75, 95)
+
+    Returns:
+        Dict with same structure as compute_bootstrap_statistics() plus:
+        - 'n_filtered': count of samples passing the filter
+        - 'filter_fraction': fraction of samples passing the filter
+    """
+    # Create mask for h4 > threshold
+    h4_mask = result.h4_samples > h4_threshold
+    n_filtered = np.sum(h4_mask)
+
+    # Helper function to compute percentiles for filtered array
+    def get_percentile_stats(samples: np.ndarray, point_estimate: float, mask: np.ndarray) -> Dict[str, float]:
+        filtered = samples[mask]
+        valid = filtered[~np.isnan(filtered)]
+        if len(valid) == 0:
+            result_dict = {'point': point_estimate, 'std': np.nan, 'n_valid': 0}
+            for p in percentiles:
+                result_dict[f'p{int(p)}'] = np.nan
+            return result_dict
+
+        result_dict = {'point': point_estimate}
+        for p in percentiles:
+            result_dict[f'p{int(p)}'] = np.percentile(valid, p)
+        result_dict['std'] = np.std(valid)
+        result_dict['n_valid'] = len(valid)
+        return result_dict
+
+    stats = {}
+
+    # Core parameters
+    stats['h1'] = get_percentile_stats(result.h1_samples, result.h1_point, h4_mask)
+    stats['h2'] = get_percentile_stats(result.h2_samples, result.h2_point, h4_mask)
+    stats['T_opt'] = get_percentile_stats(result.T_opt_samples, result.T_opt_point, h4_mask)
+    stats['r_squared'] = get_percentile_stats(result.r_squared_samples, result.r_squared_point, h4_mask)
+    stats['total_r_squared'] = get_percentile_stats(result.total_r_squared_samples, result.total_r_squared_point, h4_mask)
+
+    # h4 (persistence decay)
+    if result.h4_point is not None and result.h4_samples is not None:
+        stats['h4'] = get_percentile_stats(result.h4_samples, result.h4_point, h4_mask)
+
+    # Metadata
+    stats['n_filtered'] = n_filtered
+    stats['filter_fraction'] = n_filtered / len(result.h4_samples)
 
     return stats

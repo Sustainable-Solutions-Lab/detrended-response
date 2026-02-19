@@ -39,7 +39,7 @@ This can be collapsed into:
 
 ## Parameter Naming Convention
 
-All approaches use a consistent naming scheme for output coefficients:
+All methods use a consistent naming scheme for output coefficients:
 
 ### Universal Parameters
 
@@ -52,9 +52,29 @@ All approaches use a consistent naming scheme for output coefficients:
 | r_squared | R² on detrended residuals |
 | total_r_squared | R² on original Δy |
 
-### Approach-Specific Parameters
+### Method-Specific Parameters
 
-**Approaches 0, 5, 5a-c, 7a-c** (standard quadratic): h1, h2, T_opt only
+**Methods 0, 1, 2** (standard quadratic): h1, h2, T_opt only
+
+**Method 3** (piecewise quadratic):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1 | Linear term (fixed at 0) |
+| h2 | Curvature below T_opt |
+| h4 | Curvature above T_opt |
+| T_opt | Breakpoint temperature |
+
+**Method 4** (T response with quadratic departure):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1, h2 | Response to actual temperature T |
+| h4 | Response to departure from trend (T - T_trend)² |
+| T_opt | Optimal actual temperature |
+| T_dep_opt | Optimal departure from trend |
+
+Note: Method 4 uses only h4 (quadratic departure term), with h3=0.
 
 **Method 5** (persistence decay):
 
@@ -64,75 +84,6 @@ All approaches use a consistent naming scheme for output coefficients:
 | h2 | Quadratic temperature coefficient |
 | h4 | Persistence decay parameter [0=full persistence, 1=no persistence] |
 | T_opt | Optimal temperature |
-
-**Approach 5d** (GDP-dependent response):
-
-| Parameter | Meaning |
-|-----------|---------|
-| f1 | GDP scaling exponent |
-| f2 | Reference GDP level |
-
-**Approaches 6b/6e** (separate T/departure responses):
-
-| Parameter | Meaning |
-|-----------|---------|
-| h1, h2 | Response to actual temperature T |
-| h3, h4 | Response to departure from trend (T - T_trend) |
-| T_opt | Optimal actual temperature |
-| T_dep_opt | Optimal departure from trend |
-
-Note: 6e uses only h4 (quadratic departure term), with h3=0.
-
-**Approach 6c** (departure/trend decomposition):
-
-| Parameter | Meaning |
-|-----------|---------|
-| h1, h2 | Response to departure from trend (T - T_trend) |
-| h3, h4 | Response to trend temperature T_trend |
-| T_dep_opt | Optimal departure from trend |
-| f2 | Optimal trend temperature |
-
-**Approach 8** (piecewise quadratic):
-
-| Parameter | Meaning |
-|-----------|---------|
-| h1 | Linear term (fixed at 0) |
-| h2 | Curvature below T_opt |
-| h4 | Curvature above T_opt |
-| T_opt | Breakpoint temperature |
-
-**Approach 8a** (shared T_opt, separate curvatures):
-
-| Parameter | Meaning |
-|-----------|---------|
-| h2 | Curvature for actual T response |
-| h4 | Curvature for trend T response |
-| T_opt | Shared optimal temperature |
-
-**Approach 8b** (modulated actual temperature response):
-
-| Parameter | Meaning |
-|-----------|---------|
-| f1 | Linear departure modulation coefficient |
-| f2 | Quadratic departure modulation coefficient |
-| h1, h2 | Response to actual temperature T |
-| T_opt | Optimal actual temperature |
-
-**Approach 8c** (linear-only modulated response):
-
-| Parameter | Meaning |
-|-----------|---------|
-| f1 | Linear departure modulation coefficient |
-| h1, h2 | Response to actual temperature T |
-| T_opt | Optimal actual temperature |
-
-**Approach 8d** (quadratic-only modulated response):
-
-| Parameter | Meaning |
-|-----------|---------|
-| f2 | Quadratic departure modulation coefficient |
-| h1, h2 | Response to actual temperature T |
-| T_opt | Optimal actual temperature |
 
 ### Standard Error Convention
 
@@ -151,9 +102,9 @@ The time trend function `jᵢ(t)` can be interpreted as:
 
 If the quadratic time trend is meant to be one or both of these detrending functions, then these detrendings can be applied to the original datasets and the associated parameter values found prior to the main ordinary least squares solution for the climate response coefficients.
 
-## Approaches
+## Methods
 
-### Approach 0: Conjoined OLS Fit
+### Method 0: Conjoined OLS Fit
 
 Fit all terms in a single (conjoined) ordinary least squares fitting process. With this approach, it is unclear how much `jᵢ(t)` is acting to detrend temperature versus per capita GDP growth rates, and how much of the error term is being absorbed into these many additional degrees of freedom.
 
@@ -165,7 +116,7 @@ Note: One could add any arbitrary quadratic in time to `k(t)` and subtract the s
 
 **Degrees of freedom:** 2 for h(T) + 3×(n_countries - 1) for jᵢ(t) + n_years for k(t)
 
-### Approach 1: Combined Detrending (Mixed)
+### Method 1: Combined Detrending (Mixed)
 
 Combines linear temperature detrending with quadratic GDP growth detrending. If the purpose of `jᵢ(t)` is to effect both a linear detrending of the temperature record and a quadratic detrending of the per-capita GDP growth record:
 
@@ -175,80 +126,11 @@ Combines linear temperature detrending with quadratic GDP growth detrending. If 
 
 **Degrees of freedom:** 2 for h(T) + n_years for kₜ
 
-### Approach 2: Linear Temperature Detrending
-
-We know that at least `j₀,ᵢ` and `j₁,ᵢ` relate to the temperature scale, because their values would differ if temperature was measured in Celsius versus Kelvin. A natural assumption is that at least part of `jᵢ(t)` is meant to represent a linear detrending of temperature.
-
-Pre-compute `T₀,ᵢ` and `T₁,ᵢ` for each country via least squares on the linear temperature trend, then estimate:
-
-```
-Δyᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t)] + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t)²] + kₜ
-```
-
-**Degrees of freedom:** 2 for h(T) + n_years for kₜ
-
-### Approach 3: Quadratic GDP Growth Detrending
-
-Another interpretation of `jᵢ(t)` is that it represents a quadratic detrending of the `Δyᵢ(t)` values.
-
-Pre-compute `y₀,ᵢ`, `y₁,ᵢ`, and `y₂,ᵢ` for each country via least squares on the quadratic per capita GDP-growth trend, then estimate:
-
-```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·T + h₂·T² + kₜ
-```
-
-**Degrees of freedom:** 2 for h(T) + n_years for kₜ
-
-### Approach 4: Combined Quadratic Detrending
-
-Applies quadratic detrending to both per capita GDP growth and temperature. When combined with the 2nd order term in h(T), this results in `jᵢ(t)` becoming a 4th-order equation.
-
-```
-Δyᵢ(t) - (y₀,ᵢ + y₁,ᵢ·t + y₂,ᵢ·t²) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)]
-                                      + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²] + kₜ
-```
-
-**Degrees of freedom:** 2 for h(T) + n_years for kₜ
-
-### Approach 5: Pre-computed k(t) with Quadratic Trends
-
-In Approaches 0-4, year fixed effects kₜ are estimated simultaneously with the temperature coefficients. An alternative is to pre-compute kₜ as year means before fitting.
-
-1. Pre-compute year effects: `k(t) = mean_i(Δyᵢ(t))`
-2. Fit country trends jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t² to `Δyᵢ(t) - k(t)`
-3. Fit temperature trends T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t² (quadratic)
-4. Final regression on residuals:
-
-```
-[Δyᵢ(t) - k(t)] - jᵢ(t) = h₁·[T - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)]
-                         + h₂·[T² - (T₀,ᵢ + T₁,ᵢ·t + T₂,ᵢ·t²)²]
-```
-
-**Degrees of freedom:** 2 for h(T) (year effects pre-computed, not estimated)
-
-#### Approach 5 Variants
-
-Several variants explore different detrending combinations:
-
-| Variant | GDP Trend | Temp Trend | Description |
-|---------|-----------|------------|-------------|
-| **5** | Quadratic | Quadratic | Full quadratic detrending |
-| **5a** | Quadratic | Linear | Linear temperature only |
-| **5b** | Quadratic | None | GDP detrending only |
-| **5c** | Quadratic | Linear+Quadratic | Combined approach |
-| **5d** | Quadratic | Quadratic + GDP-scaling | GDP-dependent response |
-
-**Approach 5d** introduces GDP-dependent scaling:
-```
-h(Y,T) = (Y/f₂)^(-f₁) · (h₁·T* + h₂·T*²)
-```
-where f₁ is the GDP scaling exponent (larger f₁ = stronger income-based adaptation) and f₂ is the reference GDP level.
-
-### Approach 6: LOESS Detrending (Departure Response)
+### Method 2: LOESS Detrending (Departure Response)
 
 Replaces polynomial detrending with LOESS (Locally Weighted Scatterplot Smoothing), a non-parametric method that allows for more flexible trend shapes.
 
-**GDP detrending** (same for all Approach 6 variants):
+**GDP detrending:**
 ```
 Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
@@ -265,116 +147,17 @@ h(T) = h₁·T + h₂·T²
 
 where `T_trend = LOESS(T)`. The regression is performed on the design matrix `[T - T_trend, T² - T_trend²]`.
 
-**Key insight:** This approach regresses GDP growth on the *departure of the climate response from its trend*, i.e., `h(T) - h(T_trend)`. It measures how GDP responds to year-to-year fluctuations in the climate effect, not to the absolute temperature level.
+**Key insight:** This method regresses GDP growth on the *departure of the climate response from its trend*, i.e., `h(T) - h(T_trend)`. It measures how GDP responds to year-to-year fluctuations in the climate effect, not to the absolute temperature level.
 
 Uses a 25-year LOESS window (configurable via `--loess-window`).
 
 **Degrees of freedom:** 2 for h(T) (year effects pre-computed)
 
-### Approach 6b: LOESS Detrending (Actual T Response)
-
-Uses the same GDP detrending as Approach 6, but regresses on actual temperature rather than temperature departures.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T) = h₁·T + h₂·T²
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T)
-```
-
-The regression is performed on the design matrix `[T, T²]` using actual temperature, not detrended temperature.
-
-**Key insight:** This approach regresses GDP growth on *actual temperature*, testing whether the absolute temperature level affects growth. Unlike Approach 6, this assumes there is no separate effect from temperature trends—only the current year's temperature matters.
-
-**Comparison to Approach 6:**
-| Aspect | Approach 6 | Approach 6b |
-|--------|------------|-------------|
-| GDP detrending | LOESS | LOESS (same) |
-| Independent variable | T - T_trend, T² - T_trend² | T, T² |
-| Measures response to | Departures from climate trend | Actual temperature level |
-
-**Degrees of freedom:** 2 for h(T) (h₁, h₂)
-
-### Approach 6c: Departure/Trend Decomposition
-
-Originally intended to decompose the response into departure and trend components, but with the h(T,T_trend) - h(T_trend,T_trend) formulation, the trend terms cancel.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = h₁·(T - T_trend) + h₂·(T - T_trend)² + h₃·T_trend + h₄·T_trend²
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-       = h₁·(T - T_trend) + h₂·(T - T_trend)²
-```
-
-The trend terms (h₃·T_trend + h₄·T_trend²) completely cancel out.
-
-The regression is performed on the design matrix `[(T - T_trend), (T - T_trend)²]`.
-
-**Note:** h₃ and h₄ are not identifiable (they cancel). Only departure response (h₁, h₂) is estimated.
-
-**Parameters:**
-- `h₁, h₂`: Departure response coefficients (response to T - T_trend)
-- `T_dep_opt`: Optimal departure from trend = -h₁/(2h₂)
-
-**Key insight:** With the h(T) - h(T_trend) formulation, Approach 6c becomes equivalent to Approach 6 (departure response only). The trend terms cancel out because h(T_trend, T_trend) includes those same terms.
-
-**Degrees of freedom:** 2 for h(T) (h₁, h₂)
-
-### Approach 6e: T Response with Quadratic Departure Only
-
-Quadratic departure term only (no linear departure), testing whether temperature volatility matters regardless of direction.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = h₁·T + h₂·T² + h₄·(T - T_trend)²
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-       = h₁·(T - T_trend) + h₂·(T² - T_trend²) + h₄·(T - T_trend)²
-```
-
-The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²), (T - T_trend)²]`.
-
-**Parameters:**
-- `h₁`: Linear departure coefficient
-- `h₂`: Quadratic T² - T_trend² coefficient
-- `h₄`: Quadratic departure coefficient
-- `T_opt`: Optimal temperature = -h₁/(2h₂)
-- `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
-
-**Key insight:** A negative h₄ means larger temperature fluctuations reduce growth (volatility is harmful), regardless of whether the fluctuation is positive or negative.
-
-**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
-
-### Approach 8: Piecewise Quadratic Response with LOESS
+### Method 3: Piecewise Quadratic Response with LOESS
 
 Uses a piecewise quadratic temperature response that allows different curvatures for temperatures above vs below the optimum. This captures asymmetry where warming may have different effects on hot vs cold countries.
 
-**GDP detrending** (same as Approach 6):
+**GDP detrending** (same as Method 2):
 ```
 Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
@@ -403,148 +186,44 @@ h(T) = h₄ · (T - T_opt)²   if T > T_opt
 
 **Degrees of freedom:** 3 (T_opt, h₂, h₄)
 
-### Approach 8a: Separate Total/Trend Response with Shared T_opt
+### Method 4: T Response with Quadratic Departure
 
-Originally intended to use separate curvature parameters for actual and trend temperature, but with h(T,T_trend) - h(T_trend,T_trend), the h₄ term cancels.
+Quadratic departure term only (no linear departure), testing whether temperature volatility matters regardless of direction.
 
-**GDP detrending** (same as Approach 6):
+**GDP detrending** (same as Method 2):
 ```
 Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
 
 **Climate response function:**
 ```
-h(T, T_trend) = h₂·(T - T_opt)² - h₄·(T_trend - T_opt)²
+h(T, T_trend) = h₁·T + h₂·T² + h₄·(T - T_trend)²
 ```
 
 **Regression model:**
 ```
 Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-       = h₂·[(T - T_opt)² - (T_trend - T_opt)²]
+       = h₁·(T - T_trend) + h₂·(T² - T_trend²) + h₄·(T - T_trend)²
 ```
 
-The h₄ term cancels completely: h(T_trend, T_trend) = (h₂ - h₄)·(T_trend - T_opt)².
-
-The regression is performed on the design matrix `[(T - T_opt)² - (T_trend - T_opt)²]` (1 column).
-
-**Note:** h₄ is not identifiable (it cancels). Only h₂ and T_opt are estimated.
+The regression is performed on the design matrix `[(T - T_trend), (T² - T_trend²), (T - T_trend)²]`.
 
 **Parameters:**
-- `h₂`: Curvature coefficient
-- `T_opt`: Optimal temperature
+- `h₁`: Linear departure coefficient
+- `h₂`: Quadratic T² - T_trend² coefficient
+- `h₄`: Quadratic departure coefficient
+- `T_opt`: Optimal temperature = -h₁/(2h₂)
+- `T_dep_opt`: Optimal departure = 0 (by construction, since h₃=0)
 
-**Key insight:** With the h(T) - h(T_trend) formulation, h₄ cancels and this becomes a 2-parameter model (h₂, T_opt) with nonlinear optimization for T_opt.
+**Key insight:** A negative h₄ means larger temperature fluctuations reduce growth (volatility is harmful), regardless of whether the fluctuation is positive or negative.
 
-**Degrees of freedom:** 2 (T_opt, h₂)
-
-### Approach 8b: Modulated Actual Temperature Response
-
-The temperature response to actual temperature is scaled by the deviation from trend, capturing effects that depend on both direction and magnitude of deviation.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = (1 + f₁·(T - T_trend) + f₂·(T - T_trend)²) · (h₁·T + h₂·T²)
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-```
-
-**Parameters:**
-- `f₁`: Linear departure modulation coefficient
-- `f₂`: Quadratic departure modulation coefficient
-- `h₁, h₂`: Quadratic temperature response coefficients
-- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
-
-**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
-
-**Fitting Strategy:**
-- Outer optimization: 2D L-BFGS-B search over (f₁, f₂)
-- Inner OLS: For each (f₁, f₂), solve for h₁ and h₂ via 2-column OLS
-
-**Key insight:** f₁ captures asymmetric effects (warmer vs cooler deviations differ); f₂ captures symmetric effects (magnitude matters regardless of sign). If f₁ = f₂ = 0, reduces to standard quadratic.
-
-**Degrees of freedom:** 4 (f₁, f₂, h₁, h₂)
-
-### Approach 8c: Linear-Only Modulated Response
-
-Like Approach 8b but with only linear modulation (f₂ = 0). The temperature response is scaled by a linear function of deviation from trend.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = (1 + f₁·(T - T_trend)) · (h₁·T + h₂·T²)
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-```
-
-**Parameters:**
-- `f₁`: Linear departure modulation coefficient
-- `h₁, h₂`: Quadratic temperature response coefficients
-- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
-
-**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
-
-**Fitting Strategy:**
-- Outer optimization: 1D L-BFGS-B search over f₁
-- Inner OLS: For each f₁, solve for h₁ and h₂ via 2-column OLS
-
-**Key insight:** Positive f₁ means the climate effect is amplified when T > T_trend and dampened when T < T_trend. If f₁ = 0, reduces to standard quadratic.
-
-**Degrees of freedom:** 3 (f₁, h₁, h₂)
-
-### Approach 8d: Quadratic-Only Modulated Response
-
-Like Approach 8b but with only quadratic modulation (f₁ = 0). The temperature response is scaled by a quadratic function of deviation from trend.
-
-**GDP detrending** (same as Approach 6):
-```
-Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
-```
-
-**Climate response function:**
-```
-h(T, T_trend) = (1 + f₂·(T - T_trend)²) · (h₁·T + h₂·T²)
-```
-
-**Regression model:**
-```
-Δy*(t) = h(T, T_trend) - h(T_trend, T_trend)
-```
-
-**Parameters:**
-- `f₂`: Quadratic departure modulation coefficient
-- `h₁, h₂`: Quadratic temperature response coefficients
-- `T_opt`: Optimal actual temperature = -h₁/(2·h₂)
-
-**At Trend:** When T = T_trend, the modulation is 1 and h = h₁·T + h₂·T².
-
-**Fitting Strategy:**
-- Outer optimization: 1D L-BFGS-B search over f₂
-- Inner OLS: For each f₂, solve for h₁ and h₂ via 2-column OLS
-
-**Key insight:** Positive f₂ means the climate effect is amplified for any deviation from trend (symmetric effect). If f₂ = 0, reduces to standard quadratic.
-
-**Degrees of freedom:** 3 (f₂, h₁, h₂)
+**Degrees of freedom:** 3 for h(T) (h₁, h₂, h₄)
 
 ### Method 5: Persistence Decay Model
 
 Models persistent effects of past temperatures on current GDP growth. The climate response includes an exponentially decaying memory of past temperature effects.
 
-**GDP detrending** (same as Approach 6):
+**GDP detrending** (same as Method 2):
 ```
 Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
 ```
@@ -608,7 +287,7 @@ If the choice of smoothing function and the determination of the climate respons
 
 where:
 - `h(T) = h₁·T + h₂·T²` is the climate response function
-- `f_trend(T)` is the temperature trend (linear, quadratic, or LOESS depending on approach)
+- `f_trend(T)` is the temperature trend (linear, quadratic, or LOESS depending on method)
 - `f_trend(Δy - k)` is the country-specific GDP growth trend (after removing year means)
 - `k(t)` is the year mean
 
@@ -616,7 +295,7 @@ In practice, the right side will not sum to zero. The root-mean-square of this i
 
 ### Three Metrics
 
-For each approach, we compute:
+For each method, we compute:
 
 | Metric | Description |
 |--------|-------------|
@@ -741,7 +420,7 @@ python scripts/run_analysis.py --year-min 1970 --year-max 2010
 
 ### Bootstrap Uncertainty Analysis
 
-The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for all parameters across all approaches.
+The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for all parameters across all methods.
 
 ```bash
 python scripts/run_bootstrap.py
@@ -749,7 +428,7 @@ python scripts/run_bootstrap.py
 
 **What it does:**
 1. Resamples countries with replacement (cluster bootstrap preserves within-country correlation)
-2. Re-fits all approaches for each bootstrap iteration
+2. Re-fits all methods for each bootstrap iteration
 3. Computes percentile-based confidence intervals (90% CI, IQR)
 4. Generates distribution plots and summary statistics
 
@@ -791,26 +470,24 @@ python scripts/run_influence_analysis.py
 --bootstrap-dir DIR    Bootstrap output directory
                        (default: most recent data/output/reference/bootstrap_*)
 --output-dir DIR       Output directory (default: timestamped)
---approaches LIST      Approaches to analyze (default: all)
---coefficients LIST    Coefficients to analyze (default: approach-specific)
+--methods LIST         Methods to analyze (default: all)
+--coefficients LIST    Coefficients to analyze (default: method-specific)
 --percentiles LIST     Percentile thresholds (default: 5 25 75 95)
 --regression-type      "linear" (default)
 --n-top N              Number of top/bottom countries to report (default: 10)
 ```
 
-**Default coefficients by approach:**
-| Approach | Coefficients |
-|----------|--------------|
-| Standard (0-5, 5a-5d, 6, method0h0, method1h0) | h₁, h₂, T_opt |
-| Approach 6b | h₁, h₂, h₃, h₄, T_opt, T_dep_opt |
-| Approach 6c | h₁, h₂, h₃, h₄, T_dep_opt, f₂ |
-| Approach 6e | h₁, h₂, h₄, T_opt, T_dep_opt |
-| Approach 8 | h₂, h₄, T_opt |
-| Approach 8a | h₂, h₄, T_opt |
+**Default coefficients by method:**
+| Method | Coefficients |
+|--------|--------------|
+| Standard (method0, method1, method2, method0h0, method1h0) | h₁, h₂, T_opt |
+| Method 3 | h₂, h₄, T_opt |
+| Method 4 | h₁, h₂, h₄, T_opt, T_dep_opt |
+| Method 5 | h₁, h₂, h₄, T_opt |
 
 **Example:**
 ```bash
-python scripts/run_influence_analysis.py --approaches "approach5 method2" --n-top 15
+python scripts/run_influence_analysis.py --methods "method0 method2" --n-top 15
 ```
 
 **Interpretation:**
@@ -818,19 +495,19 @@ python scripts/run_influence_analysis.py --approaches "approach5 method2" --n-to
 - Countries with **negative** influence coefficients tend to **decrease** the parameter when included more frequently
 - Large absolute coefficients indicate high sensitivity to that country's inclusion
 
-### Approach 0 vs 5c Parameter Comparison
+### Method 0 vs 5c Parameter Comparison
 
-The `compare_method0_5c.py` script generates scatter plots comparing parameters from Approach 0 (conjoined OLS) against parameters predicted from Approach 5c's pre-computed trends combined with Approach 0's h₁ and h₂.
+The `compare_method0_5c.py` script generates scatter plots comparing parameters from Method 0 (conjoined OLS) against parameters predicted from Approach 5c's pre-computed trends combined with Method 0's h₁ and h₂.
 
 ```bash
 python scripts/compare_method0_5c.py
 ```
 
 **What it does:**
-1. Fits Approach 0 and Approach 5c to the same data
-2. Extracts per-country j coefficients from Approach 0 residuals
-3. Predicts j coefficients from Approach 5c's pre-computed trends (g, T₀, T₁) using Approach 0's h₁, h₂
-4. Re-references by subtracting country 0's predicted j values (matching Approach 0's identification constraint), absorbing the subtracted quadratic into k
+1. Fits Method 0 and Approach 5c to the same data
+2. Extracts per-country j coefficients from Method 0 residuals
+3. Predicts j coefficients from Approach 5c's pre-computed trends (g, T₀, T₁) using Method 0's h₁, h₂
+4. Re-references by subtracting country 0's predicted j values (matching Method 0's identification constraint), absorbing the subtracted quadratic into k
 5. Generates a 2×2 scatter plot: (a) k(t), (b) j₀,ᵢ, (c) j₁,ᵢ, (d) j₂,ᵢ with best-fit regression equations, R², and correlation
 
 **Options:**
@@ -903,6 +580,87 @@ python scripts/sweep_h4_method5.py --output-csv data/output/h4_sweep.csv
 | r_squared | R² of detrended regression |
 | total_r_squared | R² of original Δy explained |
 
+### Cumulative Effects Analysis
+
+The `calculate_cumulative_effects.py` script computes cumulative climate effects on GDP from bootstrap h(T) values.
+
+```bash
+python scripts/calculate_cumulative_effects.py
+```
+
+**What it does:**
+1. Loads bootstrap h(T) values for all countries
+2. Fits trend to h(T) and evaluates at 1961 as baseline
+3. Computes cumulative climate effects from 1961-2022
+4. Selects representative countries at percentiles (5, 25, 50, 75, 95)
+5. Creates box-and-whisker visualizations grouped by country and by method
+
+**Options:**
+```
+--reference-dir DIR       Parent directory containing bootstrap_* subdirectory
+                          (e.g., data/output/reference_mw10)
+--input-dir DIR           Directory containing bootstrap_h_values.csv
+                          (default: most recent in reference-dir/bootstrap_* or
+                          data/output/reference/bootstrap_*)
+--output-dir DIR          Output directory (default: timestamped)
+--loess-window N          LOESS window size (default: 25)
+--mean-weight-distance N  Mean weighting distance for LOESS (overrides --loess-window)
+```
+
+**Examples:**
+```bash
+# Use default reference directory
+python scripts/calculate_cumulative_effects.py
+
+# Use a specific reference directory
+python scripts/calculate_cumulative_effects.py --reference-dir data/output/reference_mw10
+
+# Use explicit input directory
+python scripts/calculate_cumulative_effects.py --input-dir data/output/reference/bootstrap_20260215_120000
+```
+
+### Publication Tables and Figures
+
+The `make_tables_and_figures.py` script generates publication-quality tables and figures from analysis outputs.
+
+```bash
+python scripts/make_tables_and_figures.py
+```
+
+**What it does:**
+1. Loads pre-computed results from run_analysis.py and run_bootstrap.py outputs
+2. Generates formatted tables (CSV/Excel) with coefficients and confidence intervals
+3. Creates publication-quality figures for temperature response curves, year effects, etc.
+
+**Options:**
+```
+--reference-dir DIR    Parent directory containing analysis_* and bootstrap_* subdirectories
+                       (e.g., data/output/reference_mw10)
+--analysis-dir DIR     Path to analysis output directory
+                       (default: most recent in reference-dir/analysis_* or
+                       data/output/reference/analysis_*)
+--bootstrap-dir DIR    Path to bootstrap output directory
+                       (default: most recent in reference-dir/bootstrap_* or
+                       data/output/reference/bootstrap_*)
+--output-dir DIR       Output directory for publication files (default: timestamped)
+--data-file PATH       Path to input data CSV for temperature histogram
+                       (default: data/input/Maddison_CRU_dataset.csv)
+```
+
+**Examples:**
+```bash
+# Use default reference directory
+python scripts/make_tables_and_figures.py
+
+# Use a specific reference directory (finds analysis_* and bootstrap_* subdirs)
+python scripts/make_tables_and_figures.py --reference-dir data/output/reference_mw10
+
+# Use explicit directories
+python scripts/make_tables_and_figures.py \
+    --analysis-dir data/output/reference/analysis_20260215_100000 \
+    --bootstrap-dir data/output/reference/bootstrap_20260215_120000
+```
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
@@ -911,16 +669,16 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 
 | File | Description |
 |------|-------------|
-| `comparison_summary.txt` | Text summary of all approaches |
+| `comparison_summary.txt` | Text summary of all methods |
 | `comparison_table.csv` | Tabular comparison of coefficients and fit statistics |
 | `comparison_table.xlsx` | Same as above in Excel format (includes variance decomposition) |
 | `country_trends.csv` | Country-level trend coefficients |
-| `temperature_response_*.pdf` | Plot of h(T) - h(T_opt) for each approach group |
-| `temperature_derivative_*.pdf` | Plot of dh/dT for each approach group |
-| `coefficient_comparison.pdf` | Bar chart comparing h₁ and h₂ across approaches |
+| `temperature_response_*.pdf` | Plot of h(T) - h(T_opt) for each method group |
+| `temperature_derivative_*.pdf` | Plot of dh/dT for each method group |
+| `coefficient_comparison.pdf` | Bar chart comparing h₁ and h₂ across methods |
 | `optimal_temperature_comparison.pdf` | Bar chart of optimal temperatures |
 | `year_effects.pdf` | Year fixed effects plot |
-| `residuals_*.pdf` | Residual diagnostic plots for each approach |
+| `residuals_*.pdf` | Residual diagnostic plots for each method |
 
 ### Bootstrap Outputs
 
@@ -939,7 +697,7 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 
 | File | Description |
 |------|-------------|
-| `country_influence_coefficients.csv` | Full regression coefficients for all approach/coefficient/percentile combinations |
+| `country_influence_coefficients.csv` | Full regression coefficients for all method/coefficient/percentile combinations |
 | `country_influence_rankings.csv` | Countries ranked by influence (all 157 countries per combination) |
 | `country_influence_summary.txt` | Human-readable report with top 10 influential countries |
 
@@ -957,7 +715,7 @@ detrended-response/
 │   ├── __init__.py
 │   ├── data_loader.py           # Load and merge GDP + temperature data
 │   ├── detrending.py            # Country-level trend fitting (polynomial + LOESS)
-│   ├── fitting.py               # OLS regression for each approach
+│   ├── fitting.py               # OLS regression for each method
 │   ├── bootstrap.py             # Cluster bootstrap resampling
 │   ├── influence.py             # Country influence analysis
 │   └── output.py                # Results tables and plots
@@ -965,7 +723,7 @@ detrended-response/
 │   ├── run_analysis.py              # Main entry point
 │   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
 │   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
-│   ├── compare_method0_5c.py        # Scatter plots comparing Approach 0 vs 5c parameters
+│   ├── compare_method0_5c.py        # Scatter plots comparing Method 0 vs 5c parameters
 │   ├── sweep_h4_method5.py          # Sweep h₄ persistence decay parameter for method5
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore

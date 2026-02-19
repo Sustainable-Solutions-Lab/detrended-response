@@ -1266,6 +1266,54 @@ def save_bootstrap_summary_txt(
 
             f.write("\n")
 
+            # Add filtered section for method5
+            if name == 'method5':
+                from .bootstrap import compute_method5_filtered_statistics
+                filtered_stats = compute_method5_filtered_statistics(result)
+                n_filtered = int(filtered_stats['n_filtered'])
+                filter_frac = filtered_stats['filter_fraction']
+
+                f.write(f"{result.approach} (Filtered: h4 > 0.001)\n")
+                f.write("-" * 50 + "\n")
+                f.write(f"  Note: Statistics from {n_filtered} samples ({100*filter_frac:.1f}%) with h4 > 0.001\n")
+                f.write(f"        (When h4 ≈ 0, method5 behaves like method2)\n\n")
+
+                # T_opt
+                if result.T_opt_point is not None:
+                    f.write(f"  T_opt (Optimal Temperature, C):\n")
+                    f.write(f"    Point estimate:  {result.T_opt_point:10.2f}\n")
+                    f.write(f"    Bootstrap median:{filtered_stats['T_opt']['p50']:10.2f}\n")
+                    f.write(f"    90% CI:          [{filtered_stats['T_opt']['p5']:8.2f}, {filtered_stats['T_opt']['p95']:8.2f}]\n")
+                    f.write(f"    IQR:             [{filtered_stats['T_opt']['p25']:8.2f}, {filtered_stats['T_opt']['p75']:8.2f}]\n")
+                    f.write(f"    Std:             {filtered_stats['T_opt']['std']:10.4f}\n")
+
+                # h1
+                f.write(f"  h1 (Linear temperature coefficient):\n")
+                f.write(f"    Point estimate:  {result.h1_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{filtered_stats['h1']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{filtered_stats['h1']['p5']:10.6f}, {filtered_stats['h1']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{filtered_stats['h1']['p25']:10.6f}, {filtered_stats['h1']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {filtered_stats['h1']['std']:10.6f}\n")
+
+                # h2
+                f.write(f"  h2 (Quadratic temperature coefficient):\n")
+                f.write(f"    Point estimate:  {result.h2_point:10.6f}\n")
+                f.write(f"    Bootstrap median:{filtered_stats['h2']['p50']:10.6f}\n")
+                f.write(f"    90% CI:          [{filtered_stats['h2']['p5']:10.6f}, {filtered_stats['h2']['p95']:10.6f}]\n")
+                f.write(f"    IQR:             [{filtered_stats['h2']['p25']:10.6f}, {filtered_stats['h2']['p75']:10.6f}]\n")
+                f.write(f"    Std:             {filtered_stats['h2']['std']:10.6f}\n")
+
+                # h4 (persistence decay)
+                if 'h4' in filtered_stats:
+                    f.write(f"  h4 (Persistence decay coefficient):\n")
+                    f.write(f"    Point estimate:  {result.h4_point:10.6f}\n")
+                    f.write(f"    Bootstrap median:{filtered_stats['h4']['p50']:10.6f}\n")
+                    f.write(f"    90% CI:          [{filtered_stats['h4']['p5']:10.6f}, {filtered_stats['h4']['p95']:10.6f}]\n")
+                    f.write(f"    IQR:             [{filtered_stats['h4']['p25']:10.6f}, {filtered_stats['h4']['p75']:10.6f}]\n")
+                    f.write(f"    Std:             {filtered_stats['h4']['std']:10.6f}\n")
+
+                f.write("\n")
+
     print(f"  Saved bootstrap_summary.txt")
 
 
@@ -1449,6 +1497,110 @@ def save_bootstrap_summary_table(
 
         rows.append(row)
 
+    # Add method5_h4pos row (filtered to h4 > 0.001)
+    if 'method5' in results:
+        from .bootstrap import compute_method5_filtered_statistics
+        method5_result = results['method5']
+        filtered_stats = compute_method5_filtered_statistics(method5_result)
+
+        row = {
+            'approach': 'method5_h4pos',
+            'approach_name': '5: Persistence Decay LOESS (h4>0)',
+            'n_bootstrap': method5_result.n_bootstrap,
+            'n_successful': int(filtered_stats['n_filtered']),
+
+            # h1 statistics
+            'h1_point': method5_result.h1_point,
+            'h1_median': filtered_stats['h1']['p50'],
+            'h1_p5': filtered_stats['h1']['p5'],
+            'h1_p25': filtered_stats['h1']['p25'],
+            'h1_p75': filtered_stats['h1']['p75'],
+            'h1_p95': filtered_stats['h1']['p95'],
+            'h1_std': filtered_stats['h1']['std'],
+
+            # h2 statistics
+            'h2_point': method5_result.h2_point,
+            'h2_median': filtered_stats['h2']['p50'],
+            'h2_p5': filtered_stats['h2']['p5'],
+            'h2_p25': filtered_stats['h2']['p25'],
+            'h2_p75': filtered_stats['h2']['p75'],
+            'h2_p95': filtered_stats['h2']['p95'],
+            'h2_std': filtered_stats['h2']['std'],
+
+            # T_opt statistics
+            'T_opt_point': method5_result.T_opt_point,
+            'T_opt_median': filtered_stats['T_opt']['p50'],
+            'T_opt_p5': filtered_stats['T_opt']['p5'],
+            'T_opt_p25': filtered_stats['T_opt']['p25'],
+            'T_opt_p75': filtered_stats['T_opt']['p75'],
+            'T_opt_p95': filtered_stats['T_opt']['p95'],
+            'T_opt_std': filtered_stats['T_opt']['std'],
+
+            # total_r_squared statistics
+            'total_r_squared_point': method5_result.total_r_squared_point,
+            'total_r_squared_median': filtered_stats['total_r_squared']['p50'],
+            'total_r_squared_p5': filtered_stats['total_r_squared']['p5'],
+            'total_r_squared_p25': filtered_stats['total_r_squared']['p25'],
+            'total_r_squared_p75': filtered_stats['total_r_squared']['p75'],
+            'total_r_squared_p95': filtered_stats['total_r_squared']['p95'],
+            'total_r_squared_std': filtered_stats['total_r_squared']['std'],
+
+            # r_squared statistics
+            'r_squared_point': method5_result.r_squared_point,
+            'r_squared_median': filtered_stats['r_squared']['p50'],
+            'r_squared_p5': filtered_stats['r_squared']['p5'],
+            'r_squared_p25': filtered_stats['r_squared']['p25'],
+            'r_squared_p75': filtered_stats['r_squared']['p75'],
+            'r_squared_p95': filtered_stats['r_squared']['p95'],
+            'r_squared_std': filtered_stats['r_squared']['std'],
+
+            # f1 not used for method5
+            'f1_point': np.nan,
+            'f1_median': np.nan,
+            'f1_p5': np.nan,
+            'f1_p25': np.nan,
+            'f1_p75': np.nan,
+            'f1_p95': np.nan,
+            'f1_std': np.nan,
+
+            # T_dep_opt not used for method5
+            'T_dep_opt_point': np.nan,
+            'T_dep_opt_median': np.nan,
+            'T_dep_opt_p5': np.nan,
+            'T_dep_opt_p25': np.nan,
+            'T_dep_opt_p75': np.nan,
+            'T_dep_opt_p95': np.nan,
+            'T_dep_opt_std': np.nan,
+
+            # h3 not used for method5
+            'h3_point': np.nan,
+            'h3_median': np.nan,
+            'h3_p5': np.nan,
+            'h3_p25': np.nan,
+            'h3_p75': np.nan,
+            'h3_p95': np.nan,
+            'h3_std': np.nan,
+
+            # h4 statistics (persistence decay)
+            'h4_point': method5_result.h4_point,
+            'h4_median': filtered_stats['h4']['p50'],
+            'h4_p5': filtered_stats['h4']['p5'],
+            'h4_p25': filtered_stats['h4']['p25'],
+            'h4_p75': filtered_stats['h4']['p75'],
+            'h4_p95': filtered_stats['h4']['p95'],
+            'h4_std': filtered_stats['h4']['std'],
+
+            # f2 not used for method5
+            'f2_point': np.nan,
+            'f2_median': np.nan,
+            'f2_p5': np.nan,
+            'f2_p25': np.nan,
+            'f2_p75': np.nan,
+            'f2_p95': np.nan,
+            'f2_std': np.nan,
+        }
+        rows.append(row)
+
     df = pd.DataFrame(rows)
 
     # Save as CSV
@@ -1630,6 +1782,25 @@ def save_variance_decomposition_table(
     # Build approach names mapping
     approach_names = {name: results[name].approach for name in available_approaches}
 
+    # Add method5_h4pos (filtered to h4 > 0.001) if method5 exists
+    method5_h4pos_data = None
+    if 'method5' in results and results['method5'].var_attrib_samples is not None:
+        method5_result = results['method5']
+        h4_mask = method5_result.h4_samples > 0.001
+
+        # Create filtered variance attribution samples
+        method5_h4pos_data = {
+            'h4_mask': h4_mask,
+            'total_r_squared_samples': method5_result.total_r_squared_samples,
+            'var_attrib_samples': method5_result.var_attrib_samples,
+        }
+        available_approaches.append('method5_h4pos')
+        approach_names['method5_h4pos'] = '5: Persistence Decay LOESS (h4>0)'
+
+    def get_filtered_samples(samples: np.ndarray, mask: np.ndarray) -> np.ndarray:
+        """Apply h4 mask to samples and return filtered array."""
+        return samples[mask]
+
     # Build table rows
     rows = []
 
@@ -1637,8 +1808,14 @@ def save_variance_decomposition_table(
     total_r2_row = {'Metric': 'Total R²'}
     for approach in available_approaches:
         name = approach_names[approach]
-        result = results[approach]
-        samples = result.total_r_squared_samples
+        if approach == 'method5_h4pos':
+            samples = get_filtered_samples(
+                method5_h4pos_data['total_r_squared_samples'],
+                method5_h4pos_data['h4_mask']
+            )
+        else:
+            result = results[approach]
+            samples = result.total_r_squared_samples
         stats = compute_stats(samples)
         total_r2_row[f'{name}_point'] = stats['point']
         total_r2_row[f'{name}_p5'] = stats['p5']
@@ -1653,8 +1830,13 @@ def save_variance_decomposition_table(
         row = {'Metric': label}
         for approach in available_approaches:
             name = approach_names[approach]
-            result = results[approach]
-            var_attrib = result.var_attrib_samples
+            if approach == 'method5_h4pos':
+                var_attrib = method5_h4pos_data['var_attrib_samples']
+                h4_mask = method5_h4pos_data['h4_mask']
+            else:
+                result = results[approach]
+                var_attrib = result.var_attrib_samples
+                h4_mask = None
 
             # Get metric samples (may compute combined h(T) terms from separated terms)
             metric_samples = get_metric_samples(var_attrib, key)
@@ -1668,6 +1850,12 @@ def save_variance_decomposition_table(
                 continue
 
             var_dy_samples = var_attrib['var_dy']
+
+            # Apply h4 filter for method5_h4pos
+            if h4_mask is not None:
+                metric_samples = get_filtered_samples(metric_samples, h4_mask)
+                var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
+
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
             normalized = np.where(np.isfinite(normalized), normalized, np.nan)
@@ -1685,8 +1873,13 @@ def save_variance_decomposition_table(
         row = {'Metric': label}
         for approach in available_approaches:
             name = approach_names[approach]
-            result = results[approach]
-            var_attrib = result.var_attrib_samples
+            if approach == 'method5_h4pos':
+                var_attrib = method5_h4pos_data['var_attrib_samples']
+                h4_mask = method5_h4pos_data['h4_mask']
+            else:
+                result = results[approach]
+                var_attrib = result.var_attrib_samples
+                h4_mask = None
 
             # Get metric samples (may compute combined h(T) terms from separated terms)
             metric_samples = get_metric_samples(var_attrib, key)
@@ -1700,6 +1893,12 @@ def save_variance_decomposition_table(
                 continue
 
             var_dy_samples = var_attrib['var_dy']
+
+            # Apply h4 filter for method5_h4pos
+            if h4_mask is not None:
+                metric_samples = get_filtered_samples(metric_samples, h4_mask)
+                var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
+
             metric_samples = metric_samples * 2  # 2*Cov term
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
@@ -1717,8 +1916,13 @@ def save_variance_decomposition_table(
     sum_row = {'Metric': 'Sum'}
     for approach in available_approaches:
         name = approach_names[approach]
-        result = results[approach]
-        var_attrib = result.var_attrib_samples
+        if approach == 'method5_h4pos':
+            var_attrib = method5_h4pos_data['var_attrib_samples']
+            h4_mask = method5_h4pos_data['h4_mask']
+        else:
+            result = results[approach]
+            var_attrib = result.var_attrib_samples
+            h4_mask = None
 
         if 'var_dy' not in var_attrib:
             sum_row[f'{name}_point'] = np.nan
@@ -1730,6 +1934,11 @@ def save_variance_decomposition_table(
             continue
 
         var_dy_samples = var_attrib['var_dy']
+
+        # Apply h4 filter for method5_h4pos
+        if h4_mask is not None:
+            var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
+
         n_samples = len(var_dy_samples)
         total_sum = np.zeros(n_samples)
 
@@ -1737,10 +1946,14 @@ def save_variance_decomposition_table(
         for key, _ in variance_metrics:
             samples = get_metric_samples(var_attrib, key)
             if samples is not None:
+                if h4_mask is not None:
+                    samples = get_filtered_samples(samples, h4_mask)
                 total_sum += samples
         for key, _ in covariance_metrics:
             samples = get_metric_samples(var_attrib, key)
             if samples is not None:
+                if h4_mask is not None:
+                    samples = get_filtered_samples(samples, h4_mask)
                 total_sum += 2 * samples
 
         with np.errstate(divide='ignore', invalid='ignore'):

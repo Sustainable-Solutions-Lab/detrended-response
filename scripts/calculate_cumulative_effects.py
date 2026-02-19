@@ -66,6 +66,29 @@ def find_most_recent_dir(pattern: str) -> str:
     return None
 
 
+def load_run_metadata(directory: Path) -> dict:
+    """Load run metadata from a directory.
+
+    Looks for run_metadata.json in the directory.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory to search for metadata
+
+    Returns
+    -------
+    dict
+        Metadata dictionary, or empty dict if not found
+    """
+    import json
+    metadata_path = directory / 'run_metadata.json'
+    if metadata_path.exists():
+        with open(metadata_path, 'r') as f:
+            return json.load(f)
+    return {}
+
+
 # ==============================================================================
 # Constants
 # ==============================================================================
@@ -815,6 +838,13 @@ def main():
         default=DEFAULT_LOESS_WINDOW_YEARS,
         help=f"Window size in years for LOESS smoothing (default: {DEFAULT_LOESS_WINDOW_YEARS})",
     )
+    parser.add_argument(
+        "--mean-weight-distance",
+        type=float,
+        default=None,
+        help="Mean weighting distance in years for LOESS. Window = 44/7 * this value. "
+             "Overrides --loess-window if specified.",
+    )
 
     args = parser.parse_args()
 
@@ -853,6 +883,27 @@ def main():
     print(f"      Input dir: {input_dir}")
     input_file = str(input_path)
 
+    # Determine LOESS window: explicit args > metadata > default
+    # Try to load metadata from bootstrap directory
+    metadata = load_run_metadata(input_dir)
+
+    if args.mean_weight_distance is not None:
+        loess_window = (44 / 7) * args.mean_weight_distance
+        print(f"      LOESS window: {loess_window:.1f} years (from --mean-weight-distance {args.mean_weight_distance})")
+    elif args.loess_window != DEFAULT_LOESS_WINDOW_YEARS:
+        loess_window = args.loess_window
+        print(f"      LOESS window: {loess_window} years (from --loess-window)")
+    elif 'loess_window' in metadata:
+        loess_window = metadata['loess_window']
+        mwd = metadata.get('mean_weight_distance')
+        if mwd is not None:
+            print(f"      LOESS window: {loess_window:.1f} years (from metadata, mean_weight_distance={mwd})")
+        else:
+            print(f"      LOESS window: {loess_window:.1f} years (from metadata)")
+    else:
+        loess_window = DEFAULT_LOESS_WINDOW_YEARS
+        print(f"      LOESS window: {loess_window} years (default)")
+
     # Output directory
     if args.output_dir:
         output_dir = Path(args.output_dir)
@@ -862,7 +913,7 @@ def main():
 
     # Phase 1: Process all countries with point estimate
     print("\n[1/7] Processing all countries (point estimate only)...")
-    df_all_countries = process_all_countries_point_estimate(input_path, args.loess_window)
+    df_all_countries = process_all_countries_point_estimate(input_path, loess_window)
 
     # Save all countries cumulative effects
     all_countries_path = output_dir / 'cumulative_effects_all_countries.csv'
@@ -879,7 +930,7 @@ def main():
     # Phase 3: Select representative countries using point estimate only
     print("\n[3/7] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
-        input_path, args.loess_window
+        input_path, loess_window
     )
 
     # Print selected countries
@@ -914,7 +965,7 @@ def main():
     print("\n[4/7] Processing bootstrap data for representative countries...")
     rep_iso3s = [representatives[p]['iso3'] for p in representatives]
     df_summary = process_representative_countries(
-        input_path, rep_iso3s, args.loess_window
+        input_path, rep_iso3s, loess_window
     )
 
     # Save cumulative effects summary

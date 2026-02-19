@@ -212,7 +212,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include (publication set)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5_h4pos']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -483,7 +483,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (publication set, same as variance decomposition table)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5_h4pos']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
