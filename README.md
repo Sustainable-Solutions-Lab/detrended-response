@@ -56,6 +56,15 @@ All approaches use a consistent naming scheme for output coefficients:
 
 **Approaches 0, 5, 5a-c, 7a-c** (standard quadratic): h1, h2, T_opt only
 
+**Method 5** (persistence decay):
+
+| Parameter | Meaning |
+|-----------|---------|
+| h1 | Linear temperature coefficient |
+| h2 | Quadratic temperature coefficient |
+| h4 | Persistence decay parameter [0=full persistence, 1=no persistence] |
+| T_opt | Optimal temperature |
+
 **Approach 5d** (GDP-dependent response):
 
 | Parameter | Meaning |
@@ -531,6 +540,53 @@ h(T, T_trend) = (1 + f₂·(T - T_trend)²) · (h₁·T + h₂·T²)
 
 **Degrees of freedom:** 3 (f₂, h₁, h₂)
 
+### Method 5: Persistence Decay Model
+
+Models persistent effects of past temperatures on current GDP growth. The climate response includes an exponentially decaying memory of past temperature effects.
+
+**GDP detrending** (same as Approach 6):
+```
+Δy*(t) = Δyᵢ(t) - k(t) - LOESS(Δyᵢ - k)
+```
+
+**Climate response function with persistence:**
+```
+h_conv(T(t)) = h(T(t)) - h₄ · Σₖ (1-h₄)^(k-1) · h(T(t-k))
+```
+
+where `h(T) = h₁·T + h₂·T²` and the sum runs over all prior years in the country's record.
+
+**Efficient computation using accumulators:**
+```
+A_T(t) = T(t) + (1-h₄) · A_T(t-1)
+A_T²(t) = T²(t) + (1-h₄) · A_T²(t-1)
+```
+
+**Modified regressors:**
+```
+X₁(t) = [T(t) - h₄·A_T(t-1)] - [T_trend(t) - h₄·A_T_trend(t-1)]
+X₂(t) = [T²(t) - h₄·A_T²(t-1)] - [T_trend²(t) - h₄·A_T²_trend(t-1)]
+```
+
+**Parameters:**
+- `h₁`: Linear temperature coefficient
+- `h₂`: Quadratic temperature coefficient
+- `h₄`: Persistence decay parameter [0, 1]
+- `T_opt`: Optimal temperature = -h₁/(2h₂)
+
+**Edge cases:**
+- `h₄ = 0`: Full persistence (accumulated temperature effects persist indefinitely)
+- `h₄ = 1`: No persistence (first-difference behavior, only current year matters)
+
+**Optimization strategy:**
+1. Grid search over h₄ ∈ [0, 1] with 21 points
+2. Refine with Brent's method in the best region
+3. Inner OLS: For each h₄, solve for h₁ and h₂
+
+**Key insight:** This model tests whether past temperatures have lingering effects on current growth, or whether only the current year's temperature matters.
+
+**Degrees of freedom:** 3 (h₁, h₂, h₄)
+
 ### Null Models (No Climate Response)
 
 Two null models for comparison:
@@ -651,14 +707,25 @@ python scripts/run_analysis.py
 ### Command Line Options
 
 ```
---use-csv PATH     Use pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
---maddison PATH    Path to Maddison GDP Excel file
---cru PATH         Path to CRU temperature CSV file
---year-min YEAR    Minimum year to include
---year-max YEAR    Maximum year to include
---output-dir DIR   Output directory (default: timestamped directory in data/output/)
---loess-window N   Window size in years for LOESS smoothing (default: 25)
+--use-csv PATH              Use pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
+--maddison PATH             Path to Maddison GDP Excel file
+--cru PATH                  Path to CRU temperature CSV file
+--year-min YEAR             Minimum year to include
+--year-max YEAR             Maximum year to include
+--output-dir DIR            Output directory (default: timestamped directory in data/output/)
+--loess-window N            Window size in years for LOESS smoothing (default: 25)
+--mean-weight-distance N    Mean weighting distance in years for LOESS (alternative to --loess-window)
 ```
+
+#### LOESS Window Specification
+
+The LOESS smoothing window can be specified in two ways:
+
+1. **`--loess-window N`**: Directly specify the window size in years (default: 25)
+
+2. **`--mean-weight-distance N`**: Specify the mean weighting distance, which is converted to a window size using the formula: `window = (44/7) × mean_weight_distance`
+
+The mean weighting distance represents the average distance (in years) at which data points contribute to the LOESS fit, providing a more intuitive parameterization. When using `--mean-weight-distance`, the output directory automatically includes a `_mwXX` suffix (e.g., `analysis_mw10_20260219_065737`).
 
 ### Examples
 
@@ -688,14 +755,15 @@ python scripts/run_bootstrap.py
 
 **Options:**
 ```
---n-bootstrap N     Number of bootstrap iterations (default: 1000)
---random-seed SEED  Random seed for reproducibility (default: 42)
---use-csv PATH      Pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
---year-min YEAR     Minimum year to include
---year-max YEAR     Maximum year to include
---output-dir DIR    Output directory (default: timestamped)
---loess-window N    LOESS window size (default: 25)
---quiet             Suppress progress messages
+--n-bootstrap N           Number of bootstrap iterations (default: 1000)
+--random-seed SEED        Random seed for reproducibility (default: 42)
+--use-csv PATH            Pre-processed CSV file (default: data/input/Maddison_CRU_dataset.csv)
+--year-min YEAR           Minimum year to include
+--year-max YEAR           Maximum year to include
+--output-dir DIR          Output directory (default: timestamped)
+--loess-window N          LOESS window size (default: 25)
+--mean-weight-distance N  Mean weighting distance for LOESS (alternative to --loess-window)
+--quiet                   Suppress progress messages
 ```
 
 **Example:**
@@ -778,6 +846,63 @@ python scripts/compare_method0_5c.py
 
 For a detailed step-by-step mathematical derivation of this analysis, see [METHODS_DETAIL.md](METHODS_DETAIL.md).
 
+### Method 5 h₄ Sweep Analysis
+
+The `sweep_h4_method5.py` script evaluates method5 at fixed h₄ values across a range, computing metrics at each value. This is useful for understanding how the persistence decay parameter affects the fit.
+
+```bash
+python scripts/sweep_h4_method5.py
+```
+
+**What it does:**
+1. Loads data and computes LOESS trends
+2. For each h₄ value in the specified range:
+   - Computes persistence accumulators
+   - Fits the inner OLS for h₁ and h₂
+   - Computes SSE, RMSE, R², total R², and T_optimal
+3. Identifies the h₄ value with minimum SSE
+4. Outputs results as a table (and optionally to CSV)
+
+**Options:**
+```
+--h4-min N                Minimum h₄ value (default: 0.0)
+--h4-max N                Maximum h₄ value (default: 1.0)
+--h4-steps N              Number of h₄ values to evaluate (default: 21)
+--mean-weight-distance N  Mean weighting distance for LOESS
+--loess-window N          LOESS window size (default: 25)
+--use-csv PATH            Input CSV file (default: data/input/Maddison_CRU_dataset.csv)
+--year-min YEAR           Minimum year to include
+--year-max YEAR           Maximum year to include
+--output-csv PATH         Save results to CSV file
+```
+
+**Examples:**
+```bash
+# Basic sweep with default settings
+python scripts/sweep_h4_method5.py
+
+# Sweep with mean weight distance of 10
+python scripts/sweep_h4_method5.py --mean-weight-distance 10
+
+# Custom range with more steps
+python scripts/sweep_h4_method5.py --h4-min 0.0 --h4-max 0.5 --h4-steps 51
+
+# Save to CSV
+python scripts/sweep_h4_method5.py --output-csv data/output/h4_sweep.csv
+```
+
+**Output columns:**
+| Column | Description |
+|--------|-------------|
+| h4 | Fixed h₄ value |
+| h1 | Linear temperature coefficient |
+| h2 | Quadratic temperature coefficient |
+| T_optimal | Optimal temperature (-h₁ / 2h₂) |
+| SSE | Sum of squared errors |
+| RMSE | Root mean squared error |
+| r_squared | R² of detrended regression |
+| total_r_squared | R² of original Δy explained |
+
 ## Output Files
 
 Results are saved to a timestamped directory in `data/output/`. Files include:
@@ -840,7 +965,8 @@ detrended-response/
 │   ├── run_analysis.py              # Main entry point
 │   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
 │   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
-│   ├── compare_method0_5c.py         # Scatter plots comparing Approach 0 vs 5c parameters
+│   ├── compare_method0_5c.py        # Scatter plots comparing Approach 0 vs 5c parameters
+│   ├── sweep_h4_method5.py          # Sweep h₄ persistence decay parameter for method5
 │   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
