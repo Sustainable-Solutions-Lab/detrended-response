@@ -10,6 +10,7 @@ Methods:
     method2: Pre-computed k with LOESS trends
     method3: Piecewise quadratic response with LOESS
     method4: T response with quadratic departure term
+    method5: Persistence decay model with LOESS
     method0h0: Null model (h1=h2=0) for method0
     method1h0: Null model (h1=h2=0) for method1
 
@@ -167,6 +168,16 @@ def main():
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+
+        # method5: h1, h2, h4 (persistence decay), T_opt
+        elif name == 'method5' and hasattr(r, 'h4'):
+            print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            if not np.isnan(r.T_opt):
+                print(f"  T_opt = {r.T_opt:.2f} C")
+            else:
+                print(f"  T_opt = N/A")
 
         else:
             # Standard methods (method0, method1, method2, null models)

@@ -158,7 +158,7 @@ def main():
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
     # Specify methods for h(T) computation
-    h_T_approaches = ['method0', 'method1', 'method2', 'method4', 'method3']
+    h_T_approaches = ['method0', 'method1', 'method2', 'method4', 'method3', 'method5']
     bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -245,6 +245,20 @@ def main():
             print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
             print(f"  T_opt: {result.T_opt_point:.2f} C")
             print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
+
+        # method5: h1, h2, h4 (persistence decay), T_opt
+        elif name == 'method5' and result.h4_point is not None:
+            print(f"  h1: {result.h1_point:.6f}")
+            print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
+            print(f"  h2: {result.h2_point:.6f}")
+            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+            print(f"  h4 (persistence decay): {result.h4_point:.6f}")
+            print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
+            if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
+                print(f"  T_opt: {result.T_opt_point:.2f} C")
+                print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
+            else:
+                print(f"  T_opt: N/A")
 
         else:
             # Standard methods (method0, method1, method2, null models)

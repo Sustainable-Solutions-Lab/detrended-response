@@ -45,6 +45,7 @@ METHOD_COLORS = {
     'method2': 'orange',
     'method3': 'magenta',
     'method4': 'salmon',
+    'method5': 'cyan',
     'method0h0': 'gray',
     'method1h0': 'gray',
 }
@@ -52,7 +53,7 @@ METHOD_COLORS = {
 # Line style scheme for methods:
 # - method0 (Conjoined OLS): solid
 # - method1 (Precomputed k): dash-dot
-# - LOESS methods (2-4): densely dashed
+# - LOESS methods (2-5): densely dashed
 # - Null models: dashed/dotted
 METHOD_LINESTYLES = {
     'method0': '-',
@@ -60,6 +61,7 @@ METHOD_LINESTYLES = {
     'method2': (0, (5, 1)),   # densely dashed
     'method3': (0, (5, 1)),   # densely dashed
     'method4': (0, (5, 1)),   # densely dashed
+    'method5': (0, (5, 1)),   # densely dashed
     'method0h0': '--',
     'method1h0': ':',
 }

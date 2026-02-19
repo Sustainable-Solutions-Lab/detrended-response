@@ -6,6 +6,7 @@ Methods:
     method2: Pre-computed k with LOESS trends
     method3: Piecewise quadratic response with LOESS
     method4: T response with quadratic departure term
+    method5: Persistence decay model with LOESS
     method0h0: Null model (h1=h2=0) for method0
     method1h0: Null model (h1=h2=0) for method1
 """
@@ -273,6 +274,115 @@ def compute_variance_attribution(
     }
 
 
+def compute_persistence_accumulators(data: AnalysisData, h4: float) -> tuple:
+    """Compute lagged persistence accumulators for observed temperatures.
+
+    For each country, computes:
+    - A_T(t) = T(t) + (1-h4) * A_T(t-1), with A_T(first_year) = T(first_year)
+    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1), with A_T2(first_year) = T^2(first_year)
+
+    Returns the LAGGED values A_T(t-1) and A_T2(t-1) for use in regressors.
+    For the first year of each country, returns 0 (no lagged value available).
+
+    Args:
+        data: AnalysisData object
+        h4: Persistence decay parameter [0, 1]
+
+    Returns:
+        Tuple of (A_T_lag, A_T2_lag), each of shape (n_obs,)
+    """
+    decay = 1 - h4
+    A_T_lag = np.zeros(data.n_obs)
+    A_T2_lag = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        # Get observation indices for this country, sorted by year
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+        # Sort by year
+        years_for_country = data.year[country_indices]
+        sorted_order = np.argsort(years_for_country)
+        sorted_indices = country_indices[sorted_order]
+
+        # Compute accumulators
+        A_T = 0.0
+        A_T2 = 0.0
+        for i, idx in enumerate(sorted_indices):
+            T_val = data.temp[idx]
+            T2_val = T_val ** 2
+
+            if i == 0:
+                # First year: no lagged value available
+                A_T_lag[idx] = 0.0
+                A_T2_lag[idx] = 0.0
+                # Initialize accumulator with first year's value
+                A_T = T_val
+                A_T2 = T2_val
+            else:
+                # Store lagged accumulator (from previous iteration)
+                A_T_lag[idx] = A_T
+                A_T2_lag[idx] = A_T2
+                # Update accumulator: A(t) = T(t) + (1-h4) * A(t-1)
+                A_T = T_val + decay * A_T
+                A_T2 = T2_val + decay * A_T2
+
+    return A_T_lag, A_T2_lag
+
+
+def compute_persistence_accumulators_at_T(
+    data: AnalysisData, h4: float, T_values: np.ndarray
+) -> tuple:
+    """Compute lagged persistence accumulators for arbitrary temperature values.
+
+    Same as compute_persistence_accumulators but using provided T_values
+    instead of data.temp. Used for computing accumulators at trend temperatures.
+
+    Args:
+        data: AnalysisData object (for country/year structure)
+        h4: Persistence decay parameter [0, 1]
+        T_values: Temperature values to use, shape (n_obs,)
+
+    Returns:
+        Tuple of (A_T_lag, A_T2_lag), each of shape (n_obs,)
+    """
+    decay = 1 - h4
+    A_T_lag = np.zeros(data.n_obs)
+    A_T2_lag = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        # Get observation indices for this country, sorted by year
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+        # Sort by year
+        years_for_country = data.year[country_indices]
+        sorted_order = np.argsort(years_for_country)
+        sorted_indices = country_indices[sorted_order]
+
+        # Compute accumulators
+        A_T = 0.0
+        A_T2 = 0.0
+        for i, idx in enumerate(sorted_indices):
+            T_val = T_values[idx]
+            T2_val = T_val ** 2
+
+            if i == 0:
+                # First year: no lagged value available
+                A_T_lag[idx] = 0.0
+                A_T2_lag[idx] = 0.0
+                # Initialize accumulator with first year's value
+                A_T = T_val
+                A_T2 = T2_val
+            else:
+                # Store lagged accumulator (from previous iteration)
+                A_T_lag[idx] = A_T
+                A_T2_lag[idx] = A_T2
+                # Update accumulator: A(t) = T(t) + (1-h4) * A(t-1)
+                A_T = T_val + decay * A_T
+                A_T2 = T2_val + decay * A_T2
+
+    return A_T_lag, A_T2_lag
+
+
 @dataclass
 class FitResult:
     """Container for regression results."""
@@ -342,6 +452,49 @@ class FitResultApproach8:
     # Compatibility field for plotting that expects h1
     h1: float = 0.0        # Linear term (always 0 for piecewise model)
     h1_se: float = 0.0     # SE for h1 (always 0)
+
+
+@dataclass
+class FitResultMethod5:
+    """Container for method5 (persistence decay) results.
+
+    Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
+
+    where h(T) = h1*T + h2*T^2 and n = t - 1961.
+
+    Using accumulators for efficient computation:
+    - A_T(t) = T(t) + (1-h4) * A_T(t-1), with A_T(1961) = T(1961)
+    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1), with A_T2(1961) = T^2(1961)
+
+    Modified regressors:
+    - X1(t) = T(t) - h4 * A_T(t-1)
+    - X2(t) = T^2(t) - h4 * A_T2(t-1)
+
+    Edge cases:
+    - h4 = 0: Full persistence (h_conv = h(T))
+    - h4 = 1: No persistence (first-difference behavior)
+    """
+    approach: str
+    h1: float              # Linear temperature coefficient
+    h2: float              # Quadratic temperature coefficient
+    h1_se: float
+    h2_se: float
+    h4: float              # Persistence decay parameter [0, 1]
+    h4_se: float
+    k: Dict[int, float]    # Year fixed effects
+    r_squared: float
+    adj_r_squared: float
+    rmse: float
+    n_obs: int
+    n_params: int          # = 3
+    residuals: np.ndarray
+    T_opt: float           # -h1/(2*h2)
+    total_r_squared: float
+    rms_imbalance: float = None
+    rms_h: float = None
+    imbalance_ratio: float = None
+    var_decomp: dict = None
+    var_attrib: dict = None
 
 
 @dataclass
@@ -1400,6 +1553,173 @@ def fit_method3_piecewise_loess(
     )
 
 
+def fit_method5_persistence_decay(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    h4_bounds: tuple = (0.0, 1.0),
+) -> FitResultMethod5:
+    """Method 5: Persistence decay model with LOESS detrending.
+
+    Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
+
+    where h(T) = h1*T + h2*T^2.
+
+    Using accumulators for efficient computation:
+    - A_T(t) = T(t) + (1-h4) * A_T(t-1)
+    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1)
+
+    Modified regressors (with detrending):
+    - X1(t) = (T - h4*A_T_lag) - (T_trend - h4*A_T_trend_lag)
+    - X2(t) = (T^2 - h4*A_T2_lag) - (T_trend^2 - h4*A_T2_trend_lag)
+
+    Uses 1D optimization over h4 in [0, 1] with inner 2-column OLS for h1, h2.
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+
+    Returns:
+        FitResultMethod5 with h1, h2, h4, T_opt, and standard errors
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as method2)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    T = data.temp
+    T_trend = trends_loess.T_loess
+
+    def compute_sse_for_h4(h4_val):
+        """Compute SSE for given h4 by solving inner 2-column OLS for h1, h2."""
+        # Compute accumulators for observed temperature
+        A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_val)
+        # Compute accumulators for trend temperature
+        A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
+            data, h4_val, T_trend
+        )
+
+        # Modified regressors with detrending
+        # X1 = (T - h4*A_T_lag) - (T_trend - h4*A_T_trend_lag)
+        X1 = (T - h4_val * A_T_lag) - (T_trend - h4_val * A_T_trend_lag)
+        # X2 = (T^2 - h4*A_T2_lag) - (T_trend^2 - h4*A_T2_trend_lag)
+        X2 = (T**2 - h4_val * A_T2_lag) - (T_trend**2 - h4_val * A_T2_trend_lag)
+
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS: min ||y - X @ [h1, h2]||^2
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # 1D optimization using L-BFGS-B to find optimal h4 in [0, 1]
+    result = minimize(
+        lambda x: compute_sse_for_h4(x[0]),
+        x0=[0.5],  # Initial guess
+        bounds=[h4_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    h4_opt = result.x[0]
+
+    # Re-fit at optimal h4 to get h1, h2, residuals, covariance
+    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_opt)
+    A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
+        data, h4_opt, T_trend
+    )
+
+    X1 = (T - h4_opt * A_T_lag) - (T_trend - h4_opt * A_T_trend_lag)
+    X2 = (T**2 - h4_opt * A_T2_lag) - (T_trend**2 - h4_opt * A_T2_trend_lag)
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for h4 using numerical Hessian
+    h4_se = compute_1d_se_numerical(
+        compute_sse_for_h4,
+        h4_opt,
+        h4_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1, h2, h4
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Compute RMS imbalance
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # Climate response values using h_conv formulation
+    h_conv_values = h1 * X1 + h2 * X2
+
+    # For imbalance, we use h(T_trend) term (no persistence correction at trend)
+    h_of_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    imbalance = h_of_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # Compute RMS of h_conv
+    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_conv_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    # h(T) at full temperature (without persistence correction for baseline)
+    h_T_full = h1 * T + h2 * T ** 2
+    h_T_trend_full = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_conv_values  # Effective climate response increment
+    v = h_T_trend_full       # Baseline at trend temperature
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultMethod5(
+        approach="5: Persistence Decay LOESS",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        h4=h4_opt,
+        h4_se=h4_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
 
 
 def fit_method0_no_detrending(data: AnalysisData) -> FitResult:
@@ -1753,6 +2073,7 @@ def fit_all_approaches(
         'method2': Pre-computed k with LOESS trends (if trends_loess provided)
         'method3': Piecewise quadratic response with LOESS (if trends_loess provided)
         'method4': T response with quadratic departure only (if trends_loess provided)
+        'method5': Persistence decay model with LOESS (if trends_loess provided)
         'method0h0': No climate response, joint OLS (country trends + year effects only)
         'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
 
@@ -1760,8 +2081,8 @@ def fit_all_approaches(
         data: AnalysisData object
         trends: CountryTrends (unused, kept for API compatibility)
         trends_with_k: CountryTrends for method1 (fit to dy - k)
-        year_means: Pre-computed k[t] for methods 1-4
-        trends_loess: CountryTrendsLoess for methods 2-4 (LOESS detrending)
+        year_means: Pre-computed k[t] for methods 1-5
+        trends_loess: CountryTrendsLoess for methods 2-5 (LOESS detrending)
     """
     results = {
         'method0': fit_method0_no_detrending(data),
@@ -1777,7 +2098,7 @@ def fit_all_approaches(
             data, trends_with_k, year_means
         )
 
-    # Add methods 2, 3, 4 if trends_loess and year_means are provided
+    # Add methods 2, 3, 4, 5 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         results['method2'] = fit_method2_precomputed_k_loess(
             data, trends_loess, year_means
@@ -1786,6 +2107,9 @@ def fit_all_approaches(
             data, trends_loess, year_means
         )
         results['method3'] = fit_method3_piecewise_loess(
+            data, trends_loess, year_means
+        )
+        results['method5'] = fit_method5_persistence_decay(
             data, trends_loess, year_means
         )
 
