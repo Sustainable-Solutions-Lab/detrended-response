@@ -169,24 +169,26 @@ def create_publication_output_dir(base_dir: str = None) -> Path:
 
 
 def main():
-    # Find most recent directories for defaults
-    default_analysis_dir = find_most_recent_dir("data/output/reference/analysis_*")
-    default_bootstrap_dir = find_most_recent_dir("data/output/reference/bootstrap_*")
-
     parser = argparse.ArgumentParser(
         description="Generate publication-quality tables and figures from analysis outputs"
     )
     parser.add_argument(
+        "--reference-dir",
+        type=str,
+        default=None,
+        help="Parent directory containing analysis_* and bootstrap_* subdirectories (e.g., data/output/reference_mw10)",
+    )
+    parser.add_argument(
         "--analysis-dir",
         type=str,
-        default=default_analysis_dir,
-        help=f"Path to analysis output directory (default: most recent in data/output/reference/analysis_*)",
+        default=None,
+        help="Path to analysis output directory (default: most recent in reference-dir/analysis_* or data/output/reference/analysis_*)",
     )
     parser.add_argument(
         "--bootstrap-dir",
         type=str,
-        default=default_bootstrap_dir,
-        help=f"Path to bootstrap output directory (default: most recent in data/output/reference/bootstrap_*)",
+        default=None,
+        help="Path to bootstrap output directory (default: most recent in reference-dir/bootstrap_* or data/output/reference/bootstrap_*)",
     )
     parser.add_argument(
         "--output-dir",
@@ -203,6 +205,21 @@ def main():
 
     args = parser.parse_args()
 
+    # Resolve directories: explicit args > --reference-dir > default
+    if args.analysis_dir is not None:
+        analysis_dir = args.analysis_dir
+    elif args.reference_dir is not None:
+        analysis_dir = find_most_recent_dir(f"{args.reference_dir}/analysis_*")
+    else:
+        analysis_dir = find_most_recent_dir("data/output/reference/analysis_*")
+
+    if args.bootstrap_dir is not None:
+        bootstrap_dir = args.bootstrap_dir
+    elif args.reference_dir is not None:
+        bootstrap_dir = find_most_recent_dir(f"{args.reference_dir}/bootstrap_*")
+    else:
+        bootstrap_dir = find_most_recent_dir("data/output/reference/bootstrap_*")
+
     print("=" * 70)
     print("Publication Tables and Figures Generator")
     print("=" * 70)
@@ -210,17 +227,23 @@ def main():
     # Validate input directories
     print(f"\n[1/6] Validating input directories...")
 
-    if args.analysis_dir is None:
-        print("ERROR: No analysis directory found matching data/output/reference/analysis_*")
-        print("       Please specify --analysis-dir explicitly")
+    if analysis_dir is None:
+        if args.reference_dir:
+            print(f"ERROR: No analysis directory found matching {args.reference_dir}/analysis_*")
+        else:
+            print("ERROR: No analysis directory found matching data/output/reference/analysis_*")
+        print("       Please specify --analysis-dir or --reference-dir explicitly")
         sys.exit(1)
-    if args.bootstrap_dir is None:
-        print("ERROR: No bootstrap directory found matching data/output/reference/bootstrap_*")
-        print("       Please specify --bootstrap-dir explicitly")
+    if bootstrap_dir is None:
+        if args.reference_dir:
+            print(f"ERROR: No bootstrap directory found matching {args.reference_dir}/bootstrap_*")
+        else:
+            print("ERROR: No bootstrap directory found matching data/output/reference/bootstrap_*")
+        print("       Please specify --bootstrap-dir or --reference-dir explicitly")
         sys.exit(1)
 
-    analysis_dir = Path(args.analysis_dir)
-    bootstrap_dir = Path(args.bootstrap_dir)
+    analysis_dir = Path(analysis_dir)
+    bootstrap_dir = Path(bootstrap_dir)
 
     print(f"      Analysis dir: {analysis_dir}")
     print(f"      Bootstrap dir: {bootstrap_dir}")
