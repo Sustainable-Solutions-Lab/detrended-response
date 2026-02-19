@@ -212,7 +212,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include (publication set)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -483,7 +483,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (publication set, same as variance decomposition table)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -646,6 +646,8 @@ def generate_figures(
     approaches_4panel = ['method0', 'method1', 'method2', 'method4']
     # 2-panel layout: [col0: method2, col1: method3]
     approaches_2panel = ['method2', 'method3']
+    # 6-panel layout: includes method5 (persistence decay)
+    approaches_6panel = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5']
 
     # Figure 1a: Temperature response (2 panels)
     if data is not None:
@@ -721,6 +723,17 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
 
+    # Figure 6b: T_optimal histograms - 6 panels (all main methods including method5)
+    print("      [Figures] Generating T_optimal histogram figure (6 panels)...")
+    plot_T_optimal_histograms(
+        results,
+        output_dir,
+        approaches=approaches_6panel,
+        filename='fig_T_optimal_histogram_6panel.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_T_optimal_histogram_6panel.pdf")
+
     # Figure 7: h2 coefficient histograms - 4 panels [[method0, method1], [method2, method4]]
     print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
     plot_h2_histograms(
@@ -733,6 +746,19 @@ def generate_figures(
         input_file=None,
     )
     print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
+
+    # Figure 7b: h2 coefficient histograms - 6 panels (all main methods including method5)
+    print("      [Figures] Generating h2 coefficient histogram figure (6 panels)...")
+    plot_h2_histograms(
+        results,
+        output_dir,
+        approaches=approaches_6panel,
+        x_range=(-0.001, 0.0001),
+        bin_width=0.00002,
+        filename='fig_h2_histogram_6panel.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_h2_histogram_6panel.pdf")
 
     # Figure 8: h2 coefficient histograms - 3 panels (method2 h2, method3 h2_low, method3 h2_high)
     print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
@@ -774,5 +800,18 @@ def generate_figures(
         input_file=None,
     )
     print("      [Figures] Saved fig_climate_response_contours.pdf")
+
+    # Figure 11: Method5 persistence decay (h(T) response + h4 distribution)
+    print("      [Figures] Generating method5 persistence decay figure...")
+    from .output import plot_method5_persistence_decay
+    plot_method5_persistence_decay(
+        results,
+        output_dir,
+        data=data,
+        T_range=(0, 30),
+        filename='fig_method5_persistence_decay.pdf',
+        input_file=None,
+    )
+    print("      [Figures] Saved fig_method5_persistence_decay.pdf")
 
     # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)

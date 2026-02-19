@@ -101,9 +101,24 @@ def main():
         default=25,
         help="Window size in years for LOESS smoothing (default: 25)",
     )
+    parser.add_argument(
+        "--mean-weight-distance",
+        type=float,
+        default=None,
+        help="Mean weighting distance in years for LOESS. Window = 44/7 * this value. "
+             "If specified, adds '_mwXX' suffix to output directory.",
+    )
 
     args = parser.parse_args()
     verbose = not args.quiet
+
+    # Compute LOESS window from mean weight distance if specified
+    if args.mean_weight_distance is not None:
+        loess_window = (44 / 7) * args.mean_weight_distance
+        mw_suffix = f"mw{int(args.mean_weight_distance):02d}"
+    else:
+        loess_window = args.loess_window
+        mw_suffix = ""
 
     print("=" * 70)
     print("Bootstrap Uncertainty Analysis")
@@ -141,8 +156,8 @@ def main():
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
     # Compute LOESS trends for methods 2-4
-    trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
-    print(f"      LOESS window: {args.loess_window} years")
+    trends_loess = compute_country_trends_loess(data, year_means, loess_window)
+    print(f"      LOESS window: {loess_window:.1f} years")
     print("      Done.")
 
     # Fit original model (point estimates)
@@ -166,7 +181,7 @@ def main():
         n_bootstrap=args.n_bootstrap,
         random_seed=args.random_seed,
         verbose=verbose,
-        loess_window=args.loess_window,
+        loess_window=loess_window,
         h_T_approaches=h_T_approaches,
     )
     print("      Done.")
@@ -184,7 +199,7 @@ def main():
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
-        output_dir = create_output_dir(prefix="bootstrap_")
+        output_dir = create_output_dir(prefix="bootstrap_", suffix=mw_suffix)
 
     save_bootstrap_coefficients_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)

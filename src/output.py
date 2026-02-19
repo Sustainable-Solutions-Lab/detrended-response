@@ -9,7 +9,11 @@ from typing import Dict
 from scipy.special import erf
 from .data_loader import AnalysisData
 from .detrending import CountryTrends, CountryTrendsLoess, compute_year_means, compute_country_trends_loess
-from .fitting import FitResult
+from .fitting import (
+    FitResult,
+    compute_persistence_accumulators,
+    compute_persistence_accumulators_at_T,
+)
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -182,18 +186,20 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
         return result.h1 + 2 * result.h2 * T
 
 
-def create_output_dir(base_dir: str = "data/output", prefix: str = "") -> Path:
+def create_output_dir(base_dir: str = "data/output", prefix: str = "", suffix: str = "") -> Path:
     """Create timestamped output directory.
 
     Args:
         base_dir: Base directory for output (default: "data/output")
         prefix: Optional prefix for the timestamped folder (e.g., "analysis_", "bootstrap_")
+        suffix: Optional suffix inserted between prefix and timestamp (e.g., "mw10")
 
     Returns:
         Path to created output directory
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = Path(base_dir) / f"{prefix}{timestamp}"
+    suffix_part = f"{suffix}_" if suffix else ""
+    output_dir = Path(base_dir) / f"{prefix}{suffix_part}{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
@@ -1825,6 +1831,7 @@ def save_bootstrap_h_values(
     - method0, method1, method2: h(T) = h1*T + h2*T²
     - method4: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
     - method3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+    - method5: h_conv = h1*X1 + h2*X2 with persistence-decay accumulators
 
     Note: This file can be large (~2GB for 1000 iterations × 5 approaches × 9405 obs).
     Consider gzip compression after generation if needed.
@@ -1878,6 +1885,15 @@ def save_bootstrap_h_values(
                 elif name == 'method3':
                     below = temp_arr <= r.T_opt
                     h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
+                elif name == 'method5':
+                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag) + h2*(T² - h4*A_T2_lag)
+                    # Store h_conv(T) without trend subtraction (like method2)
+                    # The cumulative effects script handles trend subtraction separately
+                    h4 = r.h4
+                    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
+                    X1 = temp_arr - h4 * A_T_lag
+                    X2 = temp_arr**2 - h4 * A_T2_lag
+                    h_T_point = r.h1 * X1 + r.h2 * X2
                 else:
                     continue
 
@@ -1940,7 +1956,7 @@ def plot_year_effects_bootstrap(
     # Default to methods that have meaningful year effects
     if approaches_to_plot is None:
         approaches_to_plot = [
-            'method0', 'method1', 'method2', 'method3', 'method4'
+            'method0', 'method1', 'method2', 'method3', 'method4', 'method5'
         ]
 
     # Filter to approaches that exist and have k_samples
@@ -4172,9 +4188,16 @@ def plot_h2_histograms(
     if n_panels <= 3:
         n_rows, n_cols = 1, n_panels
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4))
-    else:
+    elif n_panels <= 4:
         n_rows, n_cols = 2, 2
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(10, 8))
+    elif n_panels <= 6:
+        n_rows, n_cols = 2, 3
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 8))
+    else:
+        n_cols = 3
+        n_rows = (n_panels + n_cols - 1) // n_cols
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 4 * n_rows))
 
     if n_panels == 1:
         axes = [axes]
@@ -4244,6 +4267,233 @@ def plot_h2_histograms(
     add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, bbox_inches='tight')
     plt.close()
+
+
+def plot_method5_persistence_decay(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    data: AnalysisData = None,
+    T_range: tuple = (0, 30),
+    filename: str = 'fig_method5_persistence_decay.pdf',
+    input_file: str = None,
+) -> None:
+    """Plot method5 (persistence decay) 4-panel figure.
+
+    Top row: All bootstrap samples
+    Bottom row: Only bootstrap samples where h4 > 0 (persistence decay estimated)
+
+    Panel layout:
+        [0,0] h(T) response (all samples)     [0,1] h4 distribution (all samples)
+        [1,0] h(T) response (h4 > 0 only)     [1,1] h4 distribution (h4 > 0 only)
+
+    Args:
+        results: Dict of BootstrapResult (must contain 'method5')
+        output_dir: Directory to save the plot
+        data: AnalysisData for temperature histogram overlay
+        T_range: Temperature range for x-axis (default: 0-30°C)
+        filename: Output filename
+        input_file: Path to input data file (for annotation)
+    """
+    if 'method5' not in results:
+        print("      [Figures] WARNING: method5 not in results, skipping persistence decay figure")
+        return
+
+    result = results['method5']
+    color = METHOD_COLORS.get('method5', 'cyan')
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Get bootstrap samples
+    h1_samples = result.h1_samples
+    h2_samples = result.h2_samples
+    h4_samples = result.h4_samples
+
+    # Point estimates
+    h1_point = result.h1_point
+    h2_point = result.h2_point
+    h4_point = result.h4_point
+    T_opt_point = result.T_opt_point if hasattr(result, 'T_opt_point') else -h1_point / (2 * h2_point)
+
+    # Compute point estimate h(T) curve
+    h_point = h1_point * T + h2_point * T**2
+    if not np.isnan(T_opt_point):
+        h_at_opt_point = h1_point * T_opt_point + h2_point * T_opt_point**2
+        h_point = h_point - h_at_opt_point
+
+    # Helper function to compute h(T) samples and percentiles
+    def compute_h_samples_and_percentiles(h1_vals, h2_vals):
+        """Compute h(T) for each bootstrap sample and return percentiles."""
+        valid_mask = ~np.isnan(h1_vals) & ~np.isnan(h2_vals)
+        h1_valid = h1_vals[valid_mask]
+        h2_valid = h2_vals[valid_mask]
+
+        n_valid = len(h1_valid)
+        h_samples = np.zeros((n_valid, len(T)))
+        for i in range(n_valid):
+            h1_i, h2_i = h1_valid[i], h2_valid[i]
+            h_i = h1_i * T + h2_i * T**2
+            T_opt_i = -h1_i / (2 * h2_i) if h2_i != 0 else np.nan
+            if not np.isnan(T_opt_i) and T_range[0] <= T_opt_i <= T_range[1]:
+                h_at_opt = h1_i * T_opt_i + h2_i * T_opt_i**2
+                h_samples[i] = h_i - h_at_opt
+            else:
+                h_samples[i] = np.nan
+
+        h_p5 = np.nanpercentile(h_samples, 5, axis=0)
+        h_p25 = np.nanpercentile(h_samples, 25, axis=0)
+        h_p75 = np.nanpercentile(h_samples, 75, axis=0)
+        h_p95 = np.nanpercentile(h_samples, 95, axis=0)
+        return h_p5, h_p25, h_p75, h_p95
+
+    # Helper function to plot h(T) panel
+    def plot_h_T_panel(ax, h_p5, h_p25, h_p75, h_p95, title, add_temp_hist=True,
+                       T_opt_override=None, T_opt_label=None):
+        """Plot h(T) response panel.
+
+        Args:
+            T_opt_override: If provided, use this T_opt value instead of T_opt_point
+            T_opt_label: If provided, use this label for T_opt (e.g., "T_opt (median)")
+        """
+        # Add temperature histogram on secondary y-axis
+        if add_temp_hist and data is not None:
+            ax_twin = ax.twinx()
+            max_year = data.year_range[1]
+            mask_recent = data.year == max_year
+            temp_recent = data.temp[mask_recent]
+            bins = np.linspace(T_range[0], T_range[1], 30)
+            ax_twin.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+            ax_twin.set_ylabel('Data density', fontsize=8, color='gray')
+            ax_twin.tick_params(axis='y', labelcolor='gray', labelsize=7)
+            ax_twin.set_ylim(bottom=0)
+
+        # Plot uncertainty bands
+        ax.fill_between(T, h_p5, h_p95, alpha=0.2, color=color, label='90% CI')
+        ax.fill_between(T, h_p25, h_p75, alpha=0.3, color=color, label='IQR')
+        ax.plot(T, h_point, color=color, linewidth=2, label='Point estimate')
+
+        # Mark optimal temperature with label
+        T_opt_to_plot = T_opt_override if T_opt_override is not None else T_opt_point
+        if not np.isnan(T_opt_to_plot):
+            label = T_opt_label if T_opt_label else f'T_opt = {T_opt_to_plot:.1f}°C'
+            ax.axvline(T_opt_to_plot, color=color, linestyle=':', alpha=0.7, label=label)
+
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_xlabel('Temperature (°C)')
+        ax.set_ylabel('h(T) - h(T_opt)')
+        ax.set_title(title)
+        ax.set_xlim(T_range)
+        ax.set_ylim(-0.25, 0.0)
+        ax.legend(loc='lower left', fontsize=8)
+
+    # Helper function to plot h4 histogram panel
+    def plot_h4_panel(ax, h4_vals, title, show_count_annotation=False, total_count=None,
+                      show_median=False):
+        """Plot h4 distribution panel.
+
+        Args:
+            show_median: If True, show median of displayed values instead of point estimate
+        """
+        valid_h4 = h4_vals[~np.isnan(h4_vals)]
+
+        if len(valid_h4) > 0:
+            # Compute statistics
+            p5 = np.percentile(valid_h4, 5)
+            p25 = np.percentile(valid_h4, 25)
+            median = np.median(valid_h4)
+            p75 = np.percentile(valid_h4, 75)
+            p95 = np.percentile(valid_h4, 95)
+
+            # Fixed x-axis range for h4 (0 to 1)
+            x_min, x_max = 0, 1
+            bin_width = 0.02
+            bins = np.arange(x_min, x_max + bin_width, bin_width)
+
+            # Plot histogram
+            ax.hist(valid_h4, bins=bins, color=color, alpha=0.7, edgecolor='black', linewidth=0.5)
+
+            # Mark statistics with vertical lines
+            if show_median:
+                ax.axvline(median, color='black', linewidth=2, label=f'Median: {median:.3f}')
+            else:
+                ax.axvline(h4_point, color='black', linewidth=2, label=f'Point: {h4_point:.3f}')
+            ax.axvline(p5, color=color, linestyle='--', linewidth=1.5, alpha=0.7)
+            ax.axvline(p95, color=color, linestyle='--', linewidth=1.5, alpha=0.7,
+                       label=f'90% CI: [{p5:.3f}, {p95:.3f}]')
+
+            # Shade IQR region
+            ax.axvspan(p25, p75, alpha=0.2, color=color, label=f'IQR: [{p25:.3f}, {p75:.3f}]')
+
+            ax.set_xlabel('h₄ (persistence decay parameter)')
+            ax.set_ylabel('Count')
+            ax.set_title(title)
+            ax.set_xlim(x_min, x_max)
+            ax.legend(loc='upper right', fontsize=8)
+
+            # Add interpretation text
+            interpretation_text = 'h₄ = 0: full persistence\nh₄ = 1: no persistence'
+            if show_count_annotation and total_count is not None:
+                interpretation_text += f'\n\nn = {len(valid_h4)} of {total_count}'
+            ax.text(0.05, 0.95, interpretation_text,
+                    transform=ax.transAxes, fontsize=8, verticalalignment='top',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        else:
+            ax.text(0.5, 0.5, 'No h4 samples available', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+
+    # ==================== TOP ROW: All samples ====================
+
+    # Top-left: h(T) response (all samples)
+    h_p5_all, h_p25_all, h_p75_all, h_p95_all = compute_h_samples_and_percentiles(h1_samples, h2_samples)
+    plot_h_T_panel(axes[0, 0], h_p5_all, h_p25_all, h_p75_all, h_p95_all,
+                   'Method 5: Temperature Response (All Samples)')
+
+    # Top-right: h4 distribution (all samples)
+    plot_h4_panel(axes[0, 1], h4_samples, 'Method 5: h₄ Distribution (All Samples)')
+
+    # ==================== BOTTOM ROW: h4 > 0 subset ====================
+
+    # Filter to samples where h4 is away from the boundary (h4=0)
+    # Values < 0.001 are effectively at the h4=0 boundary due to optimizer precision
+    h4_positive_mask = h4_samples > 0.001
+    n_total = len(h4_samples[~np.isnan(h4_samples)])
+    n_positive = np.sum(h4_positive_mask)
+
+    h1_positive = h1_samples[h4_positive_mask]
+    h2_positive = h2_samples[h4_positive_mask]
+    h4_positive = h4_samples[h4_positive_mask]
+
+    # Compute median T_opt for the h4 > 0 subset
+    T_opt_positive = -h1_positive / (2 * h2_positive)
+    T_opt_median = np.nanmedian(T_opt_positive)
+
+    # Bottom-left: h(T) response (h4 > 0 only)
+    if n_positive > 0:
+        h_p5_pos, h_p25_pos, h_p75_pos, h_p95_pos = compute_h_samples_and_percentiles(h1_positive, h2_positive)
+        plot_h_T_panel(axes[1, 0], h_p5_pos, h_p25_pos, h_p75_pos, h_p95_pos,
+                       f'Method 5: Temperature Response (h₄ > 0 Only, n={n_positive})',
+                       T_opt_override=T_opt_median,
+                       T_opt_label=f'T_opt (median) = {T_opt_median:.1f}°C')
+    else:
+        axes[1, 0].text(0.5, 0.5, 'No samples with h₄ > 0', ha='center', va='center',
+                        transform=axes[1, 0].transAxes, fontsize=12)
+        axes[1, 0].set_title('Method 5: Temperature Response (h₄ > 0 Only)')
+
+    # Bottom-right: h4 distribution (h4 > 0 only)
+    if n_positive > 0:
+        plot_h4_panel(axes[1, 1], h4_positive, 'Method 5: h₄ Distribution (h₄ > 0 Only)',
+                      show_count_annotation=True, total_count=n_total, show_median=True)
+    else:
+        axes[1, 1].text(0.5, 0.5, 'No samples with h₄ > 0', ha='center', va='center',
+                        transform=axes[1, 1].transAxes, fontsize=12)
+        axes[1, 1].set_title('Method 5: h₄ Distribution (h₄ > 0 Only)')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
 
 
 def plot_bootstrap_gdp_scaling(
@@ -4419,10 +4669,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS methods (method2, method3, method4)
+    # Temperature response PDF 3: LOESS methods (method2, method3, method4, method5)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['method2', 'method3', 'method4'],
+        approaches=['method2', 'method3', 'method4', 'method5'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -4433,7 +4683,7 @@ def save_all_bootstrap_plots(
     # Temperature derivative plot - all methods in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
-        approaches=['method0', 'method1', 'method2', 'method3', 'method4'],
+        approaches=['method0', 'method1', 'method2', 'method3', 'method4', 'method5'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file

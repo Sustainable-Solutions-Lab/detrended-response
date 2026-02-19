@@ -1616,15 +1616,23 @@ def fit_method5_persistence_decay(
         sse = np.sum((y - y_pred) ** 2)
         return sse
 
-    # 1D optimization using L-BFGS-B to find optimal h4 in [0, 1]
-    result = minimize(
-        lambda x: compute_sse_for_h4(x[0]),
-        x0=[0.5],  # Initial guess
-        bounds=[h4_bounds],
-        method='L-BFGS-B',
-        options={'ftol': 1e-8}
+    # 1D optimization using Brent's method (more robust for 1D bounded problems)
+    # First do a coarse grid search to find a good starting region
+    h4_grid = np.linspace(h4_bounds[0], h4_bounds[1], 21)
+    sse_grid = [compute_sse_for_h4(h4_val) for h4_val in h4_grid]
+    best_grid_idx = np.argmin(sse_grid)
+
+    # Refine with Brent's method in the region around the best grid point
+    search_lo = h4_grid[max(0, best_grid_idx - 1)]
+    search_hi = h4_grid[min(len(h4_grid) - 1, best_grid_idx + 1)]
+
+    result = minimize_scalar(
+        compute_sse_for_h4,
+        bounds=(search_lo, search_hi),
+        method='bounded',
+        options={'xatol': 1e-8}
     )
-    h4_opt = result.x[0]
+    h4_opt = result.x
 
     # Re-fit at optimal h4 to get h1, h2, residuals, covariance
     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_opt)

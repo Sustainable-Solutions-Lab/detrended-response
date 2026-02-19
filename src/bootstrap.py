@@ -404,16 +404,13 @@ def run_bootstrap(
                     )
 
                 elif name == 'method5':
-                    # Persistence decay: h_conv = h1*X1 + h2*X2
-                    # where X1, X2 are modified regressors with accumulator corrections
+                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag) + h2*(T² - h4*A_T2_lag)
+                    # Store h_conv(T) without trend subtraction (like method2)
+                    # The cumulative effects script handles trend subtraction separately
                     h4 = r.h4
-                    T_trend = original_trends_loess.T_loess
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
-                        data, h4, T_trend
-                    )
-                    X1 = (data.temp - h4 * A_T_lag) - (T_trend - h4 * A_T_trend_lag)
-                    X2 = (data.temp**2 - h4 * A_T2_lag) - (T_trend**2 - h4 * A_T2_trend_lag)
+                    X1 = data.temp - h4 * A_T_lag
+                    X2 = data.temp**2 - h4 * A_T2_lag
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
 
             n_successful += 1

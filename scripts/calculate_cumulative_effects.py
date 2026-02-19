@@ -26,6 +26,27 @@ from src.detrending import fit_quadratic_trend, DEFAULT_LOESS_WINDOW_YEARS
 from src.output import METHOD_COLORS, create_output_dir, add_input_file_annotation
 
 
+def get_method5_h4_positive_iterations(bootstrap_dir: Path, threshold: float = 0.001) -> set:
+    """Get iteration numbers where method5 h4 > threshold.
+
+    For method5, h4 is constrained to [0, 1]. When the optimizer finds h4=0 is optimal,
+    it returns a boundary value like 6e-9 (not exactly 0). This function identifies
+    iterations where h4 is genuinely away from the boundary.
+
+    Args:
+        bootstrap_dir: Directory containing bootstrap_coefficients.csv
+        threshold: h4 threshold to distinguish boundary from non-boundary (default 0.001)
+
+    Returns:
+        Set of iteration numbers where h4 > threshold
+    """
+    coef_path = bootstrap_dir / 'bootstrap_coefficients.csv'
+    df = pd.read_csv(coef_path, comment='#')
+    method5 = df[df['approach'] == 'method5']
+    positive_mask = method5['h4'] > threshold
+    return set(method5.loc[positive_mask, 'iteration'].values)
+
+
 def find_most_recent_dir(pattern: str) -> str:
     """Find the most recent directory matching a glob pattern.
 
@@ -53,10 +74,10 @@ def find_most_recent_dir(pattern: str) -> str:
 QUADRATIC_METHODS = {'method0', 'method1'}
 
 # Approaches that use LOESS for h(T) trend
-LOESS_METHODS = {'method2', 'method4', 'method3'}
+LOESS_METHODS = {'method2', 'method4', 'method3', 'method5'}
 
 # Central approaches for analysis (in display order)
-CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4']
+CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -328,7 +349,8 @@ def plot_cumulative_effects_by_method(
     df: pd.DataFrame,
     representatives: dict,
     output_dir: Path,
-    input_file: str = None
+    input_file: str = None,
+    method5_h4_positive_iters: set = None
 ) -> None:
     """Create clustered box-and-whisker plot grouped by method.
 
@@ -340,6 +362,8 @@ def plot_cumulative_effects_by_method(
         representatives: Dictionary from select_representative_countries
         output_dir: Directory to save plot
         input_file: Input file for annotation
+        method5_h4_positive_iters: Set of iteration numbers where method5 h4 > threshold.
+            If provided, method5 bootstrap samples are filtered to only these iterations.
     """
     fig, ax = plt.subplots(figsize=(14, 6))
 
@@ -367,6 +391,12 @@ def plot_cumulative_effects_by_method(
 
             # Get bootstrap samples (iterations 0-999) for this country/approach
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
+
+            # For method5, filter to only iterations where h4 > threshold (persistence decay estimated)
+            if approach == 'method5' and method5_h4_positive_iters is not None:
+                iter_mask = df_2022['iteration'].isin(method5_h4_positive_iters)
+                mask = mask & iter_mask
+
             bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
 
             # Transform to log scale
@@ -537,7 +567,18 @@ def plot_cumulative_effects_by_approach(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    fig, axes = plt.subplots(1, 5, figsize=(15, 4), sharey=True)
+    # Check for missing approaches
+    available_approaches = set(df['approach'].unique())
+    missing_approaches = [a for a in CENTRAL_METHODS if a not in available_approaches]
+    if missing_approaches:
+        raise ValueError(
+            f"Missing approaches in data: {missing_approaches}. "
+            f"Available: {sorted(available_approaches)}. "
+            f"You may need to re-run run_bootstrap.py to generate data for all approaches."
+        )
+
+    n_methods = len(CENTRAL_METHODS)
+    fig, axes = plt.subplots(1, n_methods, figsize=(3 * n_methods, 4), sharey=True)
 
     for ax, approach in zip(axes, CENTRAL_METHODS):
         # Filter to this approach
@@ -877,7 +918,13 @@ def main():
     plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
 
     print("\n[7/7] Creating box plot visualization (grouped by method)...")
-    plot_cumulative_effects_by_method(df_summary, representatives, output_dir, input_file)
+    # Get iterations where method5 h4 > 0.001 (persistence decay actually estimated)
+    method5_h4_positive_iters = get_method5_h4_positive_iterations(input_dir, threshold=0.001)
+    print(f"      method5: {len(method5_h4_positive_iters)} of 1000 bootstrap samples have h4 > 0.001")
+    plot_cumulative_effects_by_method(
+        df_summary, representatives, output_dir, input_file,
+        method5_h4_positive_iters=method5_h4_positive_iters
+    )
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")

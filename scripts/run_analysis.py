@@ -82,8 +82,23 @@ def main():
         default=25,
         help="Window size in years for LOESS smoothing (default: 25)",
     )
+    parser.add_argument(
+        "--mean-weight-distance",
+        type=float,
+        default=None,
+        help="Mean weighting distance in years for LOESS. Window = 44/7 * this value. "
+             "If specified, adds '_mwXX' suffix to output directory.",
+    )
 
     args = parser.parse_args()
+
+    # Compute LOESS window from mean weight distance if specified
+    if args.mean_weight_distance is not None:
+        loess_window = (44 / 7) * args.mean_weight_distance
+        mw_suffix = f"mw{int(args.mean_weight_distance):02d}"
+    else:
+        loess_window = args.loess_window
+        mw_suffix = ""
 
     print("=" * 70)
     print("Detrended Response Analysis")
@@ -126,8 +141,8 @@ def main():
     print("      Done.")
 
     # Compute LOESS trends
-    print(f"\n[3/5] Computing LOESS trends (window={args.loess_window} years)...")
-    trends_loess = compute_country_trends_loess(data, year_means, args.loess_window)
+    print(f"\n[3/5] Computing LOESS trends (window={loess_window:.1f} years)...")
+    trends_loess = compute_country_trends_loess(data, year_means, loess_window)
     print("      Done.")
 
     # Fit all methods
@@ -204,7 +219,7 @@ def main():
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
     else:
-        output_dir = create_output_dir(prefix="analysis_")
+        output_dir = create_output_dir(prefix="analysis_", suffix=mw_suffix)
 
     save_all_outputs(data, trends, results, output_dir, input_file=input_file)
 
