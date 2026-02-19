@@ -17,12 +17,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from statsmodels.nonparametric.smoothers_lowess import lowess
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.detrending import fit_quadratic_trend, DEFAULT_LOESS_WINDOW_YEARS
+from src.detrending import DEFAULT_LOESS_WINDOW_YEARS
 from src.output import METHOD_COLORS, create_output_dir, add_input_file_annotation
 
 
@@ -465,8 +464,10 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
     years = group['year'].values
     h_T = group['h_T'].values
 
-    # Use actual h_T value at 1961 as baseline (no trend fitting)
+    # Use actual h_T value at 1961 as baseline for all methods
     # This makes h_T_delta = 0 at 1961, showing GDP relative to 1961
+    # Note: The LOESS trend for method4 is already incorporated in the h(T) values
+    # computed during bootstrap - here we just reference h(T(1961), T_trend(1961))
     year_1961_mask = years == BASE_YEAR
     if year_1961_mask.any():
         h_T_1961 = h_T[year_1961_mask][0]
