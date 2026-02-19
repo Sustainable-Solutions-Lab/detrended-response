@@ -97,10 +97,11 @@ def load_run_metadata(directory: Path) -> dict:
 QUADRATIC_METHODS = {'method0', 'method1'}
 
 # Approaches that use LOESS for h(T) trend
-LOESS_METHODS = {'method2', 'method4', 'method3', 'method5'}
+LOESS_METHODS = {'method2', 'method4', 'method3', 'method5', 'method5h4pos'}
 
 # Central approaches for analysis (in display order)
-CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5']
+# Note: method5h4pos uses method5 data filtered to h4 > 0.001
+CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5h4pos']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -571,6 +572,87 @@ def process_all_countries_point_estimate(
     return pd.concat(results, ignore_index=True)
 
 
+def process_method5h4pos_all_countries(
+    input_path: Path,
+    bootstrap_dir: Path,
+    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS,
+    h4_threshold: float = 0.001
+) -> pd.DataFrame:
+    """Process method5h4pos data for all countries using median of h4>threshold bootstrap samples.
+
+    For method5h4pos, we filter to bootstrap iterations where h4 > threshold,
+    then compute the median cumulative effect across those iterations for each country/year.
+
+    Args:
+        input_path: Path to bootstrap_h_values.csv
+        bootstrap_dir: Directory containing bootstrap_coefficients.csv
+        loess_window: Window size for LOESS smoothing
+        h4_threshold: Threshold for h4 filtering (default 0.001)
+
+    Returns:
+        DataFrame with cumulative effects for all countries (method5h4pos)
+    """
+    # Get iterations where method5 h4 > threshold
+    h4_positive_iters = get_method5_h4_positive_iterations(bootstrap_dir, h4_threshold)
+    print(f"      method5h4pos: Using {len(h4_positive_iters)} iterations with h4 > {h4_threshold}")
+
+    if len(h4_positive_iters) == 0:
+        print("      WARNING: No iterations with h4 > threshold, skipping method5h4pos")
+        return pd.DataFrame()
+
+    # Load method5 bootstrap data for h4-positive iterations
+    print("      Loading method5 bootstrap data for h4-positive iterations...")
+    chunks = []
+    for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
+        filtered = chunk[
+            (chunk['approach'] == 'method5') &
+            (chunk['iteration'].isin(h4_positive_iters))
+        ]
+        if len(filtered) > 0:
+            chunks.append(filtered)
+
+    if not chunks:
+        print("      WARNING: No data found for method5 h4-positive iterations")
+        return pd.DataFrame()
+
+    df = pd.concat(chunks, ignore_index=True)
+    print(f"      Loaded {len(df):,} rows")
+
+    # Process each (iteration, iso3) group to compute cumulative effects
+    groups = df.groupby(['iteration', 'iso3'])
+    total_groups = len(groups)
+
+    processed_data = []
+    for idx, ((iteration, iso3), group) in enumerate(groups):
+        if idx % 1000 == 0:
+            print(f"      Progress: {idx:,}/{total_groups:,} groups...")
+
+        processed = process_group(group, 'method5', loess_window)
+        processed_data.append(processed)
+
+    df_processed = pd.concat(processed_data, ignore_index=True)
+    print(f"      Processed {total_groups:,} groups")
+
+    # Compute median across iterations for each (iso3, year)
+    print("      Computing median cumulative effects...")
+    median_results = []
+    for (iso3, year), group in df_processed.groupby(['iso3', 'year']):
+        median_results.append({
+            'iteration': -1,  # Mark as synthetic point estimate
+            'approach': 'method5h4pos',
+            'iso3': iso3,
+            'year': year,
+            'h_T': np.median(group['h_T'].values),
+            'h_T_trend_1961': np.median(group['h_T_trend_1961'].values),
+            'h_T_delta': np.median(group['h_T_delta'].values),
+            'h_T_delta_cum': np.median(group['h_T_delta_cum'].values),
+        })
+
+    df_median = pd.DataFrame(median_results)
+    print(f"      Created {len(df_median):,} median rows for method5h4pos")
+    return df_median
+
+
 def plot_cumulative_effects_by_approach(
     df: pd.DataFrame,
     output_dir: Path,
@@ -912,8 +994,15 @@ def main():
         output_dir = create_output_dir(prefix="cumulative_")
 
     # Phase 1: Process all countries with point estimate
-    print("\n[1/7] Processing all countries (point estimate only)...")
+    print("\n[1/8] Processing all countries (point estimate only)...")
     df_all_countries = process_all_countries_point_estimate(input_path, loess_window)
+
+    # Phase 1b: Process method5h4pos (median of h4>0.001 bootstrap samples)
+    print("\n[2/8] Processing method5h4pos (median of h4>0.001 bootstrap samples)...")
+    df_method5h4pos = process_method5h4pos_all_countries(input_path, input_dir, loess_window)
+    if len(df_method5h4pos) > 0:
+        df_all_countries = pd.concat([df_all_countries, df_method5h4pos], ignore_index=True)
+        print(f"      Added {len(df_method5h4pos):,} method5h4pos rows")
 
     # Save all countries cumulative effects
     all_countries_path = output_dir / 'cumulative_effects_all_countries.csv'
@@ -923,12 +1012,12 @@ def main():
     df_all_countries.to_csv(all_countries_path, mode='a', index=False)
     print(f"      Saved: {all_countries_path} ({len(df_all_countries):,} rows)")
 
-    # Phase 2: Create multi-panel visualization by approach
-    print("\n[2/7] Creating cumulative effects by approach visualization...")
+    # Phase 3: Create multi-panel visualization by approach
+    print("\n[3/8] Creating cumulative effects by approach visualization...")
     plot_cumulative_effects_by_approach(df_all_countries, output_dir, input_file)
 
-    # Phase 3: Select representative countries using point estimate only
-    print("\n[3/7] Selecting representative countries (using point estimate)...")
+    # Phase 4: Select representative countries using point estimate only
+    print("\n[4/8] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
         input_path, loess_window
     )
@@ -961,15 +1050,15 @@ def main():
     rep_df.to_csv(rep_path, index=False)
     print(f"      Saved: {rep_path}")
 
-    # Phase 4: Process full bootstrap data for representative countries only
-    print("\n[4/7] Processing bootstrap data for representative countries...")
+    # Phase 5: Process full bootstrap data for representative countries only
+    print("\n[5/8] Processing bootstrap data for representative countries...")
     rep_iso3s = [representatives[p]['iso3'] for p in representatives]
     df_summary = process_representative_countries(
         input_path, rep_iso3s, loess_window
     )
 
     # Save cumulative effects summary
-    print("\n[5/7] Saving cumulative effects summary...")
+    print("\n[6/8] Saving cumulative effects summary...")
 
     # Add header comment to CSV
     summary_path = output_dir / 'cumulative_h_values_summary.csv'
@@ -979,10 +1068,10 @@ def main():
     print(f"      Saved: {summary_path} ({len(df_summary):,} rows)")
 
     # Create visualizations
-    print("\n[6/7] Creating box plot visualization (grouped by country)...")
+    print("\n[7/8] Creating box plot visualization (grouped by country)...")
     plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
 
-    print("\n[7/7] Creating box plot visualization (grouped by method)...")
+    print("\n[8/8] Creating box plot visualization (grouped by method)...")
     # Get iterations where method5 h4 > 0.001 (persistence decay actually estimated)
     method5_h4_positive_iters = get_method5_h4_positive_iterations(input_dir, threshold=0.001)
     print(f"      method5: {len(method5_h4_positive_iters)} of 1000 bootstrap samples have h4 > 0.001")

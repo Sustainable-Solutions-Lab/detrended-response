@@ -212,7 +212,7 @@ def generate_variance_decomposition_table(
 
     # Default approaches to include (publication set)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5_h4pos']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5h4pos']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -241,14 +241,22 @@ def generate_variance_decomposition_table(
     # Percentiles to compute
     percentiles = [5, 25, 50, 75, 95]
 
-    def compute_stats(samples: np.ndarray) -> dict:
-        """Compute point estimate (median) and percentiles from samples."""
+    def compute_stats(samples: np.ndarray, point_estimate: float = None) -> dict:
+        """Compute percentiles from samples, with optional explicit point estimate.
+
+        Parameters
+        ----------
+        samples : np.ndarray
+            Bootstrap samples for computing percentiles
+        point_estimate : float, optional
+            Explicit point estimate to use instead of median. If None, uses median.
+        """
         valid_samples = samples[~np.isnan(samples)]
         if len(valid_samples) == 0:
             return {'point': np.nan, 'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
 
         return {
-            'point': np.median(valid_samples),
+            'point': point_estimate if point_estimate is not None else np.median(valid_samples),
             'p5': np.percentile(valid_samples, 5),
             'p25': np.percentile(valid_samples, 25),
             'p50': np.percentile(valid_samples, 50),
@@ -297,20 +305,30 @@ def generate_variance_decomposition_table(
     # Build the table data
     rows = []
 
-    # Add Total R² row first (from bootstrap_summary)
+    # Add Total R² row first (from bootstrap_coefficients)
     total_r2_row = {'Metric': 'Total R²'}
     coefficients_df = bootstrap_results.get('bootstrap_coefficients')
     for approach in available_approaches:
         name = approach_names[approach]
 
-        # Get samples from coefficients
         if coefficients_df is not None:
             coef_mask = coefficients_df['approach'] == approach
-            samples = coefficients_df[coef_mask]['total_r_squared'].values
+            approach_coef = coefficients_df[coef_mask]
+
+            # Get point estimate from iteration -1
+            point_mask = approach_coef['iteration'] == -1
+            point_estimate = None
+            if point_mask.any():
+                point_estimate = approach_coef[point_mask].iloc[0]['total_r_squared']
+
+            # Get bootstrap samples (iteration >= 0) for percentiles
+            bootstrap_mask = approach_coef['iteration'] >= 0
+            samples = approach_coef[bootstrap_mask]['total_r_squared'].values
         else:
+            point_estimate = None
             samples = np.array([])
 
-        stats = compute_stats(samples)
+        stats = compute_stats(samples, point_estimate=point_estimate)
         total_r2_row[f'{name}_point'] = stats['point']
         total_r2_row[f'{name}_p5'] = stats['p5']
         total_r2_row[f'{name}_p25'] = stats['p25']
@@ -327,9 +345,38 @@ def generate_variance_decomposition_table(
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            # Get metric samples (may compute combined h(T) terms from separated terms)
-            metric_samples = get_metric_samples(approach_data, key)
-            if metric_samples is None or 'var_dy' not in approach_data.columns:
+            if 'var_dy' not in approach_data.columns:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
+                continue
+
+            # Get point estimate from iteration -1
+            point_estimate = None
+            if 'iteration' in approach_data.columns:
+                point_mask = approach_data['iteration'] == -1
+                if point_mask.any():
+                    point_data = approach_data[point_mask]
+                    point_samples = get_metric_samples(point_data, key)
+                    if point_samples is not None and len(point_samples) > 0:
+                        var_dy_point = point_data['var_dy'].values[0]
+                        with np.errstate(divide='ignore', invalid='ignore'):
+                            point_estimate = point_samples[0] / var_dy_point
+                        if not np.isfinite(point_estimate):
+                            point_estimate = None
+
+            # Get bootstrap samples (iteration >= 0) for percentiles
+            if 'iteration' in approach_data.columns:
+                bootstrap_mask = approach_data['iteration'] >= 0
+                bootstrap_data = approach_data[bootstrap_mask]
+            else:
+                bootstrap_data = approach_data
+
+            metric_samples = get_metric_samples(bootstrap_data, key)
+            if metric_samples is None:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -339,14 +386,14 @@ def generate_variance_decomposition_table(
                 continue
 
             # Get var_dy for normalization
-            var_dy_samples = approach_data['var_dy'].values
+            var_dy_samples = bootstrap_data['var_dy'].values
 
             # Normalize by var_dy
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
 
-            stats = compute_stats(normalized_samples)
+            stats = compute_stats(normalized_samples, point_estimate=point_estimate)
             row[f'{name}_point'] = stats['point']
             row[f'{name}_p5'] = stats['p5']
             row[f'{name}_p25'] = stats['p25']
@@ -364,9 +411,38 @@ def generate_variance_decomposition_table(
             mask = var_attrib_df['approach'] == approach
             approach_data = var_attrib_df[mask]
 
-            # Get metric samples (may compute combined h(T) terms from separated terms)
-            metric_samples = get_metric_samples(approach_data, key)
-            if metric_samples is None or 'var_dy' not in approach_data.columns:
+            if 'var_dy' not in approach_data.columns:
+                row[f'{name}_point'] = np.nan
+                row[f'{name}_p5'] = np.nan
+                row[f'{name}_p25'] = np.nan
+                row[f'{name}_p50'] = np.nan
+                row[f'{name}_p75'] = np.nan
+                row[f'{name}_p95'] = np.nan
+                continue
+
+            # Get point estimate from iteration -1 (with 2x factor)
+            point_estimate = None
+            if 'iteration' in approach_data.columns:
+                point_mask = approach_data['iteration'] == -1
+                if point_mask.any():
+                    point_data = approach_data[point_mask]
+                    point_samples = get_metric_samples(point_data, key)
+                    if point_samples is not None and len(point_samples) > 0:
+                        var_dy_point = point_data['var_dy'].values[0]
+                        with np.errstate(divide='ignore', invalid='ignore'):
+                            point_estimate = (point_samples[0] * 2) / var_dy_point
+                        if not np.isfinite(point_estimate):
+                            point_estimate = None
+
+            # Get bootstrap samples (iteration >= 0) for percentiles
+            if 'iteration' in approach_data.columns:
+                bootstrap_mask = approach_data['iteration'] >= 0
+                bootstrap_data = approach_data[bootstrap_mask]
+            else:
+                bootstrap_data = approach_data
+
+            metric_samples = get_metric_samples(bootstrap_data, key)
+            if metric_samples is None:
                 row[f'{name}_point'] = np.nan
                 row[f'{name}_p5'] = np.nan
                 row[f'{name}_p25'] = np.nan
@@ -376,7 +452,7 @@ def generate_variance_decomposition_table(
                 continue
 
             # Get var_dy for normalization
-            var_dy_samples = approach_data['var_dy'].values
+            var_dy_samples = bootstrap_data['var_dy'].values
 
             # Multiply by 2 (2*Cov term) and normalize
             metric_samples = metric_samples * 2
@@ -384,7 +460,7 @@ def generate_variance_decomposition_table(
                 normalized_samples = metric_samples / var_dy_samples
             normalized_samples = np.where(np.isfinite(normalized_samples), normalized_samples, np.nan)
 
-            stats = compute_stats(normalized_samples)
+            stats = compute_stats(normalized_samples, point_estimate=point_estimate)
             row[f'{name}_point'] = stats['point']
             row[f'{name}_p5'] = stats['p5']
             row[f'{name}_p25'] = stats['p25']
@@ -410,16 +486,44 @@ def generate_variance_decomposition_table(
             sum_row[f'{name}_p95'] = np.nan
             continue
 
-        var_dy_samples = approach_data['var_dy'].values
+        # Get point estimate from iteration -1
+        point_estimate = None
+        if 'iteration' in approach_data.columns:
+            point_mask = approach_data['iteration'] == -1
+            if point_mask.any():
+                point_data = approach_data[point_mask]
+                var_dy_point = point_data['var_dy'].values[0]
+                total_sum_point = 0.0
+                for key, _ in variance_metrics:
+                    samples = get_metric_samples(point_data, key)
+                    if samples is not None and len(samples) > 0:
+                        total_sum_point += samples[0]
+                for key, _ in covariance_metrics:
+                    samples = get_metric_samples(point_data, key)
+                    if samples is not None and len(samples) > 0:
+                        total_sum_point += 2 * samples[0]
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    point_estimate = total_sum_point / var_dy_point
+                if not np.isfinite(point_estimate):
+                    point_estimate = None
+
+        # Get bootstrap samples (iteration >= 0) for percentiles
+        if 'iteration' in approach_data.columns:
+            bootstrap_mask = approach_data['iteration'] >= 0
+            bootstrap_data = approach_data[bootstrap_mask]
+        else:
+            bootstrap_data = approach_data
+
+        var_dy_samples = bootstrap_data['var_dy'].values
 
         # Sum all variance and covariance terms (using get_metric_samples for combined h(T) terms)
-        total_sum = np.zeros(len(approach_data))
+        total_sum = np.zeros(len(bootstrap_data))
         for key, _ in variance_metrics:
-            samples = get_metric_samples(approach_data, key)
+            samples = get_metric_samples(bootstrap_data, key)
             if samples is not None:
                 total_sum += samples
         for key, _ in covariance_metrics:
-            samples = get_metric_samples(approach_data, key)
+            samples = get_metric_samples(bootstrap_data, key)
             if samples is not None:
                 total_sum += 2 * samples  # 2*Cov terms
 
@@ -427,7 +531,7 @@ def generate_variance_decomposition_table(
             sum_normalized = total_sum / var_dy_samples
         sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
 
-        stats = compute_stats(sum_normalized)
+        stats = compute_stats(sum_normalized, point_estimate=point_estimate)
         sum_row[f'{name}_point'] = stats['point']
         sum_row[f'{name}_p5'] = stats['p5']
         sum_row[f'{name}_p25'] = stats['p25']
@@ -483,7 +587,7 @@ def generate_bootstrap_comparison_table(
 
     # Default approaches to include (publication set, same as variance decomposition table)
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5_h4pos']
+        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5h4pos']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]

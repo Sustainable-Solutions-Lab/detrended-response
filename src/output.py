@@ -50,6 +50,7 @@ METHOD_COLORS = {
     'method3': 'magenta',
     'method4': 'salmon',
     'method5': 'cyan',
+    'method5h4pos': 'teal',
     'method0h0': 'gray',
     'method1h0': 'gray',
 }
@@ -1060,7 +1061,7 @@ def save_bootstrap_coefficients_csv(
     """Save bootstrap samples to CSV for each approach.
 
     Creates: bootstrap_coefficients.csv with columns:
-    - iteration
+    - iteration (-1 for point estimate, 0+ for bootstrap)
     - approach
     - h1, h2, T_opt, r_squared, total_r_squared
     - f1 (GDP scaling exponent for approach 5d, linear modulation for 8b/8c)
@@ -1071,6 +1072,28 @@ def save_bootstrap_coefficients_csv(
     """
     rows = []
     for name, result in results.items():
+        # Write point estimates as iteration -1
+        point_row = {
+            'iteration': -1,
+            'approach': name,
+            'approach_name': result.approach,
+            'h1': result.h1_point,
+            'h2': result.h2_point,
+            'T_opt': result.T_opt_point,
+            'r_squared': result.r_squared_point,
+            'total_r_squared': result.total_r_squared_point,
+        }
+        if result.f1_point is not None:
+            point_row['f1'] = result.f1_point
+        if result.h4_point is not None:
+            point_row['h4'] = result.h4_point
+        if result.h3_point is not None:
+            point_row['h3'] = result.h3_point
+        if result.f2_point is not None:
+            point_row['f2'] = result.f2_point
+        rows.append(point_row)
+
+        # Write bootstrap samples (iteration 0, 1, ..., N-1)
         for i in range(result.n_bootstrap):
             row = {
                 'iteration': i,
@@ -1497,14 +1520,14 @@ def save_bootstrap_summary_table(
 
         rows.append(row)
 
-    # Add method5_h4pos row (filtered to h4 > 0.001)
+    # Add method5h4pos row (filtered to h4 > 0.001)
     if 'method5' in results:
         from .bootstrap import compute_method5_filtered_statistics
         method5_result = results['method5']
         filtered_stats = compute_method5_filtered_statistics(method5_result)
 
         row = {
-            'approach': 'method5_h4pos',
+            'approach': 'method5h4pos',
             'approach_name': '5: Persistence Decay LOESS (h4>0)',
             'n_bootstrap': method5_result.n_bootstrap,
             'n_successful': int(filtered_stats['n_filtered']),
@@ -1664,7 +1687,7 @@ def save_bootstrap_var_attrib_csv(
     """Save bootstrap samples of variance attribution to CSV.
 
     Creates: bootstrap_var_attrib_samples.csv with columns:
-    - iteration: bootstrap iteration number
+    - iteration: bootstrap iteration number (-1 for point estimate, 0+ for bootstrap)
     - approach: approach key (e.g., 'approach5')
     - approach_name: human-readable approach name
     - All var_attrib keys (Sigma_Delta_u_Delta_u, Sigma_Delta_u_v, etc.)
@@ -1682,6 +1705,18 @@ def save_bootstrap_var_attrib_csv(
         if not keys:
             continue
 
+        # Write point estimates as iteration -1
+        if result.var_attrib_point is not None:
+            row = {
+                'iteration': -1,
+                'approach': name,
+                'approach_name': result.approach,
+            }
+            for key in keys:
+                row[key] = result.var_attrib_point.get(key, np.nan)
+            rows.append(row)
+
+        # Write bootstrap samples (iteration 0, 1, ..., N-1)
         for i in range(result.n_bootstrap):
             row = {
                 'iteration': i,
@@ -1734,13 +1769,17 @@ def save_variance_decomposition_table(
         ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)'),
     ]
 
-    def compute_stats(samples: np.ndarray) -> dict:
-        """Compute point estimate (median) and percentiles from samples."""
+    def compute_stats(samples: np.ndarray, point_estimate: float = None) -> dict:
+        """Compute percentiles from samples, with optional explicit point estimate.
+
+        If point_estimate is provided, use it directly. Otherwise use median of samples.
+        """
         valid_samples = samples[~np.isnan(samples)]
         if len(valid_samples) == 0:
-            return {'point': np.nan, 'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
+            return {'point': point_estimate if point_estimate is not None else np.nan,
+                    'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
         return {
-            'point': np.median(valid_samples),
+            'point': point_estimate if point_estimate is not None else np.median(valid_samples),
             'p5': np.percentile(valid_samples, 5),
             'p25': np.percentile(valid_samples, 25),
             'p50': np.percentile(valid_samples, 50),
@@ -1772,6 +1811,32 @@ def save_variance_decomposition_table(
 
         return None
 
+    def get_metric_point(var_attrib_point: dict, key: str) -> float:
+        """Get point estimate for a metric, computing combined h(T) terms if needed."""
+        if var_attrib_point is None:
+            return np.nan
+        # If the key exists directly, use it
+        if key in var_attrib_point:
+            return var_attrib_point[key]
+
+        # Compute combined h(T) terms from separated Delta_u and v terms
+        if key == 'Sigma_h_h':
+            if all(k in var_attrib_point for k in ['Sigma_Delta_u_Delta_u', 'Sigma_v_v', 'Sigma_Delta_u_v']):
+                return (var_attrib_point['Sigma_Delta_u_Delta_u'] +
+                        var_attrib_point['Sigma_v_v'] +
+                        2 * var_attrib_point['Sigma_Delta_u_v'])
+        elif key == 'Sigma_h_j':
+            if all(k in var_attrib_point for k in ['Sigma_Delta_u_j', 'Sigma_v_j']):
+                return var_attrib_point['Sigma_Delta_u_j'] + var_attrib_point['Sigma_v_j']
+        elif key == 'Sigma_h_k':
+            if all(k in var_attrib_point for k in ['Sigma_Delta_u_k', 'Sigma_v_k']):
+                return var_attrib_point['Sigma_Delta_u_k'] + var_attrib_point['Sigma_v_k']
+        elif key == 'Sigma_h_epsilon':
+            if all(k in var_attrib_point for k in ['Sigma_Delta_u_epsilon', 'Sigma_v_epsilon']):
+                return var_attrib_point['Sigma_Delta_u_epsilon'] + var_attrib_point['Sigma_v_epsilon']
+
+        return np.nan
+
     # Get approaches that have var_attrib_samples
     available_approaches = [name for name, result in results.items()
                            if result.var_attrib_samples is not None]
@@ -1782,20 +1847,20 @@ def save_variance_decomposition_table(
     # Build approach names mapping
     approach_names = {name: results[name].approach for name in available_approaches}
 
-    # Add method5_h4pos (filtered to h4 > 0.001) if method5 exists
-    method5_h4pos_data = None
+    # Add method5h4pos (filtered to h4 > 0.001) if method5 exists
+    method5h4pos_data = None
     if 'method5' in results and results['method5'].var_attrib_samples is not None:
         method5_result = results['method5']
         h4_mask = method5_result.h4_samples > 0.001
 
         # Create filtered variance attribution samples
-        method5_h4pos_data = {
+        method5h4pos_data = {
             'h4_mask': h4_mask,
             'total_r_squared_samples': method5_result.total_r_squared_samples,
             'var_attrib_samples': method5_result.var_attrib_samples,
         }
-        available_approaches.append('method5_h4pos')
-        approach_names['method5_h4pos'] = '5: Persistence Decay LOESS (h4>0)'
+        available_approaches.append('method5h4pos')
+        approach_names['method5h4pos'] = '5: Persistence Decay LOESS (h4>0)'
 
     def get_filtered_samples(samples: np.ndarray, mask: np.ndarray) -> np.ndarray:
         """Apply h4 mask to samples and return filtered array."""
@@ -1808,15 +1873,18 @@ def save_variance_decomposition_table(
     total_r2_row = {'Metric': 'Total R²'}
     for approach in available_approaches:
         name = approach_names[approach]
-        if approach == 'method5_h4pos':
+        if approach == 'method5h4pos':
+            # For filtered subset, use median of filtered samples as point estimate
             samples = get_filtered_samples(
-                method5_h4pos_data['total_r_squared_samples'],
-                method5_h4pos_data['h4_mask']
+                method5h4pos_data['total_r_squared_samples'],
+                method5h4pos_data['h4_mask']
             )
+            point_estimate = None  # Use median of filtered samples
         else:
             result = results[approach]
+            point_estimate = result.total_r_squared_point
             samples = result.total_r_squared_samples
-        stats = compute_stats(samples)
+        stats = compute_stats(samples, point_estimate)
         total_r2_row[f'{name}_point'] = stats['point']
         total_r2_row[f'{name}_p5'] = stats['p5']
         total_r2_row[f'{name}_p25'] = stats['p25']
@@ -1830,12 +1898,14 @@ def save_variance_decomposition_table(
         row = {'Metric': label}
         for approach in available_approaches:
             name = approach_names[approach]
-            if approach == 'method5_h4pos':
-                var_attrib = method5_h4pos_data['var_attrib_samples']
-                h4_mask = method5_h4pos_data['h4_mask']
+            if approach == 'method5h4pos':
+                var_attrib = method5h4pos_data['var_attrib_samples']
+                var_attrib_point = None  # Use median of filtered samples
+                h4_mask = method5h4pos_data['h4_mask']
             else:
                 result = results[approach]
                 var_attrib = result.var_attrib_samples
+                var_attrib_point = result.var_attrib_point
                 h4_mask = None
 
             # Get metric samples (may compute combined h(T) terms from separated terms)
@@ -1851,15 +1921,25 @@ def save_variance_decomposition_table(
 
             var_dy_samples = var_attrib['var_dy']
 
-            # Apply h4 filter for method5_h4pos
+            # Apply h4 filter for method5h4pos
             if h4_mask is not None:
                 metric_samples = get_filtered_samples(metric_samples, h4_mask)
                 var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
 
+            # Compute point estimate from var_attrib_point (normalized by var_dy)
+            # For method5h4pos, use median of filtered samples (var_attrib_point is None)
+            if var_attrib_point is not None:
+                metric_point = get_metric_point(var_attrib_point, key)
+                var_dy_point = var_attrib_point.get('var_dy', np.nan) if var_attrib_point else np.nan
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    point_estimate = metric_point / var_dy_point if var_dy_point else np.nan
+            else:
+                point_estimate = None  # Use median of filtered samples
+
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
             normalized = np.where(np.isfinite(normalized), normalized, np.nan)
-            stats = compute_stats(normalized)
+            stats = compute_stats(normalized, point_estimate)
             row[f'{name}_point'] = stats['point']
             row[f'{name}_p5'] = stats['p5']
             row[f'{name}_p25'] = stats['p25']
@@ -1873,12 +1953,14 @@ def save_variance_decomposition_table(
         row = {'Metric': label}
         for approach in available_approaches:
             name = approach_names[approach]
-            if approach == 'method5_h4pos':
-                var_attrib = method5_h4pos_data['var_attrib_samples']
-                h4_mask = method5_h4pos_data['h4_mask']
+            if approach == 'method5h4pos':
+                var_attrib = method5h4pos_data['var_attrib_samples']
+                var_attrib_point = None  # Use median of filtered samples
+                h4_mask = method5h4pos_data['h4_mask']
             else:
                 result = results[approach]
                 var_attrib = result.var_attrib_samples
+                var_attrib_point = result.var_attrib_point
                 h4_mask = None
 
             # Get metric samples (may compute combined h(T) terms from separated terms)
@@ -1894,16 +1976,26 @@ def save_variance_decomposition_table(
 
             var_dy_samples = var_attrib['var_dy']
 
-            # Apply h4 filter for method5_h4pos
+            # Apply h4 filter for method5h4pos
             if h4_mask is not None:
                 metric_samples = get_filtered_samples(metric_samples, h4_mask)
                 var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
+
+            # Compute point estimate from var_attrib_point (normalized by var_dy, with 2x factor)
+            # For method5h4pos, use median of filtered samples (var_attrib_point is None)
+            if var_attrib_point is not None:
+                metric_point = get_metric_point(var_attrib_point, key)
+                var_dy_point = var_attrib_point.get('var_dy', np.nan) if var_attrib_point else np.nan
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    point_estimate = (2 * metric_point) / var_dy_point if var_dy_point else np.nan
+            else:
+                point_estimate = None  # Use median of filtered samples
 
             metric_samples = metric_samples * 2  # 2*Cov term
             with np.errstate(divide='ignore', invalid='ignore'):
                 normalized = metric_samples / var_dy_samples
             normalized = np.where(np.isfinite(normalized), normalized, np.nan)
-            stats = compute_stats(normalized)
+            stats = compute_stats(normalized, point_estimate)
             row[f'{name}_point'] = stats['point']
             row[f'{name}_p5'] = stats['p5']
             row[f'{name}_p25'] = stats['p25']
@@ -1916,12 +2008,14 @@ def save_variance_decomposition_table(
     sum_row = {'Metric': 'Sum'}
     for approach in available_approaches:
         name = approach_names[approach]
-        if approach == 'method5_h4pos':
-            var_attrib = method5_h4pos_data['var_attrib_samples']
-            h4_mask = method5_h4pos_data['h4_mask']
+        if approach == 'method5h4pos':
+            var_attrib = method5h4pos_data['var_attrib_samples']
+            var_attrib_point = None  # Use median of filtered samples
+            h4_mask = method5h4pos_data['h4_mask']
         else:
             result = results[approach]
             var_attrib = result.var_attrib_samples
+            var_attrib_point = result.var_attrib_point
             h4_mask = None
 
         if 'var_dy' not in var_attrib:
@@ -1935,12 +2029,30 @@ def save_variance_decomposition_table(
 
         var_dy_samples = var_attrib['var_dy']
 
-        # Apply h4 filter for method5_h4pos
+        # Apply h4 filter for method5h4pos
         if h4_mask is not None:
             var_dy_samples = get_filtered_samples(var_dy_samples, h4_mask)
 
         n_samples = len(var_dy_samples)
         total_sum = np.zeros(n_samples)
+
+        # Compute point estimate sum from var_attrib_point
+        # For method5h4pos, use median of filtered samples (var_attrib_point is None)
+        if var_attrib_point is not None:
+            var_dy_point = var_attrib_point.get('var_dy', np.nan) if var_attrib_point else np.nan
+            total_sum_point = 0.0
+            for key, _ in variance_metrics:
+                metric_point = get_metric_point(var_attrib_point, key)
+                if not np.isnan(metric_point):
+                    total_sum_point += metric_point
+            for key, _ in covariance_metrics:
+                metric_point = get_metric_point(var_attrib_point, key)
+                if not np.isnan(metric_point):
+                    total_sum_point += 2 * metric_point
+            with np.errstate(divide='ignore', invalid='ignore'):
+                point_estimate = total_sum_point / var_dy_point if var_dy_point else np.nan
+        else:
+            point_estimate = None  # Use median of filtered samples
 
         # Sum all variance and covariance terms (using get_metric_samples for combined h(T) terms)
         for key, _ in variance_metrics:
@@ -1959,7 +2071,7 @@ def save_variance_decomposition_table(
         with np.errstate(divide='ignore', invalid='ignore'):
             sum_normalized = total_sum / var_dy_samples
         sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
-        stats = compute_stats(sum_normalized)
+        stats = compute_stats(sum_normalized, point_estimate)
         sum_row[f'{name}_point'] = stats['point']
         sum_row[f'{name}_p5'] = stats['p5']
         sum_row[f'{name}_p25'] = stats['p25']

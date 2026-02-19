@@ -78,6 +78,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 - Default to 1000 bootstrap iterations for publication results
 - Store both full sample arrays and summary statistics (percentiles)
 - Preserve year fixed effects (k_samples) for year effects plots
+- **Testing**: Use 10 bootstrap samples (`--n-bootstrap 10`) when testing bootstrap-related code changes to minimize runtime
 
 ## Mathematical Conventions
 
