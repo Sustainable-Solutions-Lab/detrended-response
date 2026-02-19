@@ -93,12 +93,6 @@ def load_run_metadata(directory: Path) -> dict:
 # Constants
 # ==============================================================================
 
-# Approaches that use quadratic OLS for h(T) trend
-QUADRATIC_METHODS = {'method0', 'method1'}
-
-# Approaches that use LOESS for h(T) trend
-LOESS_METHODS = {'method2', 'method4', 'method3', 'method5', 'method5h4pos'}
-
 # Central approaches for analysis (in display order)
 # Note: method5h4pos uses method5 data filtered to h4 > 0.001
 CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5h4pos']
@@ -113,49 +107,6 @@ REPRESENTATIVE_PERCENTILES = (5, 25, 50, 75, 95)
 # ==============================================================================
 # Core Functions
 # ==============================================================================
-
-def fit_h_T_trend_1961(
-    years: np.ndarray,
-    h_T_values: np.ndarray,
-    approach: str,
-    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS
-) -> float:
-    """Fit trend to h(T) and evaluate at 1961.
-
-    For quadratic approaches (method0, method1): fit h_T ~ year + year²
-    For LOESS approaches (method2, method4, method3): use LOESS smoothing
-
-    Args:
-        years: Array of year values
-        h_T_values: Array of h(T) values
-        approach: Approach name
-        loess_window: Window size in years for LOESS smoothing
-
-    Returns:
-        Trend value at 1961
-    """
-    if approach in QUADRATIC_METHODS:
-        # Fit quadratic: h_T = a + b*year + c*year²
-        a, b, c = fit_quadratic_trend(years, h_T_values)
-        return a + b * BASE_YEAR + c * BASE_YEAR ** 2
-    else:
-        # LOESS smoothing
-        n = len(years)
-        t_range = years.max() - years.min()
-        frac = min(loess_window / t_range, 1.0) if t_range > 0 else 1.0
-        frac = max(frac, 3.0 / n)  # Ensure minimum points
-
-        # Sort data for LOESS
-        sort_idx = np.argsort(years)
-        years_sorted = years[sort_idx]
-        h_T_sorted = h_T_values[sort_idx]
-
-        # Fit LOESS
-        smoothed = lowess(h_T_sorted, years_sorted, frac=frac, return_sorted=False)
-
-        # Interpolate to get value at 1961
-        return np.interp(BASE_YEAR, years_sorted, smoothed)
-
 
 def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> np.ndarray:
     """Calculate compound cumulative effect.
@@ -505,8 +456,8 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
 
     Args:
         group: DataFrame for a single group with columns [year, temp, h_T]
-        approach: Approach name
-        loess_window: Window size for LOESS smoothing
+        approach: Approach name (unused, kept for API compatibility)
+        loess_window: Window size (unused, kept for API compatibility)
 
     Returns:
         DataFrame with added columns [h_T_trend_1961, h_T_delta, h_T_delta_cum]
@@ -514,17 +465,23 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
     years = group['year'].values
     h_T = group['h_T'].values
 
-    # Calculate h_T_trend_1961
-    h_T_trend_1961 = fit_h_T_trend_1961(years, h_T, approach, loess_window)
+    # Use actual h_T value at 1961 as baseline (no trend fitting)
+    # This makes h_T_delta = 0 at 1961, showing GDP relative to 1961
+    year_1961_mask = years == BASE_YEAR
+    if year_1961_mask.any():
+        h_T_1961 = h_T[year_1961_mask][0]
+    else:
+        # If 1961 not in data, use first year's value
+        h_T_1961 = h_T[0]
 
-    # Calculate h_T_delta
-    h_T_delta = h_T - h_T_trend_1961
+    # Calculate h_T_delta = h_T - h_T(1961)
+    h_T_delta = h_T - h_T_1961
 
     # Calculate cumulative
     h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
 
     result = group.copy()
-    result['h_T_trend_1961'] = h_T_trend_1961
+    result['h_T_trend_1961'] = h_T_1961  # Keep column name for compatibility
     result['h_T_delta'] = h_T_delta
     result['h_T_delta_cum'] = h_T_delta_cum
 
@@ -633,22 +590,47 @@ def process_method5h4pos_all_countries(
     df_processed = pd.concat(processed_data, ignore_index=True)
     print(f"      Processed {total_groups:,} groups")
 
-    # Compute median across iterations for each (iso3, year)
-    print("      Computing median cumulative effects...")
-    median_results = []
-    for (iso3, year), group in df_processed.groupby(['iso3', 'year']):
-        median_results.append({
-            'iteration': -1,  # Mark as synthetic point estimate
-            'approach': 'method5h4pos',
-            'iso3': iso3,
-            'year': year,
-            'h_T': np.median(group['h_T'].values),
-            'h_T_trend_1961': np.median(group['h_T_trend_1961'].values),
-            'h_T_delta': np.median(group['h_T_delta'].values),
-            'h_T_delta_cum': np.median(group['h_T_delta_cum'].values),
-        })
+    # Compute median h_T for each (iso3, year) across iterations
+    print("      Computing median h_T values...")
+    median_h_T = df_processed.groupby(['iso3', 'year']).agg({
+        'h_T': 'median',
+        'temp': 'median'  # temp should be same across iterations
+    }).reset_index()
 
-    df_median = pd.DataFrame(median_results)
+    # Now process each country: use h_T at 1961 as baseline, then compute cumulative effects
+    print("      Computing cumulative effects from median h_T...")
+    results = []
+    for iso3, country_data in median_h_T.groupby('iso3'):
+        country_data = country_data.sort_values('year')
+        years = country_data['year'].values
+        h_T_values = country_data['h_T'].values
+
+        # Use actual h_T value at 1961 as baseline (no trend fitting)
+        year_1961_mask = years == BASE_YEAR
+        if year_1961_mask.any():
+            h_T_1961 = h_T_values[year_1961_mask][0]
+        else:
+            # If 1961 not in data, use first year's value
+            h_T_1961 = h_T_values[0]
+
+        # Compute h_T_delta = h_T - h_T(1961), so delta is 0 at 1961
+        h_T_delta = h_T_values - h_T_1961
+        h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
+
+        for i, (_, row) in enumerate(country_data.iterrows()):
+            results.append({
+                'iteration': -1,  # Mark as synthetic point estimate
+                'approach': 'method5h4pos',
+                'iso3': iso3,
+                'year': row['year'],
+                'temp': row['temp'],
+                'h_T': row['h_T'],
+                'h_T_trend_1961': h_T_1961,
+                'h_T_delta': h_T_delta[i],
+                'h_T_delta_cum': h_T_delta_cum[i],
+            })
+
+    df_median = pd.DataFrame(results)
     print(f"      Created {len(df_median):,} median rows for method5h4pos")
     return df_median
 

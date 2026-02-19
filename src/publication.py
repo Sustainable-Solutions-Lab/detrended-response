@@ -214,11 +214,49 @@ def generate_variance_decomposition_table(
     if approaches is None:
         approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5h4pos']
 
-    # Filter to approaches that exist in the data
-    available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
+    # Filter to approaches that exist in the data (excluding method5h4pos for now)
+    available_approaches = [a for a in approaches if a != 'method5h4pos' and a in var_attrib_df['approach'].values]
     if not available_approaches:
         print("      [Tables] WARNING: No matching approaches found in var_attrib data")
         return
+
+    # Handle method5h4pos: filter method5 data to iterations where h4 > 0.001
+    method5h4pos_data = None
+    coefficients_df = bootstrap_results.get('bootstrap_coefficients')
+    if 'method5h4pos' in approaches and 'method5' in var_attrib_df['approach'].values and coefficients_df is not None:
+        # Get h4 values for method5 bootstrap iterations
+        method5_coef = coefficients_df[coefficients_df['approach'] == 'method5']
+        h4_positive_mask = method5_coef['h4'] > 0.001
+        h4_positive_iters = set(method5_coef.loc[h4_positive_mask, 'iteration'].values)
+
+        if h4_positive_iters:
+            # Filter method5 var_attrib data to h4-positive iterations
+            method5_var_attrib = var_attrib_df[var_attrib_df['approach'] == 'method5']
+            filtered_var_attrib = method5_var_attrib[
+                method5_var_attrib['iteration'].isin(h4_positive_iters) |
+                (method5_var_attrib['iteration'] == -1)  # Keep point estimate
+            ].copy()
+            filtered_var_attrib['approach'] = 'method5h4pos'
+            method5h4pos_data = filtered_var_attrib
+
+            # Also filter coefficients for method5h4pos
+            filtered_coef = method5_coef[
+                method5_coef['iteration'].isin(h4_positive_iters) |
+                (method5_coef['iteration'] == -1)
+            ].copy()
+            filtered_coef['approach'] = 'method5h4pos'
+
+            # Add to available approaches and append filtered data to var_attrib_df
+            available_approaches.append('method5h4pos')
+            var_attrib_df = pd.concat([var_attrib_df, method5h4pos_data], ignore_index=True)
+
+            # Also add to coefficients_df for Total R² row
+            coefficients_df = pd.concat([coefficients_df, filtered_coef], ignore_index=True)
+            bootstrap_results['bootstrap_coefficients'] = coefficients_df
+
+            print(f"      [Tables] Created method5h4pos from {len(h4_positive_iters)} iterations with h4 > 0.001")
+        else:
+            print("      [Tables] WARNING: No method5 iterations with h4 > 0.001, skipping method5h4pos")
 
     # Define the metrics to include in the table (in order)
     # These correspond to var_attrib keys, normalized by var_dy
@@ -296,11 +334,14 @@ def generate_variance_decomposition_table(
     # Get approach display names
     approach_names = {}
     for approach in available_approaches:
-        mask = summary_df['approach'] == approach
-        if mask.any():
-            approach_names[approach] = summary_df[mask].iloc[0]['approach_name']
+        if approach == 'method5h4pos':
+            approach_names[approach] = '5: Persistence Decay LOESS (h4>0)'
         else:
-            approach_names[approach] = approach
+            mask = summary_df['approach'] == approach
+            if mask.any():
+                approach_names[approach] = summary_df[mask].iloc[0]['approach_name']
+            else:
+                approach_names[approach] = approach
 
     # Build the table data
     rows = []
