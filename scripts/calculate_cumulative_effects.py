@@ -93,8 +93,9 @@ def load_run_metadata(directory: Path) -> dict:
 # ==============================================================================
 
 # Central approaches for analysis (in display order)
-# Note: method5h4pos uses method5 data filtered to h4 > 0.001
-CENTRAL_METHODS = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5h4pos']
+# method5h4pos uses median of bootstrap iterations where h4 > 0.001
+CENTRAL_METHODS_POINT = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5h4pos']
+CENTRAL_METHODS_BOXPLOT = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5h4pos']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -110,11 +111,15 @@ REPRESENTATIVE_PERCENTILES = (5, 25, 50, 75, 95)
 def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> np.ndarray:
     """Calculate compound cumulative effect.
 
-    For year 1961: h_T_delta_cum = h_T_delta
-    For year > 1961: h_T_delta_cum(year) = (1 + h_T_delta_cum(year-1)) * (1 + h_T_delta(year)) - 1
+    For all methods, effects persist forever:
+        h_T_delta_cum(t) = (1 + h_T_delta_cum(t-1)) * (1 + h_T_delta(t)) - 1
+        This compounds each year's climate effect into GDP permanently.
+
+    Note: For method5, the h_T values in bootstrap_h_values.csv already incorporate
+    persistence decay via h_conv(T), so no additional decay is applied here.
 
     Args:
-        h_T_delta: Array of h_T - h_T_trend_1961 values
+        h_T_delta: Array of h_T - h_T(1961) values
         years: Array of year values (must be sorted)
 
     Returns:
@@ -124,10 +129,9 @@ def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> 
     sort_idx = np.argsort(years)
     h_T_delta_sorted = h_T_delta[sort_idx]
 
-    # Calculate compound cumulative
+    # Calculate cumulative - each year's effect compounds into GDP permanently
     h_T_delta_cum = np.zeros(len(h_T_delta))
     h_T_delta_cum[0] = h_T_delta_sorted[0]
-
     for i in range(1, len(h_T_delta_sorted)):
         h_T_delta_cum[i] = (1 + h_T_delta_cum[i - 1]) * (1 + h_T_delta_sorted[i]) - 1
 
@@ -208,7 +212,7 @@ def plot_cumulative_effects_boxplot(
     fig, ax = plt.subplots(figsize=(14, 6))
 
     # Use central approaches in consistent order
-    approaches = CENTRAL_METHODS
+    approaches = CENTRAL_METHODS_BOXPLOT
     n_approaches = len(approaches)
 
     # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
@@ -323,26 +327,23 @@ def plot_cumulative_effects_by_method(
     df: pd.DataFrame,
     representatives: dict,
     output_dir: Path,
-    input_file: str = None,
-    method5_h4_positive_iters: set = None
+    input_file: str = None
 ) -> None:
     """Create clustered box-and-whisker plot grouped by method.
 
     Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
-    Groups by method (5 clusters) with 7 country bars per method.
+    Groups by method (6 clusters) with 7 country bars per method.
 
     Args:
         df: DataFrame with cumulative effects for representative countries
         representatives: Dictionary from select_representative_countries
         output_dir: Directory to save plot
         input_file: Input file for annotation
-        method5_h4_positive_iters: Set of iteration numbers where method5 h4 > threshold.
-            If provided, method5 bootstrap samples are filtered to only these iterations.
     """
     fig, ax = plt.subplots(figsize=(14, 6))
 
     # Use central approaches in consistent order
-    approaches = CENTRAL_METHODS
+    approaches = CENTRAL_METHODS_BOXPLOT
     n_approaches = len(approaches)
 
     # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
@@ -364,12 +365,8 @@ def plot_cumulative_effects_by_method(
             iso3 = representatives[country_key]['iso3']
 
             # Get bootstrap samples (iterations 0-999) for this country/approach
+            # Note: method5h4pos already contains only h4-positive iterations
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
-
-            # For method5, filter to only iterations where h4 > threshold (persistence decay estimated)
-            if approach == 'method5' and method5_h4_positive_iters is not None:
-                iter_mask = df_2022['iteration'].isin(method5_h4_positive_iters)
-                mask = mask & iter_mask
 
             bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
 
@@ -455,7 +452,7 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
 
     Args:
         group: DataFrame for a single group with columns [year, temp, h_T]
-        approach: Approach name (unused, kept for API compatibility)
+        approach: Approach name - used to differentiate method5/method5h4pos logic
         loess_window: Window size (unused, kept for API compatibility)
 
     Returns:
@@ -464,22 +461,63 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
     years = group['year'].values
     h_T = group['h_T'].values
 
-    # Use actual h_T value at 1961 as baseline for all methods
-    # This makes h_T_delta = 0 at 1961, showing GDP relative to 1961
-    # Note: The LOESS trend for method4 is already incorporated in the h(T) values
-    # computed during bootstrap - here we just reference h(T(1961), T_trend(1961))
-    year_1961_mask = years == BASE_YEAR
+    # Sort by year to ensure proper ordering
+    sort_idx = np.argsort(years)
+    years_sorted = years[sort_idx]
+    h_T_sorted = h_T[sort_idx]
+
+    # Find 1961 index and baseline value
+    year_1961_mask = years_sorted == BASE_YEAR
     if year_1961_mask.any():
-        h_T_1961 = h_T[year_1961_mask][0]
+        idx_1961 = np.where(year_1961_mask)[0][0]
+        h_T_1961 = h_T_sorted[idx_1961]
     else:
-        # If 1961 not in data, use first year's value
-        h_T_1961 = h_T[0]
+        idx_1961 = 0
+        h_T_1961 = h_T_sorted[0]
 
-    # Calculate h_T_delta = h_T - h_T(1961)
-    h_T_delta = h_T - h_T_1961
+    if approach == 'method5h4pos':
+        # For method5h4pos (h4 > 0.001): compound h_conv directly first, then subtract
+        # 1961 baseline cumulative
+        #
+        # h_conv represents the net annual contribution to GDP growth including decay:
+        #   h_conv(t) = h(T(t)) - h4*h(T(t-1)) - h4*(1-h4)*h(T(t-2)) - ...
+        #
+        # When h4 > 0, h_conv decays towards 0 as accumulated past effects build up.
+        # This means each year's NEW contribution to GDP decreases over time.
+        #
+        # The WRONG approach (subtract h_conv(1961) first, then compound) gives large
+        # negative deltas because h_conv(1961) has no past to subtract (≈ h(T_1961)),
+        # while h_conv(2022) ≈ 0 (past effects cancel out).
+        #
+        # The CORRECT approach: compound h_conv values directly (they represent the
+        # annual GDP growth contributions), then subtract 1961's cumulative to make
+        # the result relative to 1961.
+        #
+        # This gives bounded cumulative effects that converge, rather than growing
+        # unboundedly like the no-decay case.
+        GDP_cum_raw = np.zeros(len(h_T_sorted))
+        GDP_cum_raw[0] = h_T_sorted[0]
+        for i in range(1, len(h_T_sorted)):
+            GDP_cum_raw[i] = (1 + GDP_cum_raw[i - 1]) * (1 + h_T_sorted[i]) - 1
 
-    # Calculate cumulative
-    h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
+        # Make relative to 1961
+        baseline_cum = GDP_cum_raw[idx_1961]
+        h_T_delta_cum_sorted = GDP_cum_raw - baseline_cum
+
+        # Restore original order
+        h_T_delta_cum = np.zeros(len(h_T))
+        h_T_delta_cum[sort_idx] = h_T_delta_cum_sorted
+
+        # For consistency, also compute h_T_delta (though not used for compounding in method5)
+        h_T_delta = h_T - h_T_1961
+
+    else:
+        # For methods 0-4: subtract baseline first, then compound (original behavior)
+        #
+        # h_T_delta = h_T - h_T(1961) represents the annual climate effect relative to 1961
+        # These deltas are then compounded to get cumulative GDP effect
+        h_T_delta = h_T - h_T_1961
+        h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
 
     result = group.copy()
     result['h_T_trend_1961'] = h_T_1961  # Keep column name for compatibility
@@ -491,30 +529,35 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
 
 def process_all_countries_point_estimate(
     input_path: Path,
+    bootstrap_dir: Path,
     loess_window: int = DEFAULT_LOESS_WINDOW_YEARS
 ) -> pd.DataFrame:
     """Process point estimate data for all countries and approaches.
 
+    For methods 0-4, uses point estimates (iteration=-1).
+    For method5h4pos, computes median of h4-positive bootstrap iterations.
+
     Args:
         input_path: Path to bootstrap_h_values.csv
+        bootstrap_dir: Directory containing bootstrap_coefficients.csv (for h4 filtering)
         loess_window: Window size for LOESS smoothing
 
     Returns:
-        DataFrame with cumulative effects for all countries (point estimate only)
+        DataFrame with cumulative effects for all countries
     """
-    print("      Loading point estimate data (iteration=-1, all approaches)...")
+    print("      Loading point estimate data (iteration=-1, methods 0-4)...")
 
-    # Read CSV in chunks, filtering to only point estimates
+    # Read CSV in chunks, filtering to only point estimates for methods 0-4
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[chunk['iteration'] == -1]
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] != 'method5')]
         if len(filtered) > 0:
             chunks.append(filtered)
 
     df = pd.concat(chunks, ignore_index=True)
-    print(f"      Loaded {len(df):,} rows")
+    print(f"      Loaded {len(df):,} rows for methods 0-4")
 
-    # Process each (approach, iso3) group
+    # Process each (approach, iso3) group for methods 0-4
     groups = df.groupby(['approach', 'iso3'])
     total_groups = len(groups)
 
@@ -526,114 +569,53 @@ def process_all_countries_point_estimate(
         processed = process_group(group, approach, loess_window)
         results.append(processed)
 
-    print(f"      Completed processing {total_groups:,} groups")
-    return pd.concat(results, ignore_index=True)
+    print(f"      Completed processing {total_groups:,} groups for methods 0-4")
 
-
-def process_method5h4pos_all_countries(
-    input_path: Path,
-    bootstrap_dir: Path,
-    loess_window: int = DEFAULT_LOESS_WINDOW_YEARS,
-    h4_threshold: float = 0.001
-) -> pd.DataFrame:
-    """Process method5h4pos data for all countries using median of h4>threshold bootstrap samples.
-
-    For method5h4pos, we filter to bootstrap iterations where h4 > threshold,
-    then compute the median cumulative effect across those iterations for each country/year.
-
-    Args:
-        input_path: Path to bootstrap_h_values.csv
-        bootstrap_dir: Directory containing bootstrap_coefficients.csv
-        loess_window: Window size for LOESS smoothing
-        h4_threshold: Threshold for h4 filtering (default 0.001)
-
-    Returns:
-        DataFrame with cumulative effects for all countries (method5h4pos)
-    """
-    # Get iterations where method5 h4 > threshold
-    h4_positive_iters = get_method5_h4_positive_iterations(bootstrap_dir, h4_threshold)
-    print(f"      method5h4pos: Using {len(h4_positive_iters)} iterations with h4 > {h4_threshold}")
-
-    if len(h4_positive_iters) == 0:
-        print("      WARNING: No iterations with h4 > threshold, skipping method5h4pos")
-        return pd.DataFrame()
+    # Now process method5h4pos: median of cumulative effects across h4-positive iterations
+    print("      Loading method5 bootstrap data for method5h4pos...")
+    h4_positive_iters = get_method5_h4_positive_iterations(bootstrap_dir)
+    print(f"      Found {len(h4_positive_iters)} h4-positive iterations")
 
     # Load method5 bootstrap data for h4-positive iterations
-    print("      Loading method5 bootstrap data for h4-positive iterations...")
-    chunks = []
+    chunks_m5 = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[
-            (chunk['approach'] == 'method5') &
-            (chunk['iteration'].isin(h4_positive_iters))
-        ]
+        filtered = chunk[(chunk['approach'] == 'method5') & (chunk['iteration'].isin(h4_positive_iters))]
         if len(filtered) > 0:
-            chunks.append(filtered)
+            chunks_m5.append(filtered)
 
-    if not chunks:
-        print("      WARNING: No data found for method5 h4-positive iterations")
-        return pd.DataFrame()
+    df_m5 = pd.concat(chunks_m5, ignore_index=True)
+    print(f"      Loaded {len(df_m5):,} rows for method5 h4-positive iterations")
 
-    df = pd.concat(chunks, ignore_index=True)
-    print(f"      Loaded {len(df):,} rows")
+    # Process each (iteration, iso3) group and compute cumulative effects
+    groups_m5 = df_m5.groupby(['iteration', 'iso3'])
+    total_m5 = len(groups_m5)
 
-    # Process each (iteration, iso3) group to compute cumulative effects
-    groups = df.groupby(['iteration', 'iso3'])
-    total_groups = len(groups)
+    m5_results = []
+    for idx, ((iteration, iso3), group) in enumerate(groups_m5):
+        if idx % 2000 == 0:
+            print(f"      Progress: {idx:,}/{total_m5:,} method5 groups...")
 
-    processed_data = []
-    for idx, ((iteration, iso3), group) in enumerate(groups):
-        if idx % 1000 == 0:
-            print(f"      Progress: {idx:,}/{total_groups:,} groups...")
+        processed = process_group(group, 'method5h4pos', loess_window)
+        m5_results.append(processed)
 
-        processed = process_group(group, 'method5', loess_window)
-        processed_data.append(processed)
+    df_m5_processed = pd.concat(m5_results, ignore_index=True)
 
-    df_processed = pd.concat(processed_data, ignore_index=True)
-    print(f"      Processed {total_groups:,} groups")
-
-    # Compute median h_T for each (iso3, year) across iterations
-    print("      Computing median h_T values...")
-    median_h_T = df_processed.groupby(['iso3', 'year']).agg({
+    # Compute median across iterations for each (iso3, year)
+    print("      Computing median cumulative effects across h4-positive iterations...")
+    m5h4pos_median = df_m5_processed.groupby(['iso3', 'year']).agg({
+        'temp': 'median',
         'h_T': 'median',
-        'temp': 'median'  # temp should be same across iterations
+        'h_T_trend_1961': 'median',
+        'h_T_delta': 'median',
+        'h_T_delta_cum': 'median'
     }).reset_index()
+    m5h4pos_median['approach'] = 'method5h4pos'
+    m5h4pos_median['iteration'] = -1  # Mark as point estimate equivalent
 
-    # Now process each country: use h_T at 1961 as baseline, then compute cumulative effects
-    print("      Computing cumulative effects from median h_T...")
-    results = []
-    for iso3, country_data in median_h_T.groupby('iso3'):
-        country_data = country_data.sort_values('year')
-        years = country_data['year'].values
-        h_T_values = country_data['h_T'].values
+    results.append(m5h4pos_median)
+    print(f"      Created method5h4pos: {len(m5h4pos_median):,} rows (median of {len(h4_positive_iters)} iterations)")
 
-        # Use actual h_T value at 1961 as baseline (no trend fitting)
-        year_1961_mask = years == BASE_YEAR
-        if year_1961_mask.any():
-            h_T_1961 = h_T_values[year_1961_mask][0]
-        else:
-            # If 1961 not in data, use first year's value
-            h_T_1961 = h_T_values[0]
-
-        # Compute h_T_delta = h_T - h_T(1961), so delta is 0 at 1961
-        h_T_delta = h_T_values - h_T_1961
-        h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
-
-        for i, (_, row) in enumerate(country_data.iterrows()):
-            results.append({
-                'iteration': -1,  # Mark as synthetic point estimate
-                'approach': 'method5h4pos',
-                'iso3': iso3,
-                'year': row['year'],
-                'temp': row['temp'],
-                'h_T': row['h_T'],
-                'h_T_trend_1961': h_T_1961,
-                'h_T_delta': h_T_delta[i],
-                'h_T_delta_cum': h_T_delta_cum[i],
-            })
-
-    df_median = pd.DataFrame(results)
-    print(f"      Created {len(df_median):,} median rows for method5h4pos")
-    return df_median
+    return pd.concat(results, ignore_index=True)
 
 
 def plot_cumulative_effects_by_approach(
@@ -655,9 +637,9 @@ def plot_cumulative_effects_by_approach(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    # Check for missing approaches
+    # Check for missing approaches (use point estimate methods for this plot)
     available_approaches = set(df['approach'].unique())
-    missing_approaches = [a for a in CENTRAL_METHODS if a not in available_approaches]
+    missing_approaches = [a for a in CENTRAL_METHODS_POINT if a not in available_approaches]
     if missing_approaches:
         raise ValueError(
             f"Missing approaches in data: {missing_approaches}. "
@@ -665,10 +647,10 @@ def plot_cumulative_effects_by_approach(
             f"You may need to re-run run_bootstrap.py to generate data for all approaches."
         )
 
-    n_methods = len(CENTRAL_METHODS)
+    n_methods = len(CENTRAL_METHODS_POINT)
     fig, axes = plt.subplots(1, n_methods, figsize=(3 * n_methods, 4), sharey=True)
 
-    for ax, approach in zip(axes, CENTRAL_METHODS):
+    for ax, approach in zip(axes, CENTRAL_METHODS_POINT):
         # Filter to this approach
         df_approach = df[df['approach'] == approach]
 
@@ -832,6 +814,7 @@ def select_representative_countries_from_file(
 def process_representative_countries(
     input_path: Path,
     representative_iso3s: list,
+    bootstrap_dir: Path,
     loess_window: int = DEFAULT_LOESS_WINDOW_YEARS
 ) -> pd.DataFrame:
     """Process bootstrap data for representative countries only.
@@ -839,6 +822,7 @@ def process_representative_countries(
     Args:
         input_path: Path to bootstrap_h_values.csv
         representative_iso3s: List of ISO3 country codes to process
+        bootstrap_dir: Directory containing bootstrap_coefficients.csv (for h4 filtering)
         loess_window: Window size for LOESS smoothing
 
     Returns:
@@ -872,7 +856,30 @@ def process_representative_countries(
         results.append(processed)
 
     print(f"      Completed processing {total_groups:,} groups")
-    return pd.concat(results, ignore_index=True)
+    df_result = pd.concat(results, ignore_index=True)
+
+    # Create method5h4pos from method5 data filtered to h4-positive iterations
+    # These need to be RE-PROCESSED with 'method5h4pos' approach to use the correct
+    # cumulative calculation (compound h_conv first, then subtract baseline)
+    h4_positive_iters = get_method5_h4_positive_iterations(bootstrap_dir)
+    if len(h4_positive_iters) > 0:
+        # Get the raw h_T values for h4-positive iterations (from original data, not processed)
+        method5_raw = df[(df['approach'] == 'method5') & (df['iteration'].isin(h4_positive_iters))]
+
+        # Re-process with method5h4pos approach
+        groups_m5h4pos = method5_raw.groupby(['iteration', 'iso3'])
+        m5h4pos_results = []
+        for (iteration, iso3), group in groups_m5h4pos:
+            processed = process_group(group, 'method5h4pos', loess_window)
+            m5h4pos_results.append(processed)
+
+        method5h4pos_bootstrap = pd.concat(m5h4pos_results, ignore_index=True)
+        method5h4pos_bootstrap['approach'] = 'method5h4pos'
+
+        df_result = pd.concat([df_result, method5h4pos_bootstrap], ignore_index=True)
+        print(f"      Created method5h4pos: {len(method5h4pos_bootstrap):,} bootstrap rows ({len(h4_positive_iters)} h4-positive iterations)")
+
+    return df_result
 
 
 def main():
@@ -977,15 +984,9 @@ def main():
         output_dir = create_output_dir(prefix="cumulative_")
 
     # Phase 1: Process all countries with point estimate
-    print("\n[1/8] Processing all countries (point estimate only)...")
-    df_all_countries = process_all_countries_point_estimate(input_path, loess_window)
-
-    # Phase 1b: Process method5h4pos (median of h4>0.001 bootstrap samples)
-    print("\n[2/8] Processing method5h4pos (median of h4>0.001 bootstrap samples)...")
-    df_method5h4pos = process_method5h4pos_all_countries(input_path, input_dir, loess_window)
-    if len(df_method5h4pos) > 0:
-        df_all_countries = pd.concat([df_all_countries, df_method5h4pos], ignore_index=True)
-        print(f"      Added {len(df_method5h4pos):,} method5h4pos rows")
+    # For method5h4pos, uses iteration with median h4 among h4-positive iterations
+    print("\n[1/7] Processing all countries (point estimates + method5h4pos)...")
+    df_all_countries = process_all_countries_point_estimate(input_path, input_dir, loess_window)
 
     # Save all countries cumulative effects
     all_countries_path = output_dir / 'cumulative_effects_all_countries.csv'
@@ -995,12 +996,12 @@ def main():
     df_all_countries.to_csv(all_countries_path, mode='a', index=False)
     print(f"      Saved: {all_countries_path} ({len(df_all_countries):,} rows)")
 
-    # Phase 3: Create multi-panel visualization by approach
-    print("\n[3/8] Creating cumulative effects by approach visualization...")
+    # Phase 2: Create multi-panel visualization by approach
+    print("\n[2/7] Creating cumulative effects by approach visualization...")
     plot_cumulative_effects_by_approach(df_all_countries, output_dir, input_file)
 
-    # Phase 4: Select representative countries using point estimate only
-    print("\n[4/8] Selecting representative countries (using point estimate)...")
+    # Phase 3: Select representative countries using point estimate only
+    print("\n[3/7] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
         input_path, loess_window
     )
@@ -1033,15 +1034,15 @@ def main():
     rep_df.to_csv(rep_path, index=False)
     print(f"      Saved: {rep_path}")
 
-    # Phase 5: Process full bootstrap data for representative countries only
-    print("\n[5/8] Processing bootstrap data for representative countries...")
+    # Phase 4: Process full bootstrap data for representative countries only
+    print("\n[4/7] Processing bootstrap data for representative countries...")
     rep_iso3s = [representatives[p]['iso3'] for p in representatives]
     df_summary = process_representative_countries(
-        input_path, rep_iso3s, loess_window
+        input_path, rep_iso3s, input_dir, loess_window
     )
 
     # Save cumulative effects summary
-    print("\n[6/8] Saving cumulative effects summary...")
+    print("\n[5/7] Saving cumulative effects summary...")
 
     # Add header comment to CSV
     summary_path = output_dir / 'cumulative_h_values_summary.csv'
@@ -1051,17 +1052,11 @@ def main():
     print(f"      Saved: {summary_path} ({len(df_summary):,} rows)")
 
     # Create visualizations
-    print("\n[7/8] Creating box plot visualization (grouped by country)...")
+    print("\n[6/7] Creating box plot visualization (grouped by country)...")
     plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
 
-    print("\n[8/8] Creating box plot visualization (grouped by method)...")
-    # Get iterations where method5 h4 > 0.001 (persistence decay actually estimated)
-    method5_h4_positive_iters = get_method5_h4_positive_iterations(input_dir, threshold=0.001)
-    print(f"      method5: {len(method5_h4_positive_iters)} of 1000 bootstrap samples have h4 > 0.001")
-    plot_cumulative_effects_by_method(
-        df_summary, representatives, output_dir, input_file,
-        method5_h4_positive_iters=method5_h4_positive_iters
-    )
+    print("\n[7/7] Creating box plot visualization (grouped by method)...")
+    plot_cumulative_effects_by_method(df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
