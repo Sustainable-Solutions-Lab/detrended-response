@@ -2068,6 +2068,83 @@ def fit_method1h0_precomputed_k(
     )
 
 
+def fit_method2h0_precomputed_k_loess(
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
+) -> FitResult:
+    """Null model: No climate response, precomputed k with LOESS country trends.
+
+    LOESS version of method1h0:
+    k(t) = mean_i(Δy_i(t)) is precomputed, then country LOESS trends j_i(t)
+    are smoothed from Δy_i(t) - k(t). No regression needed — all components are
+    already precomputed from trends_loess and year_means.
+
+    Δy_i(t) = j_i(t) + k(t) + ε_i(t)
+    """
+    n_obs = data.n_obs
+    unique_years = sorted(set(data.year))
+    n_years = len(unique_years)
+
+    # Build j_trend and k_values from precomputed LOESS trends
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(n_obs)])
+
+    # Residuals = dy - (j + k)
+    residuals = data.growth_pcGDP - (j_trend + k_values)
+
+    # No climate response coefficients
+    h1 = 0.0
+    h2 = 0.0
+    h1_se = 0.0
+    h2_se = 0.0
+
+    # Year fixed effects
+    k = dict(year_means)
+
+    # Fit statistics - LOESS effective degrees of freedom is harder to define,
+    # use n_years as proxy (similar to method1h0's 3*n_countries + n_years but
+    # LOESS doesn't have fixed polynomial parameters)
+    n_params = n_years  # Conservative: just count year effects
+    r_sq, adj_r_sq, rmse = compute_fit_stats(data.growth_pcGDP, residuals, n_params)
+
+    # Total R²
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature undefined
+    T_opt = np.nan
+
+    # Variance decomposition (no h components)
+    components = {'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Variance attribution (Δu=0, v=0 since no climate response)
+    Delta_u = np.zeros(n_obs)
+    v = np.zeros(n_obs)
+    epsilon = data.growth_pcGDP - (j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResult(
+        approach="method2h0: No Climate Response (LOESS Precomputed k)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        rms_imbalance=None,
+        rms_h=None,
+        imbalance_ratio=None,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
@@ -2084,6 +2161,7 @@ def fit_all_approaches(
         'method5': Persistence decay model with LOESS (if trends_loess provided)
         'method0h0': No climate response, joint OLS (country trends + year effects only)
         'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
+        'method2h0': No climate response, LOESS precomputed k (if trends_loess provided)
 
     Args:
         data: AnalysisData object
@@ -2106,9 +2184,12 @@ def fit_all_approaches(
             data, trends_with_k, year_means
         )
 
-    # Add methods 2, 3, 4, 5 if trends_loess and year_means are provided
+    # Add methods 2, 3, 4, 5 and method2h0 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         results['method2'] = fit_method2_precomputed_k_loess(
+            data, trends_loess, year_means
+        )
+        results['method2h0'] = fit_method2h0_precomputed_k_loess(
             data, trends_loess, year_means
         )
         results['method4'] = fit_method4_quadratic_departure_loess(

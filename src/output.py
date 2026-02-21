@@ -53,6 +53,7 @@ METHOD_COLORS = {
     'method5h4pos': 'teal',
     'method0h0': 'gray',
     'method1h0': 'gray',
+    'method2h0': 'gray',
 }
 
 # Line style scheme for methods:
@@ -69,6 +70,7 @@ METHOD_LINESTYLES = {
     'method5': (0, (5, 1)),   # densely dashed
     'method0h0': '--',
     'method1h0': ':',
+    'method2h0': ':',
 }
 
 
