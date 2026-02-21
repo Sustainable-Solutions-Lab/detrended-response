@@ -97,9 +97,9 @@ def main():
     )
     parser.add_argument(
         "--loess-window",
-        type=int,
-        default=25,
-        help="Window size in years for LOESS smoothing (default: 25)",
+        type=float,
+        default=39.4,
+        help="Window size in years for LOESS smoothing (default: 39.4)",
     )
     parser.add_argument(
         "--mean-weight-distance",
@@ -115,7 +115,11 @@ def main():
     # Compute LOESS window from mean weight distance if specified
     if args.mean_weight_distance is not None:
         loess_window = (44 / 7) * args.mean_weight_distance
-        mw_suffix = f"mw{int(args.mean_weight_distance):02d}"
+        # Format suffix: integer -> mwNN, non-integer -> mwNN.NNNN
+        if args.mean_weight_distance == int(args.mean_weight_distance):
+            mw_suffix = f"mw{int(args.mean_weight_distance):02d}"
+        else:
+            mw_suffix = f"mw{args.mean_weight_distance:.4f}"
     else:
         loess_window = args.loess_window
         mw_suffix = ""

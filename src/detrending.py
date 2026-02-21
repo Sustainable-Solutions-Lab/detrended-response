@@ -12,14 +12,14 @@ import numpy as np
 # ==============================================================================
 
 # Default window size in years for LOESS smoothing
-DEFAULT_LOESS_WINDOW_YEARS = 25
+# 39.4 years chosen to match Total R² of quadratic polynomial detrending (method1h0)
+DEFAULT_LOESS_WINDOW_YEARS = 39.4
 
 # Minimum number of points required for LOESS fitting
 MIN_LOESS_POINTS = 3
 
 from dataclasses import dataclass
 from typing import Dict
-from statsmodels.nonparametric.smoothers_lowess import lowess
 from .data_loader import AnalysisData
 
 
@@ -404,42 +404,76 @@ def compute_country_trends_with_k(
     )
 
 
-def fit_loess_trend(
-    t: np.ndarray, y: np.ndarray, window_years: int = DEFAULT_LOESS_WINDOW_YEARS
+def fit_loess_continuous(
+    t: np.ndarray, y: np.ndarray, bandwidth: float, degree: int = 1
 ) -> np.ndarray:
-    """Fit LOESS (locally weighted scatterplot smoothing) trend.
+    """LOESS with continuous bandwidth parameter.
+
+    Unlike statsmodels lowess which uses k-nearest neighbors (discrete),
+    this uses a continuous bandwidth with tricube weights.
 
     Args:
-        t: Time values (e.g., year or normalized time)
+        t: Time values
         y: Values to smooth
-        window_years: Window size in years for LOESS smoothing
+        bandwidth: Half-width of window in t-units (e.g., years)
+        degree: Local polynomial degree (1=linear, 2=quadratic)
 
     Returns:
         Smoothed values at each input time point
     """
     n = len(t)
+    y_smooth = np.zeros(n)
+
+    for i in range(n):
+        # Distance from point i to all points
+        d = np.abs(t - t[i])
+
+        # Tricube weights with continuous bandwidth
+        u = d / bandwidth
+        w = np.where(u < 1, (1 - u**3)**3, 0)
+
+        # Need at least degree+1 points with non-zero weight
+        if np.sum(w > 0) <= degree:
+            y_smooth[i] = y[i]
+            continue
+
+        # Weighted local polynomial regression
+        X = np.column_stack([np.power(t - t[i], p) for p in range(degree + 1)])
+        W = np.diag(w)
+        XtW = X.T @ W
+        beta = np.linalg.solve(XtW @ X, XtW @ y)
+        y_smooth[i] = beta[0]  # Intercept = smoothed value at t[i]
+
+    return y_smooth
+
+
+def fit_loess_trend(
+    t: np.ndarray, y: np.ndarray, window_years: float = DEFAULT_LOESS_WINDOW_YEARS
+) -> np.ndarray:
+    """Fit LOESS trend using continuous bandwidth.
+
+    Args:
+        t: Time values
+        y: Values to smooth
+        window_years: Bandwidth in years (points within this distance get non-zero weight)
+
+    Returns:
+        Smoothed values
+    """
+    n = len(t)
     if n < MIN_LOESS_POINTS:
-        # Not enough points for LOESS, return original values
         return y.copy()
 
-    # Calculate frac based on window_years and data span
-    # frac is the fraction of data used for each local regression
-    t_range = t.max() - t.min()
-    if t_range == 0:
-        return y.copy()
+    # Use window_years directly as the bandwidth
+    bandwidth = window_years
 
-    # frac should give roughly window_years worth of data
-    frac = min(window_years / t_range, 1.0)
-    # Ensure we use at least MIN_LOESS_POINTS
-    frac = max(frac, float(MIN_LOESS_POINTS) / n)
-
-    # Sort data by t for LOESS
+    # Sort data by t
     sort_idx = np.argsort(t)
     t_sorted = t[sort_idx]
     y_sorted = y[sort_idx]
 
-    # Fit LOESS - returns sorted results
-    smoothed = lowess(y_sorted, t_sorted, frac=frac, return_sorted=False)
+    # Apply continuous LOESS
+    smoothed = fit_loess_continuous(t_sorted, y_sorted, bandwidth, degree=1)
 
     # Reorder to match original input order
     result = np.zeros(n)
@@ -450,7 +484,7 @@ def fit_loess_trend(
 
 def compute_country_trends_loess(
     data: AnalysisData, year_means: Dict[int, float],
-    window_years: int = DEFAULT_LOESS_WINDOW_YEARS
+    window_years: float = DEFAULT_LOESS_WINDOW_YEARS
 ) -> CountryTrendsLoess:
     """Compute LOESS-smoothed trends for temperature and GDP growth.
 
