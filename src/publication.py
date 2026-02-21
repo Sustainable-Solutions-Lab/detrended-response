@@ -212,51 +212,13 @@ def generate_variance_decomposition_table(
     # Default approaches to include (publication set)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
+        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4']
 
-    # Filter to approaches that exist in the data (excluding approach4h4pos for now)
-    available_approaches = [a for a in approaches if a != 'approach4h4pos' and a in var_attrib_df['approach'].values]
+    # Filter to approaches that exist in the data
+    available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
     if not available_approaches:
         print("      [Tables] WARNING: No matching approaches found in var_attrib data")
         return
-
-    # Handle approach4h4pos: filter approach4 data to iterations where h4 > 0.001
-    approach4h4pos_data = None
-    coefficients_df = bootstrap_results.get('bootstrap_coefficients')
-    if 'approach4h4pos' in approaches and 'approach4' in var_attrib_df['approach'].values and coefficients_df is not None:
-        # Get h4 values for approach4 bootstrap iterations
-        approach4_coef = coefficients_df[coefficients_df['approach'] == 'approach4']
-        h4_positive_mask = approach4_coef['h4'] > 0.001
-        h4_positive_iters = set(approach4_coef.loc[h4_positive_mask, 'iteration'].values)
-
-        if h4_positive_iters:
-            # Filter approach4 var_attrib data to h4-positive iterations
-            approach4_var_attrib = var_attrib_df[var_attrib_df['approach'] == 'approach4']
-            filtered_var_attrib = approach4_var_attrib[
-                approach4_var_attrib['iteration'].isin(h4_positive_iters) |
-                (approach4_var_attrib['iteration'] == -1)  # Keep point estimate
-            ].copy()
-            filtered_var_attrib['approach'] = 'approach4h4pos'
-            approach4h4pos_data = filtered_var_attrib
-
-            # Also filter coefficients for approach4h4pos
-            filtered_coef = approach4_coef[
-                approach4_coef['iteration'].isin(h4_positive_iters) |
-                (approach4_coef['iteration'] == -1)
-            ].copy()
-            filtered_coef['approach'] = 'approach4h4pos'
-
-            # Add to available approaches and append filtered data to var_attrib_df
-            available_approaches.append('approach4h4pos')
-            var_attrib_df = pd.concat([var_attrib_df, approach4h4pos_data], ignore_index=True)
-
-            # Also add to coefficients_df for Total R² row
-            coefficients_df = pd.concat([coefficients_df, filtered_coef], ignore_index=True)
-            bootstrap_results['bootstrap_coefficients'] = coefficients_df
-
-            print(f"      [Tables] Created approach4h4pos from {len(h4_positive_iters)} iterations with h4 > 0.001")
-        else:
-            print("      [Tables] WARNING: No approach4 iterations with h4 > 0.001, skipping approach4h4pos")
 
     # Define the metrics to include in the table (in order)
     # These correspond to var_attrib keys, normalized by var_dy
@@ -334,14 +296,11 @@ def generate_variance_decomposition_table(
     # Get approach display names
     approach_names = {}
     for approach in available_approaches:
-        if approach == 'approach4h4pos':
-            approach_names[approach] = '4: Persistence Decay LOESS (h4>0)'
+        mask = summary_df['approach'] == approach
+        if mask.any():
+            approach_names[approach] = summary_df[mask].iloc[0]['approach_name']
         else:
-            mask = summary_df['approach'] == approach
-            if mask.any():
-                approach_names[approach] = summary_df[mask].iloc[0]['approach_name']
-            else:
-                approach_names[approach] = approach
+            approach_names[approach] = approach
 
     # Build the table data
     rows = []
@@ -629,7 +588,7 @@ def generate_bootstrap_comparison_table(
     # Default approaches to include (publication set, same as variance decomposition table)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
+        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
