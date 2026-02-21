@@ -11,7 +11,8 @@ Methods:
     method3: Piecewise quadratic response with LOESS
     method4: T response with quadratic departure term (T-Ttrend)^2
     method5: Persistence decay model with LOESS
-    method6: Piecewise model with departure term
+    method6: Interaction model h3*(T-Topt)*(T-Ttrend)
+    method7: Lagged deviation model
     method0h0: Null model (h1=h2=0) for method0
     method1h0: Null model (h1=h2=0) for method1
 
@@ -202,6 +203,12 @@ def main():
         # method6: h3 (interaction), T_opt
         elif name == 'method6' and hasattr(r, 'h4'):
             print(f"  h3 (interaction) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+
+        # method7: h2 (quadratic), h4 (lagged change), T_opt
+        elif name == 'method7' and hasattr(r, 'h4'):
+            print(f"  h2 (quadratic) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (lag change) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:

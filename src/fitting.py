@@ -1706,6 +1706,210 @@ def fit_method6_piecewise_departure_loess(
     )
 
 
+def fit_method7_lagged_deviation_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    T_opt_bounds: tuple = (0.0, 30.0),
+) -> FitResultApproach8:
+    """Method 7: Quadratic with lagged deviation change (LOESS detrending).
+
+    Model: h(T(t)) = h2 * (T(t) - T_opt)^2 + h4 * ((T(t) - T_opt)^2 - (T(t-1) - T_opt)^2)
+
+    The h4 term captures the effect of moving toward or away from optimal:
+    - h4 < 0: moving away from optimal (increasing squared deviation) is bad
+    - h4 > 0: moving away from optimal is good
+
+    Using h(T) - h(T_trend) formulation:
+    - X1 = (T(t) - T_opt)^2 - (T_trend(t) - T_opt)^2
+    - X2 = [(T(t) - T_opt)^2 - (T(t-1) - T_opt)^2] - [(T_trend(t) - T_opt)^2 - (T_trend(t-1) - T_opt)^2]
+
+    Model: y* = h2 * X1 + h4 * X2 (linear in h2, h4 after fixing T_opt)
+
+    DOF: 2 parameters (h2, h4) + 1 searched (T_opt) = 3 total (same as method3)
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+
+    Returns:
+        FitResultApproach8 with T_opt, h2, h4
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as method2)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Use raw temperature and trend
+    T = data.temp
+    T_trend = trends_loess.T_loess
+
+    # Compute lagged temperatures T(t-1) and T_trend(t-1) for each observation
+    # Need to handle this per-country since lags don't cross country boundaries
+    T_lag = np.zeros(data.n_obs)
+    T_trend_lag = np.zeros(data.n_obs)
+    valid_mask = np.ones(data.n_obs, dtype=bool)  # Track which obs have valid lags
+
+    for country_idx in range(data.n_countries):
+        mask = data.country_idx == country_idx
+        idx = np.where(mask)[0]
+        years = data.year[idx]
+        sort_order = np.argsort(years)
+        idx_sorted = idx[sort_order]
+        years_sorted = years[sort_order]
+
+        for j, obs_idx in enumerate(idx_sorted):
+            if j == 0:
+                # First year for this country: no lag available
+                valid_mask[obs_idx] = False
+                T_lag[obs_idx] = T[obs_idx]  # placeholder
+                T_trend_lag[obs_idx] = T_trend[obs_idx]
+            else:
+                # Check if previous year is consecutive
+                prev_idx = idx_sorted[j - 1]
+                if years_sorted[j] == years_sorted[j - 1] + 1:
+                    T_lag[obs_idx] = T[prev_idx]
+                    T_trend_lag[obs_idx] = T_trend[prev_idx]
+                else:
+                    # Gap in years, no valid lag
+                    valid_mask[obs_idx] = False
+                    T_lag[obs_idx] = T[obs_idx]
+                    T_trend_lag[obs_idx] = T_trend[obs_idx]
+
+    # Filter to observations with valid lags
+    y_valid = y[valid_mask]
+    T_valid = T[valid_mask]
+    T_trend_valid = T_trend[valid_mask]
+    T_lag_valid = T_lag[valid_mask]
+    T_trend_lag_valid = T_trend_lag[valid_mask]
+    n_valid = np.sum(valid_mask)
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving 2-column OLS for h2, h4."""
+        # X1: current squared deviation (detrended)
+        X1 = (T_valid - T_opt_val)**2 - (T_trend_valid - T_opt_val)**2
+
+        # X2: change in squared deviation (detrended)
+        # [(T(t) - T_opt)^2 - (T(t-1) - T_opt)^2] - [(T_trend(t) - T_opt)^2 - (T_trend(t-1) - T_opt)^2]
+        delta_sq = (T_valid - T_opt_val)**2 - (T_lag_valid - T_opt_val)**2
+        delta_sq_trend = (T_trend_valid - T_opt_val)**2 - (T_trend_lag_valid - T_opt_val)**2
+        X2 = delta_sq - delta_sq_trend
+
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS
+        try:
+            beta_ols, _, _, _ = linalg.lstsq(X, y_valid)
+            y_pred = X @ beta_ols
+            sse = np.sum((y_valid - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
+
+    # Initial guess: T_opt = 15C
+    x0 = 15.0
+
+    # 1D optimization using L-BFGS-B
+    result = minimize(
+        lambda x: compute_sse_for_T_opt(x[0]),
+        x0=[x0],
+        bounds=[T_opt_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    T_opt_opt = result.x[0]
+
+    # Re-fit at optimal T_opt to get h2, h4, residuals, covariance
+    X1 = (T_valid - T_opt_opt)**2 - (T_trend_valid - T_opt_opt)**2
+    delta_sq = (T_valid - T_opt_opt)**2 - (T_lag_valid - T_opt_opt)**2
+    delta_sq_trend = (T_trend_valid - T_opt_opt)**2 - (T_trend_lag_valid - T_opt_opt)**2
+    X2 = delta_sq - delta_sq_trend
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y_valid, X_opt)
+    h2_quad = beta_ols[0]
+    h4_delta = beta_ols[1]
+    h2_quad_se = np.sqrt(cov[0, 0])
+    h4_delta_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for T_opt using numerical Hessian
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        n_valid,
+        n_params=3
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics (using valid observations only)
+    n_params = 3  # h2, h4, T_opt
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y_valid, residuals, n_params)
+
+    # Total R^2 (variance explained in original dy for valid obs)
+    dy_valid = data.growth_pcGDP[valid_mask]
+    total_r_sq = compute_total_r_squared(residuals, dy_valid)
+
+    # Compute RMS values for valid observations
+    j_trend_valid = trends_loess.y_loess[valid_mask]
+    k_values_valid = np.array([year_means[data.year[i]] for i in np.where(valid_mask)[0]])
+
+    # Climate response: h(T) - h(T_trend)
+    h_values = h2_quad * X1 + h4_delta * X2
+
+    # h(T_trend): need to compute using trend values
+    # h(T_trend(t)) = h2 * (T_trend(t) - T_opt)^2 + h4 * ((T_trend(t) - T_opt)^2 - (T_trend(t-1) - T_opt)^2)
+    h_of_T_trend = h2_quad * (T_trend_valid - T_opt_opt)**2 + h4_delta * delta_sq_trend
+
+    imbalance = h_of_T_trend + j_trend_valid + k_values_valid
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    rms_h = np.sqrt(np.mean(h_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_values,
+        'j': j_trend_valid,
+        'k': k_values_valid,
+    }
+    var_decomp = compute_variance_decomposition(components, dy_valid, total_r_sq)
+
+    # Compute variance attribution
+    Delta_u = h_values
+    v = h_of_T_trend
+    epsilon = dy_valid - (Delta_u + v + j_trend_valid + k_values_valid)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_valid, k_values_valid, epsilon, dy_valid)
+
+    return FitResultApproach8(
+        approach="7: Lagged Deviation LOESS",
+        h2=h2_quad,
+        h2_se=h2_quad_se,
+        h4=h4_delta,
+        h4_se=h4_delta_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_valid,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_method5_persistence_decay(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
@@ -2312,7 +2516,8 @@ def fit_all_approaches(
         'method3': Piecewise quadratic response with LOESS (if trends_loess provided)
         'method4': T response with quadratic departure (T-Ttrend)^2 (if trends_loess provided)
         'method5': Persistence decay model with LOESS (if trends_loess provided)
-        'method6': Piecewise model with departure term (if trends_loess provided)
+        'method6': Interaction model h3*(T-Topt)*(T-Ttrend) (if trends_loess provided)
+        'method7': Lagged deviation model (if trends_loess provided)
         'method0h0': No climate response, joint OLS (country trends + year effects only)
         'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
         'method2h0': No climate response, LOESS precomputed k (if trends_loess provided)
@@ -2321,8 +2526,8 @@ def fit_all_approaches(
         data: AnalysisData object
         trends: CountryTrends (unused, kept for API compatibility)
         trends_with_k: CountryTrends for method1 (fit to dy - k)
-        year_means: Pre-computed k[t] for methods 1-6
-        trends_loess: CountryTrendsLoess for methods 2-6 (LOESS detrending)
+        year_means: Pre-computed k[t] for methods 1-7
+        trends_loess: CountryTrendsLoess for methods 2-7 (LOESS detrending)
     """
     results = {
         'method0': fit_method0_no_detrending(data),
@@ -2356,6 +2561,9 @@ def fit_all_approaches(
             data, trends_loess, year_means
         )
         results['method6'] = fit_method6_piecewise_departure_loess(
+            data, trends_loess, year_means
+        )
+        results['method7'] = fit_method7_lagged_deviation_loess(
             data, trends_loess, year_means
         )
 

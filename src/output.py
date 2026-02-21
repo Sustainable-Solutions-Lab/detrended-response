@@ -52,6 +52,7 @@ METHOD_COLORS = {
     'method5': 'cyan',
     'method5h4pos': 'teal',
     'method6': 'green',
+    'method7': 'purple',
     'method0h0': 'gray',
     'method1h0': 'gray',
     'method2h0': 'gray',
@@ -70,6 +71,7 @@ METHOD_LINESTYLES = {
     'method4': (0, (5, 1)),   # densely dashed
     'method5': (0, (5, 1)),   # densely dashed
     'method6': (0, (5, 1)),   # densely dashed
+    'method7': (0, (5, 1)),   # densely dashed
     'method0h0': '--',
     'method1h0': ':',
     'method2h0': ':',
