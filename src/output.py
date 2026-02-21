@@ -77,6 +77,93 @@ METHOD_LINESTYLES = {
     'method2h0': ':',
 }
 
+# Mapping from method names (internal) to approach names (publication)
+# Note: method4, method6, method7 remain as methods for exploratory work only
+METHOD_TO_APPROACH = {
+    'method0': 'approach0',
+    'method1': 'approach1',
+    'method2': 'approach2',
+    'method3': 'approach3',
+    'method5': 'approach4',
+    'method5h4pos': 'approach4h4pos',
+    'method0h0': 'approach0h0',
+    'method1h0': 'approach1h0',
+    'method2h0': 'approach2h0',
+}
+
+# Reverse mapping: approach names to method names
+APPROACH_TO_METHOD = {v: k for k, v in METHOD_TO_APPROACH.items()}
+
+# Color scheme for approaches (publication naming)
+APPROACH_COLORS = {
+    'approach0': 'black',
+    'approach1': 'red',
+    'approach2': 'orange',
+    'approach3': 'magenta',
+    'approach4': 'cyan',
+    'approach4h4pos': 'teal',
+    'approach0h0': 'gray',
+    'approach1h0': 'gray',
+    'approach2h0': 'gray',
+}
+
+# Line style scheme for approaches (publication naming)
+APPROACH_LINESTYLES = {
+    'approach0': '-',
+    'approach1': '-.',
+    'approach2': (0, (5, 1)),   # densely dashed
+    'approach3': (0, (5, 1)),   # densely dashed
+    'approach4': (0, (5, 1)),   # densely dashed
+    'approach4h4pos': (0, (5, 1)),   # densely dashed
+    'approach0h0': '--',
+    'approach1h0': ':',
+    'approach2h0': ':',
+}
+
+
+def method_to_approach(method_name: str) -> str:
+    """Convert method name to approach name for publication output.
+
+    Returns the approach name if it exists in the mapping, otherwise returns
+    the original method name (for exploratory methods like method4, method6, method7).
+    """
+    return METHOD_TO_APPROACH.get(method_name, method_name)
+
+
+def approach_to_method(approach_name: str) -> str:
+    """Convert approach name to method name.
+
+    Returns the method name if it exists in the mapping, otherwise returns
+    the original approach name.
+    """
+    return APPROACH_TO_METHOD.get(approach_name, approach_name)
+
+
+def get_color(name: str, default: str = 'gray') -> str:
+    """Get color for method or approach name.
+
+    Checks both METHOD_COLORS and APPROACH_COLORS dictionaries.
+    Returns the color if found, otherwise returns the default.
+    """
+    if name in METHOD_COLORS:
+        return METHOD_COLORS[name]
+    if name in APPROACH_COLORS:
+        return APPROACH_COLORS[name]
+    return default
+
+
+def get_linestyle(name: str, default='-'):
+    """Get linestyle for method or approach name.
+
+    Checks both METHOD_LINESTYLES and APPROACH_LINESTYLES dictionaries.
+    Returns the linestyle if found, otherwise returns the default.
+    """
+    if name in METHOD_LINESTYLES:
+        return METHOD_LINESTYLES[name]
+    if name in APPROACH_LINESTYLES:
+        return APPROACH_LINESTYLES[name]
+    return default
+
 
 # ==============================================================================
 # Helper Functions
@@ -595,11 +682,11 @@ def _plot_temperature_response_subset(
         h_relative = compute_h_response(T, r)
 
         label = f"{r.approach} (T_opt = {T_opt:.1f}°C)"
-        ax.plot(T, h_relative, color=METHOD_COLORS.get(name, 'gray'),
-                linestyle=METHOD_LINESTYLES.get(name, '-'), label=label, linewidth=2)
+        ax.plot(T, h_relative, color=get_color(name, 'gray'),
+                linestyle=get_linestyle(name, '-'), label=label, linewidth=2)
 
         # Mark optimal temperature
-        ax.axvline(T_opt, color=METHOD_COLORS.get(name, 'gray'),
+        ax.axvline(T_opt, color=get_color(name, 'gray'),
                    linestyle=':', alpha=0.5)
 
     ax.axhline(0, color='gray', linewidth=0.5)
@@ -676,8 +763,8 @@ def _plot_temperature_derivative_subset(
         # Use helper function that handles both quadratic and power-law models
         dh_dT = compute_dh_dT(T, r)
         label = f"{r.approach}"
-        ax.plot(T, dh_dT, color=METHOD_COLORS.get(name, 'gray'),
-                linestyle=METHOD_LINESTYLES.get(name, '-'), label=label, linewidth=2)
+        ax.plot(T, dh_dT, color=get_color(name, 'gray'),
+                linestyle=get_linestyle(name, '-'), label=label, linewidth=2)
 
     ax.axhline(0, color='gray', linewidth=0.5)
     ax.set_xlabel('Temperature (°C)', fontsize=12)
@@ -789,7 +876,7 @@ def plot_optimal_temperature_comparison(
     T_opt = [r.T_opt for _, r in valid]
     valid_keys = [a for a, _ in valid]
 
-    colors = [METHOD_COLORS.get(a, 'gray') for a in valid_keys]
+    colors = [get_color(a, 'gray') for a in valid_keys]
     x = np.arange(len(valid))
 
     bars = ax.bar(x, T_opt, color=colors, alpha=0.7)
@@ -864,8 +951,8 @@ def plot_year_effects(
             k_values_plot = k_values
             label = f"{result.approach}"
 
-        ax.plot(unique_years, k_values_plot, color=METHOD_COLORS.get(name, 'gray'),
-                linestyle=METHOD_LINESTYLES.get(name, '-'), linewidth=1.5,
+        ax.plot(unique_years, k_values_plot, color=get_color(name, 'gray'),
+                linestyle=get_linestyle(name, '-'), linewidth=1.5,
                 label=label)
 
     ax.axhline(0, color='gray', linewidth=0.5)
@@ -1068,7 +1155,8 @@ def save_bootstrap_coefficients_csv(
 
     Creates: bootstrap_coefficients.csv with columns:
     - iteration (-1 for point estimate, 0+ for bootstrap)
-    - approach
+    - approach (uses approach naming for publication methods, method naming for exploratory)
+    - approach_name (human-readable description)
     - h1, h2, T_opt, r_squared, total_r_squared
     - f1 (GDP scaling exponent for approach 5d, linear modulation for 8b/8c)
     - h4 (curvature above T_opt for approach 8)
@@ -1078,10 +1166,12 @@ def save_bootstrap_coefficients_csv(
     """
     rows = []
     for name, result in results.items():
+        # Map method name to approach name for publication methods
+        approach_key = method_to_approach(name)
         # Write point estimates as iteration -1
         point_row = {
             'iteration': -1,
-            'approach': name,
+            'approach': approach_key,
             'approach_name': result.approach,
             'h1': result.h1_point,
             'h2': result.h2_point,
@@ -1103,7 +1193,7 @@ def save_bootstrap_coefficients_csv(
         for i in range(result.n_bootstrap):
             row = {
                 'iteration': i,
-                'approach': name,
+                'approach': approach_key,
                 'approach_name': result.approach,
                 'h1': result.h1_samples[i],
                 'h2': result.h2_samples[i],
@@ -1366,8 +1456,11 @@ def save_bootstrap_summary_table(
     for name, result in results.items():
         stats = all_stats[name]
 
+        # Map method name to approach name for publication methods
+        approach_key = method_to_approach(name)
+
         row = {
-            'approach': name,
+            'approach': approach_key,
             'approach_name': result.approach,
             'n_bootstrap': result.n_bootstrap,
             'n_successful': result.n_successful,
@@ -1655,7 +1748,7 @@ def save_bootstrap_k_samples_csv(
 
     Creates: bootstrap_k_samples.csv with columns:
     - iteration: bootstrap iteration number
-    - approach: approach key (e.g., 'approach5')
+    - approach: approach key (uses approach naming for publication methods)
     - approach_name: human-readable approach name
     - year: calendar year
     - k_value: k(t) value for that year in that bootstrap iteration
@@ -1665,12 +1758,15 @@ def save_bootstrap_k_samples_csv(
         if result.k_samples is None:
             continue
 
+        # Map method name to approach name for publication methods
+        approach_key = method_to_approach(name)
+
         for year in sorted(result.k_samples.keys()):
             k_array = result.k_samples[year]
             for i in range(result.n_bootstrap):
                 rows.append({
                     'iteration': i,
-                    'approach': name,
+                    'approach': approach_key,
                     'approach_name': result.approach,
                     'year': year,
                     'k_value': k_array[i],
@@ -1694,7 +1790,7 @@ def save_bootstrap_var_attrib_csv(
 
     Creates: bootstrap_var_attrib_samples.csv with columns:
     - iteration: bootstrap iteration number (-1 for point estimate, 0+ for bootstrap)
-    - approach: approach key (e.g., 'approach5')
+    - approach: approach key (uses approach naming for publication methods)
     - approach_name: human-readable approach name
     - All var_attrib keys (Sigma_Delta_u_Delta_u, Sigma_Delta_u_v, etc.)
 
@@ -1706,6 +1802,9 @@ def save_bootstrap_var_attrib_csv(
         if result.var_attrib_samples is None:
             continue
 
+        # Map method name to approach name for publication methods
+        approach_key = method_to_approach(name)
+
         # Get all keys from var_attrib_samples
         keys = sorted(result.var_attrib_samples.keys())
         if not keys:
@@ -1715,7 +1814,7 @@ def save_bootstrap_var_attrib_csv(
         if result.var_attrib_point is not None:
             row = {
                 'iteration': -1,
-                'approach': name,
+                'approach': approach_key,
                 'approach_name': result.approach,
             }
             for key in keys:
@@ -1726,7 +1825,7 @@ def save_bootstrap_var_attrib_csv(
         for i in range(result.n_bootstrap):
             row = {
                 'iteration': i,
-                'approach': name,
+                'approach': approach_key,
                 'approach_name': result.approach,
             }
             for key in keys:
@@ -2152,23 +2251,23 @@ def save_bootstrap_h_values(
 
     Creates: bootstrap_h_values.csv with columns:
     - iteration: bootstrap iteration number (-1 for point estimate, 0+ for bootstrap)
-    - approach: approach key (e.g., 'method0')
+    - approach: approach key (uses approach naming for publication methods)
     - iso3: country ISO3 code
     - year: calendar year
     - temp: temperature value
     - h_T: computed h(T) value
 
     The h(T) formula varies by approach:
-    - method0, method1, method2: h(T) = h1*T + h2*T²
+    - approach0, approach1, approach2: h(T) = h1*T + h2*T²
     - method4: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
-    - method3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
-    - method5: h_conv = h1*X1 + h2*X2 with persistence-decay accumulators
+    - approach3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+    - approach4: h_conv = h1*X1 + h2*X2 with persistence-decay accumulators
 
     Note: This file can be large (~2GB for 1000 iterations × 5 approaches × 9405 obs).
     Consider gzip compression after generation if needed.
 
     Args:
-        h_T_samples: Dict mapping approach name to array of shape (n_bootstrap, n_obs)
+        h_T_samples: Dict mapping method name to array of shape (n_bootstrap, n_obs)
         data: AnalysisData with country/year info
         output_dir: Output directory
         input_file: Input data filename for header comment
@@ -2207,6 +2306,9 @@ def save_bootstrap_h_values(
                     continue
                 r = original_results[name]
 
+                # Map method name to approach name for publication methods
+                approach_key = method_to_approach(name)
+
                 # Compute h(T) for each observation based on approach type
                 if name in ['method0', 'method1', 'method2']:
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
@@ -2230,13 +2332,15 @@ def save_bootstrap_h_values(
 
                 # Vectorized formatting for point estimates
                 lines = [
-                    f'-1,{name},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_point[i]:.8f}\n'
+                    f'-1,{approach_key},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_point[i]:.8f}\n'
                     for i in range(n_obs)
                 ]
                 f.write(''.join(lines))
 
         # Write bootstrap samples (iteration = 0, 1, ..., N-1)
         for name, arr in h_T_samples.items():
+            # Map method name to approach name for publication methods
+            approach_key = method_to_approach(name)
             n_bootstrap = arr.shape[0]
             buffer = []
 
@@ -2244,7 +2348,7 @@ def save_bootstrap_h_values(
                 h_T_row = arr[b]
                 # Build lines for this bootstrap iteration
                 for i in range(n_obs):
-                    buffer.append(f'{b},{name},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_row[i]:.8f}\n')
+                    buffer.append(f'{b},{approach_key},{iso3_arr[i]},{year_arr[i]},{temp_arr[i]:.4f},{h_T_row[i]:.8f}\n')
 
                 # Flush buffer when it reaches chunk size
                 if len(buffer) >= CHUNK_SIZE:
@@ -2378,7 +2482,7 @@ def plot_year_effects_bootstrap(
         k_p75 = np.array(k_p75)
         k_p95 = np.array(k_p95)
 
-        color = METHOD_COLORS.get(name, 'blue')
+        color = get_color(name, 'blue')
 
         # Plot 90% CI band
         ax.fill_between(years_array, k_p5, k_p95, alpha=0.2, color=color, linewidth=0)
@@ -2499,7 +2603,7 @@ def plot_combined_temp_response_and_year_effects(
     for col, name in enumerate(temp_approaches[:2]):
         ax = axes[0, col]
         result = results[name]
-        color = METHOD_COLORS.get(name, 'steelblue')
+        color = get_color(name, 'steelblue')
         pdata = temp_plot_data[name]
 
         # Add temperature histogram on secondary y-axis
@@ -2600,7 +2704,7 @@ def plot_combined_temp_response_and_year_effects(
         k_p75 = np.array(k_p75)
         k_p95 = np.array(k_p95)
 
-        color = METHOD_COLORS.get(name, 'blue')
+        color = get_color(name, 'blue')
 
         # Plot 90% CI band
         ax.fill_between(years_array, k_p5, k_p95, alpha=0.2, color=color, linewidth=0)
@@ -2689,7 +2793,7 @@ def plot_temperature_response_2panel(
     for col, name in enumerate(valid_approaches[:2]):
         ax = axes[col]
         result = results[name]
-        color = METHOD_COLORS.get(name, 'steelblue')
+        color = get_color(name, 'steelblue')
         pdata = plot_data[name]
 
         # Add temperature histogram on secondary y-axis
@@ -2833,7 +2937,7 @@ def plot_year_effects_2panel(
         k_p75 = np.array(k_p75)
         k_p95 = np.array(k_p95)
 
-        color = METHOD_COLORS.get(name, 'blue')
+        color = get_color(name, 'blue')
 
         # Plot 90% CI band
         ax.fill_between(years_array, k_p5, k_p95, alpha=0.2, color=color, linewidth=0)
@@ -3860,7 +3964,7 @@ def plot_bootstrap_temperature_response(
     for idx, (plot_key, result_key, display_name, variant) in enumerate(plot_entries):
         ax = axes[idx]
         result = results[result_key]
-        color = METHOD_COLORS.get(result_key, 'steelblue')
+        color = get_color(result_key, 'steelblue')
         pdata = plot_data[plot_key]
 
         # Add temperature histogram on secondary y-axis (if data provided)
@@ -3934,7 +4038,7 @@ def plot_bootstrap_T_optimal_comparison(
     for i, name in enumerate(approach_names):
         result = results[name]
         stats = all_stats[name]['T_opt']
-        color = METHOD_COLORS.get(name, 'gray')
+        color = get_color(name, 'gray')
 
         point_est = result.T_opt_point
         p5, p25, p50, p75, p95 = stats['p5'], stats['p25'], stats['p50'], stats['p75'], stats['p95']
@@ -4280,7 +4384,7 @@ def plot_bootstrap_temperature_derivative(
     # Second pass: create the plots
     for idx, (plot_key, result_key, display_name, variant) in enumerate(plot_entries):
         ax = axes[idx]
-        color = METHOD_COLORS.get(result_key, 'steelblue')
+        color = get_color(result_key, 'steelblue')
         pdata = plot_data[plot_key]
 
         # Plot 90% CI band
@@ -4367,7 +4471,7 @@ def plot_T_optimal_histograms(
     for idx, name in enumerate(approaches):
         ax = axes[idx]
         result = results[name]
-        color = METHOD_COLORS.get(name, 'steelblue')
+        color = get_color(name, 'steelblue')
 
         # Get valid samples
         valid_samples = result.T_opt_samples[~np.isnan(result.T_opt_samples)]
@@ -4481,7 +4585,7 @@ def plot_h2_histograms(
                     panels.append((
                         valid_low,
                         result.h2_point,
-                        METHOD_COLORS.get('method3', 'magenta'),
+                        get_color('approach3', 'magenta'),
                         'Approach 8: h₂ (T ≤ T_opt)',
                         False  # not h4
                     ))
@@ -4492,7 +4596,7 @@ def plot_h2_histograms(
                     panels.append((
                         valid_high,
                         result.h4_point,
-                        METHOD_COLORS.get('method3', 'magenta'),
+                        get_color('approach3', 'magenta'),
                         'Approach 8: h₄ (T > T_opt)',
                         True  # is h4
                     ))
@@ -4506,7 +4610,7 @@ def plot_h2_histograms(
                     panels.append((
                         valid_samples,
                         result.h2_point,
-                        METHOD_COLORS.get(approach, 'gray'),
+                        get_color(approach, 'gray'),
                         f'{approach_num}: h₂',
                         False  # not h2_high
                     ))
@@ -4600,15 +4704,15 @@ def plot_h2_histograms(
     plt.close()
 
 
-def plot_method5_persistence_decay(
+def plot_persistence_decay(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
     data: AnalysisData = None,
     T_range: tuple = (0, 30),
-    filename: str = 'fig_method5_persistence_decay.pdf',
+    filename: str = 'fig_approach4_persistence_decay.pdf',
     input_file: str = None,
 ) -> None:
-    """Plot method5 (persistence decay) 4-panel figure.
+    """Plot approach4 (persistence decay) 4-panel figure.
 
     Top row: All bootstrap samples
     Bottom row: Only bootstrap samples where h4 > 0 (persistence decay estimated)
@@ -4618,19 +4722,15 @@ def plot_method5_persistence_decay(
         [1,0] h(T) response (h4 > 0 only)     [1,1] h4 distribution (h4 > 0 only)
 
     Args:
-        results: Dict of BootstrapResult (must contain 'method5')
+        results: Dict of BootstrapResult (must contain 'approach4')
         output_dir: Directory to save the plot
         data: AnalysisData for temperature histogram overlay
         T_range: Temperature range for x-axis (default: 0-30°C)
         filename: Output filename
         input_file: Path to input data file (for annotation)
     """
-    if 'method5' not in results:
-        print("      [Figures] WARNING: method5 not in results, skipping persistence decay figure")
-        return
-
-    result = results['method5']
-    color = METHOD_COLORS.get('method5', 'cyan')
+    result = results['approach4']
+    color = get_color('approach4', 'cyan')
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
 
@@ -5089,7 +5189,7 @@ def plot_temperature_response_4panel_variants(
     # Top-left: Approach 6 (standard quadratic)
     ax = axes[0, 0]
     result6 = results['method2']
-    color6 = METHOD_COLORS.get('method2', 'orange')
+    color6 = get_color('approach2', 'orange')
     h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
         result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='method2'
     )
@@ -5124,7 +5224,7 @@ def plot_temperature_response_4panel_variants(
     # Top-right: Approach 8 (piecewise quadratic)
     ax = axes[0, 1]
     result8 = results['method3']
-    color8 = METHOD_COLORS.get('method3', 'magenta')
+    color8 = get_color('approach3', 'magenta')
     h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
         result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='method3'
     )
@@ -5159,7 +5259,7 @@ def plot_temperature_response_4panel_variants(
     # Bottom-left: Approach 6e actual T component (h1*T + h2*T²)
     ax = axes[1, 0]
     result6e = results['method4']
-    color6e = METHOD_COLORS.get('method4', 'salmon')
+    color6e = get_color('method4', 'salmon')
 
     h1_samples = result6e.h1_samples
     h2_samples = result6e.h2_samples
@@ -5304,7 +5404,7 @@ def plot_temperature_derivative_4panel_variants(
     # Top-left: Approach 6 (standard quadratic derivative)
     ax = axes[0, 0]
     result6 = results['method2']
-    color6 = METHOD_COLORS.get('method2', 'orange')
+    color6 = get_color('approach2', 'orange')
 
     dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
         result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='method2'
@@ -5325,7 +5425,7 @@ def plot_temperature_derivative_4panel_variants(
     # Top-right: Approach 8 (piecewise quadratic derivative)
     ax = axes[0, 1]
     result8 = results['method3']
-    color8 = METHOD_COLORS.get('method3', 'magenta')
+    color8 = get_color('approach3', 'magenta')
 
     dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
         result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='method3'
@@ -5346,7 +5446,7 @@ def plot_temperature_derivative_4panel_variants(
     # Bottom-left: Approach 6e actual T component derivative (h1 + 2*h2*T)
     ax = axes[1, 0]
     result6e = results['method4']
-    color6e = METHOD_COLORS.get('method4', 'salmon')
+    color6e = get_color('method4', 'salmon')
 
     h1_samples = result6e.h1_samples
     h2_samples = result6e.h2_samples

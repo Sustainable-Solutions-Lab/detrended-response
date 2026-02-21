@@ -19,7 +19,6 @@ from src.output import (
     plot_h2_histograms,
     plot_year_effects_bootstrap,
     plot_combined_temp_response_and_year_effects,
-    plot_climate_response_contours,
     plot_temperature_response_2panel,
     plot_year_effects_2panel,
     plot_temperature_response_4panel_variants,
@@ -211,52 +210,53 @@ def generate_variance_decomposition_table(
         return
 
     # Default approaches to include (publication set)
+    # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5h4pos']
+        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
 
-    # Filter to approaches that exist in the data (excluding method5h4pos for now)
-    available_approaches = [a for a in approaches if a != 'method5h4pos' and a in var_attrib_df['approach'].values]
+    # Filter to approaches that exist in the data (excluding approach4h4pos for now)
+    available_approaches = [a for a in approaches if a != 'approach4h4pos' and a in var_attrib_df['approach'].values]
     if not available_approaches:
         print("      [Tables] WARNING: No matching approaches found in var_attrib data")
         return
 
-    # Handle method5h4pos: filter method5 data to iterations where h4 > 0.001
-    method5h4pos_data = None
+    # Handle approach4h4pos: filter approach4 data to iterations where h4 > 0.001
+    approach4h4pos_data = None
     coefficients_df = bootstrap_results.get('bootstrap_coefficients')
-    if 'method5h4pos' in approaches and 'method5' in var_attrib_df['approach'].values and coefficients_df is not None:
-        # Get h4 values for method5 bootstrap iterations
-        method5_coef = coefficients_df[coefficients_df['approach'] == 'method5']
-        h4_positive_mask = method5_coef['h4'] > 0.001
-        h4_positive_iters = set(method5_coef.loc[h4_positive_mask, 'iteration'].values)
+    if 'approach4h4pos' in approaches and 'approach4' in var_attrib_df['approach'].values and coefficients_df is not None:
+        # Get h4 values for approach4 bootstrap iterations
+        approach4_coef = coefficients_df[coefficients_df['approach'] == 'approach4']
+        h4_positive_mask = approach4_coef['h4'] > 0.001
+        h4_positive_iters = set(approach4_coef.loc[h4_positive_mask, 'iteration'].values)
 
         if h4_positive_iters:
-            # Filter method5 var_attrib data to h4-positive iterations
-            method5_var_attrib = var_attrib_df[var_attrib_df['approach'] == 'method5']
-            filtered_var_attrib = method5_var_attrib[
-                method5_var_attrib['iteration'].isin(h4_positive_iters) |
-                (method5_var_attrib['iteration'] == -1)  # Keep point estimate
+            # Filter approach4 var_attrib data to h4-positive iterations
+            approach4_var_attrib = var_attrib_df[var_attrib_df['approach'] == 'approach4']
+            filtered_var_attrib = approach4_var_attrib[
+                approach4_var_attrib['iteration'].isin(h4_positive_iters) |
+                (approach4_var_attrib['iteration'] == -1)  # Keep point estimate
             ].copy()
-            filtered_var_attrib['approach'] = 'method5h4pos'
-            method5h4pos_data = filtered_var_attrib
+            filtered_var_attrib['approach'] = 'approach4h4pos'
+            approach4h4pos_data = filtered_var_attrib
 
-            # Also filter coefficients for method5h4pos
-            filtered_coef = method5_coef[
-                method5_coef['iteration'].isin(h4_positive_iters) |
-                (method5_coef['iteration'] == -1)
+            # Also filter coefficients for approach4h4pos
+            filtered_coef = approach4_coef[
+                approach4_coef['iteration'].isin(h4_positive_iters) |
+                (approach4_coef['iteration'] == -1)
             ].copy()
-            filtered_coef['approach'] = 'method5h4pos'
+            filtered_coef['approach'] = 'approach4h4pos'
 
             # Add to available approaches and append filtered data to var_attrib_df
-            available_approaches.append('method5h4pos')
-            var_attrib_df = pd.concat([var_attrib_df, method5h4pos_data], ignore_index=True)
+            available_approaches.append('approach4h4pos')
+            var_attrib_df = pd.concat([var_attrib_df, approach4h4pos_data], ignore_index=True)
 
             # Also add to coefficients_df for Total R² row
             coefficients_df = pd.concat([coefficients_df, filtered_coef], ignore_index=True)
             bootstrap_results['bootstrap_coefficients'] = coefficients_df
 
-            print(f"      [Tables] Created method5h4pos from {len(h4_positive_iters)} iterations with h4 > 0.001")
+            print(f"      [Tables] Created approach4h4pos from {len(h4_positive_iters)} iterations with h4 > 0.001")
         else:
-            print("      [Tables] WARNING: No method5 iterations with h4 > 0.001, skipping method5h4pos")
+            print("      [Tables] WARNING: No approach4 iterations with h4 > 0.001, skipping approach4h4pos")
 
     # Define the metrics to include in the table (in order)
     # These correspond to var_attrib keys, normalized by var_dy
@@ -334,8 +334,8 @@ def generate_variance_decomposition_table(
     # Get approach display names
     approach_names = {}
     for approach in available_approaches:
-        if approach == 'method5h4pos':
-            approach_names[approach] = '5: Persistence Decay LOESS (h4>0)'
+        if approach == 'approach4h4pos':
+            approach_names[approach] = '4: Persistence Decay LOESS (h4>0)'
         else:
             mask = summary_df['approach'] == approach
             if mask.any():
@@ -627,8 +627,9 @@ def generate_bootstrap_comparison_table(
         return
 
     # Default approaches to include (publication set, same as variance decomposition table)
+    # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['method0', 'method0h0', 'method1', 'method1h0', 'method2', 'method3', 'method4', 'method5', 'method5h4pos']
+        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -641,7 +642,7 @@ def generate_bootstrap_comparison_table(
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
     # Additional parameters for approach 6b/6c/6e (departure/trend coefficients: h3, h4)
     trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
-    # Note: For piecewise method3, h2 = curvature below T_opt, h4 = curvature above T_opt
+    # Note: For piecewise approach3, h2 = curvature below T_opt, h4 = curvature above T_opt
     # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
 
     # Percentiles to include
@@ -787,12 +788,13 @@ def generate_figures(
     print(f"      [Figures] Reconstructed {len(results)} approaches")
 
     # Define approach patterns for publication figures
-    # 4-panel layout: [[row0: method0, method1], [row1: method2, method4]]
-    approaches_4panel = ['method0', 'method1', 'method2', 'method4']
-    # 2-panel layout: [col0: method2, col1: method3]
-    approaches_2panel = ['method2', 'method3']
-    # 6-panel layout: includes method5 (persistence decay)
-    approaches_6panel = ['method0', 'method1', 'method2', 'method3', 'method4', 'method5']
+    # Only includes approaches, not exploratory methods
+    # 4-panel layout: [[row0: approach0, approach1], [row1: approach2, approach3]]
+    approaches_4panel = ['approach0', 'approach1', 'approach2', 'approach3']
+    # 2-panel layout: [col0: approach2, col1: approach3]
+    approaches_2panel = ['approach2', 'approach3']
+    # 5-panel layout: includes approach4 (persistence decay)
+    approaches_5panel = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
 
     # Figure 1a: Temperature response (2 panels)
     if data is not None:
@@ -801,7 +803,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['method0', 'method1'],
+            approaches=['approach0', 'approach1'],
             filename='fig_temperature_response_main.pdf',
             T_range=(0, 30),
             input_file=None,
@@ -814,7 +816,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['method0', 'method2'],
+            approaches=['approach0', 'approach2'],
             filename='fig_year_effects_main.pdf',
             input_file=None,
         )
@@ -868,23 +870,23 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
 
-    # Figure 6b: T_optimal histograms - 6 panels (all main methods including method5)
-    print("      [Figures] Generating T_optimal histogram figure (6 panels)...")
+    # Figure 6b: T_optimal histograms - 5 panels (all main approaches including approach4)
+    print("      [Figures] Generating T_optimal histogram figure (5 panels)...")
     plot_T_optimal_histograms(
         results,
         output_dir,
-        approaches=approaches_6panel,
-        filename='fig_T_optimal_histogram_6panel.pdf',
+        approaches=approaches_5panel,
+        filename='fig_T_optimal_histogram_5panel.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_T_optimal_histogram_6panel.pdf")
+    print("      [Figures] Saved fig_T_optimal_histogram_5panel.pdf")
 
-    # Figure 7: h2 coefficient histograms - 4 panels [[method0, method1], [method2, method4]]
+    # Figure 7: h2 coefficient histograms - 4 panels [[approach0, approach1], [approach2, approach3]]
     print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['method0', 'method1', 'method2', 'method4'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         filename='fig_h2_histogram_4panel.pdf',
@@ -892,25 +894,25 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
 
-    # Figure 7b: h2 coefficient histograms - 6 panels (all main methods including method5)
-    print("      [Figures] Generating h2 coefficient histogram figure (6 panels)...")
+    # Figure 7b: h2 coefficient histograms - 5 panels (all main approaches including approach4)
+    print("      [Figures] Generating h2 coefficient histogram figure (5 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=approaches_6panel,
+        approaches=approaches_5panel,
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
-        filename='fig_h2_histogram_6panel.pdf',
+        filename='fig_h2_histogram_5panel.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_h2_histogram_6panel.pdf")
+    print("      [Figures] Saved fig_h2_histogram_5panel.pdf")
 
-    # Figure 8: h2 coefficient histograms - 3 panels (method2 h2, method3 h2_low, method3 h2_high)
+    # Figure 8: h2 coefficient histograms - 3 panels (approach2 h2, approach3 h2_low, approach3 h2_high)
     print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['method2', 'method3'],
+        approaches=['approach2', 'approach3'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         x_range_h2_high=(-0.01, 0.001),
@@ -933,30 +935,17 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
 
-    # Figure 10: Climate response contours for method4 (departure term)
-    print("      [Figures] Generating climate response contour figure (method4)...")
-    plot_climate_response_contours(
-        results,
-        output_dir,
-        approaches=['method4'],
-        filename='fig_climate_response_contours.pdf',
-        Ttrend_range=(0, 30),
-        deltaT_range=(-5, 5),
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_climate_response_contours.pdf")
-
-    # Figure 11: Method5 persistence decay (h(T) response + h4 distribution)
-    print("      [Figures] Generating method5 persistence decay figure...")
-    from .output import plot_method5_persistence_decay
-    plot_method5_persistence_decay(
+    # Figure 10: Approach4 persistence decay (h(T) response + h4 distribution)
+    print("      [Figures] Generating approach4 persistence decay figure...")
+    from .output import plot_persistence_decay
+    plot_persistence_decay(
         results,
         output_dir,
         data=data,
         T_range=(0, 30),
-        filename='fig_method5_persistence_decay.pdf',
+        filename='fig_approach4_persistence_decay.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_method5_persistence_decay.pdf")
+    print("      [Figures] Saved fig_approach4_persistence_decay.pdf")
 
     # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)
