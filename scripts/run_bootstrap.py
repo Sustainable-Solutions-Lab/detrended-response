@@ -98,8 +98,8 @@ def main():
     parser.add_argument(
         "--loess-window",
         type=float,
-        default=39.4,
-        help="Window size in years for LOESS smoothing (default: 39.4)",
+        default=42.447947771790915,
+        help="Window size in years for LOESS smoothing (default: 42.45)",
     )
     parser.add_argument(
         "--mean-weight-distance",

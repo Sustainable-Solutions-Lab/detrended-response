@@ -9,8 +9,9 @@ Methods:
     method1: Pre-computed k with linear T + quadratic GDP detrending
     method2: Pre-computed k with LOESS trends
     method3: Piecewise quadratic response with LOESS
-    method4: T response with quadratic departure term
+    method4: T response with quadratic departure term (T-Ttrend)^2
     method5: Persistence decay model with LOESS
+    method6: Piecewise model with departure term
     method0h0: Null model (h1=h2=0) for method0
     method1h0: Null model (h1=h2=0) for method1
 
@@ -79,8 +80,8 @@ def main():
     parser.add_argument(
         "--loess-window",
         type=float,
-        default=39.4,
-        help="Window size in years for LOESS smoothing (default: 39.4)",
+        default=42.447947771790915,
+        help="Window size in years for LOESS smoothing (default: 42.45)",
     )
     parser.add_argument(
         "--mean-weight-distance",
@@ -197,6 +198,11 @@ def main():
                 print(f"  T_opt = {r.T_opt:.2f} C")
             else:
                 print(f"  T_opt = N/A")
+
+        # method6: h3 (interaction), T_opt
+        elif name == 'method6' and hasattr(r, 'h4'):
+            print(f"  h3 (interaction) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:
             # Standard methods (method0, method1, method2, null models)

@@ -1136,14 +1136,14 @@ def fit_method2_precomputed_k_loess(
 def fit_method4_quadratic_departure_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResultApproach6ab:
-    """Approach 6e: T response with quadratic departure term only (LOESS detrending).
+    """Method 4: T response with quadratic departure term (LOESS detrending).
 
-    Model: h(T, Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
-
-    Regression: Δy* = h(T, Ttrend) - h(Ttrend, Ttrend)
-              = h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
+    Model: Δy* = h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
 
     3-parameter OLS with design matrix: [(T-Ttrend), (T²-Ttrend²), (T-Ttrend)²]
+
+    The h4*(T-Ttrend)² term captures quadratic effects of temperature departures
+    from trend, allowing asymmetric response to warm vs cold anomalies.
 
     Args:
         data: AnalysisData object
@@ -1158,6 +1158,7 @@ def fit_method4_quadratic_departure_loess(
     Ttrend = trends_loess.T_loess
     T_dep = T - Ttrend  # Departure from trend
     T2_dep = T**2 - Ttrend**2  # T² - Ttrend²
+    T_dep_sq = T_dep**2  # (T - Ttrend)²
 
     # Compute dependent variable: dy - k[t] - y_loess (same as approach 6)
     y = np.zeros(data.n_obs)
@@ -1166,8 +1167,7 @@ def fit_method4_quadratic_departure_loess(
         y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
 
     # Design matrix: [(T-Ttrend), (T²-Ttrend²), (T-Ttrend)²]
-    # This implements h(T,Ttrend) - h(Ttrend,Ttrend)
-    X = np.column_stack([T_dep, T2_dep, T_dep**2])
+    X = np.column_stack([T_dep, T2_dep, T_dep_sq])
 
     # Fit OLS
     beta, residuals, sigma_sq, cov = fit_ols(y, X)
@@ -1175,7 +1175,7 @@ def fit_method4_quadratic_departure_loess(
     # Extract coefficients
     h1_linear = beta[0]   # Linear coef for (T - Ttrend)
     h2_T = beta[1]        # Quadratic coef for (T² - Ttrend²)
-    h4_dep = beta[2]      # Quadratic coef for departure
+    h4_dep = beta[2]      # Quadratic coef for (T - Ttrend)²
     h1_linear_se = np.sqrt(cov[0, 0])
     h2_T_se = np.sqrt(cov[1, 1])
     h4_dep_se = np.sqrt(cov[2, 2])
@@ -1192,15 +1192,15 @@ def fit_method4_quadratic_departure_loess(
 
     # Optimal temperatures
     T_optimal_T = compute_T_optimal(h1_linear, h2_T)
-    # For quadratic-only departure: optimal is at T-Ttrend = 0
-    T_optimal_dep = 0.0
+    # Optimal departure: -h1/(2*h4)
+    T_optimal_dep = -h1_linear / (2 * h4_dep) if abs(h4_dep) > 1e-10 else 0.0
 
     # Compute RMS values
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
-    # h(T, Ttrend) - h(Ttrend, Ttrend) = h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
-    h_response = h1_linear * T_dep + h2_T * T2_dep + h4_dep * T_dep**2
+    # h_response = h1*(T-Ttrend) + h2*(T²-Ttrend²) + h4*(T-Ttrend)²
+    h_response = h1_linear * T_dep + h2_T * T2_dep + h4_dep * T_dep_sq
 
     # RMS imbalance: at trend, response is 0 by construction
     imbalance = j_trend + k_values
@@ -1228,7 +1228,7 @@ def fit_method4_quadratic_departure_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach6ab(
-        approach="6e: T/Quadratic Departure LOESS",
+        approach="4: T/Quadratic Departure LOESS",
         h1=h1_linear,
         h2=h2_T,
         h1_se=h1_linear_se,
@@ -1535,6 +1535,159 @@ def fit_method3_piecewise_loess(
         h2_se=h2_low_se,
         h4=h2_high,
         h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_method6_piecewise_departure_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    T_opt_bounds: tuple = (0.0, 30.0),
+) -> FitResultApproach8:
+    """Method 6: Pure interaction model (LOESS detrending).
+
+    Model: h(T) = h3 * (T - T_opt) * (T - T_trend)
+
+    The interaction term (T - T_opt) * (T - T_trend) captures:
+    - h3 < 0: hot + warming is bad, cold + cooling is bad
+    - h3 > 0: hot + warming is good, cold + cooling is good
+
+    Using h(T) - h(T_trend) formulation:
+    - X = (T - T_opt) * (T - T_trend)  (interaction term, zero at T = T_trend)
+
+    Model: y* = h3 * X (single parameter OLS after fixing T_opt)
+
+    DOF: 1 parameter (h3) + 1 searched (T_opt) = 2 total
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+
+    Returns:
+        FitResultApproach8 with T_opt, h2=0, h4=h3 (interaction coef)
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as method2)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    # Use raw temperature and trend
+    T = data.temp
+    T_trend = trends_loess.T_loess
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving single-parameter OLS for h3."""
+        # X: interaction term (T - T_opt) * (T - T_trend)
+        X = (T - T_opt_val) * (T - T_trend)
+
+        # Solve OLS: min ||y - X * h3||^2
+        # h3 = (X'X)^-1 X'y = sum(X*y) / sum(X^2)
+        XtX = np.sum(X * X)
+        if XtX < 1e-10:
+            return np.inf
+        h3 = np.sum(X * y) / XtX
+        y_pred = X * h3
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # Initial guess: T_opt = 15C
+    x0 = 15.0
+
+    # 1D optimization using L-BFGS-B
+    result = minimize(
+        lambda x: compute_sse_for_T_opt(x[0]),
+        x0=[x0],
+        bounds=[T_opt_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    T_opt_opt = result.x[0]
+
+    # Re-fit at optimal T_opt to get h3, residuals, covariance
+    X = (T - T_opt_opt) * (T - T_trend)
+    X_col = X.reshape(-1, 1)
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_col)
+    h3_int = beta_ols[0]    # Interaction coefficient
+    h3_int_se = np.sqrt(cov[0, 0])
+
+    # Compute SE for T_opt using numerical Hessian
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        data.n_obs,
+        n_params=2
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 2  # h3, T_opt
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R^2 (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Compute RMS imbalance: h(T_trend) + j_trend + k
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # Climate response values: h(T) - h(T_trend) = h3 * (T - T_opt) * (T - T_trend)
+    # Note: h(T_trend) = h3 * (T_trend - T_opt) * 0 = 0
+    h_values = h3_int * X
+
+    # h(T_trend) = 0 since (T_trend - T_trend) = 0
+    h_of_T_trend = np.zeros(data.n_obs)
+
+    imbalance = h_of_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # Compute RMS of h(T) - h(T_trend) - climate response to temperature fluctuations
+    rms_h = np.sqrt(np.mean(h_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    Delta_u = h_values      # h(T) - h(T_trend)
+    v = h_of_T_trend        # h(T_trend) = 0
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    # Return using FitResultApproach8
+    # Note: h2 = 0 (no quadratic term), h4 = h3 interaction coef
+    return FitResultApproach8(
+        approach="6: Interaction Model LOESS",
+        h2=0.0,
+        h2_se=0.0,
+        h4=h3_int,          # interaction coefficient stored in h4 slot
+        h4_se=h3_int_se,
         T_opt=T_opt_opt,
         T_opt_se=T_opt_se,
         k=k,
@@ -2157,8 +2310,9 @@ def fit_all_approaches(
         'method1': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'method2': Pre-computed k with LOESS trends (if trends_loess provided)
         'method3': Piecewise quadratic response with LOESS (if trends_loess provided)
-        'method4': T response with quadratic departure only (if trends_loess provided)
+        'method4': T response with quadratic departure (T-Ttrend)^2 (if trends_loess provided)
         'method5': Persistence decay model with LOESS (if trends_loess provided)
+        'method6': Piecewise model with departure term (if trends_loess provided)
         'method0h0': No climate response, joint OLS (country trends + year effects only)
         'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
         'method2h0': No climate response, LOESS precomputed k (if trends_loess provided)
@@ -2167,8 +2321,8 @@ def fit_all_approaches(
         data: AnalysisData object
         trends: CountryTrends (unused, kept for API compatibility)
         trends_with_k: CountryTrends for method1 (fit to dy - k)
-        year_means: Pre-computed k[t] for methods 1-5
-        trends_loess: CountryTrendsLoess for methods 2-5 (LOESS detrending)
+        year_means: Pre-computed k[t] for methods 1-6
+        trends_loess: CountryTrendsLoess for methods 2-6 (LOESS detrending)
     """
     results = {
         'method0': fit_method0_no_detrending(data),
@@ -2184,7 +2338,7 @@ def fit_all_approaches(
             data, trends_with_k, year_means
         )
 
-    # Add methods 2, 3, 4, 5 and method2h0 if trends_loess and year_means are provided
+    # Add methods 2, 3, 4, 5, 6 and method2h0 if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         results['method2'] = fit_method2_precomputed_k_loess(
             data, trends_loess, year_means
@@ -2199,6 +2353,9 @@ def fit_all_approaches(
             data, trends_loess, year_means
         )
         results['method5'] = fit_method5_persistence_decay(
+            data, trends_loess, year_means
+        )
+        results['method6'] = fit_method6_piecewise_departure_loess(
             data, trends_loess, year_means
         )
 

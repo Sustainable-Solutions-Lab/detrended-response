@@ -12,8 +12,9 @@ import numpy as np
 # ==============================================================================
 
 # Default window size in years for LOESS smoothing
-# 39.4 years chosen to match Total R² of quadratic polynomial detrending (method1h0)
-DEFAULT_LOESS_WINDOW_YEARS = 39.4
+# 42.45 years chosen to match Total R² of quadratic polynomial detrending (method1h0)
+# with 140 countries (those having data in both 1961 and 2022)
+DEFAULT_LOESS_WINDOW_YEARS = 42.447947771790915
 
 # Minimum number of points required for LOESS fitting
 MIN_LOESS_POINTS = 3
@@ -407,10 +408,7 @@ def compute_country_trends_with_k(
 def fit_loess_continuous(
     t: np.ndarray, y: np.ndarray, bandwidth: float, degree: int = 1
 ) -> np.ndarray:
-    """LOESS with continuous bandwidth parameter.
-
-    Unlike statsmodels lowess which uses k-nearest neighbors (discrete),
-    this uses a continuous bandwidth with tricube weights.
+    """LOESS with continuous bandwidth parameter using tricube weights.
 
     Args:
         t: Time values
@@ -450,7 +448,7 @@ def fit_loess_continuous(
 def fit_loess_trend(
     t: np.ndarray, y: np.ndarray, window_years: float = DEFAULT_LOESS_WINDOW_YEARS
 ) -> np.ndarray:
-    """Fit LOESS trend using continuous bandwidth.
+    """Fit LOESS trend using continuous bandwidth with tricube weights.
 
     Args:
         t: Time values

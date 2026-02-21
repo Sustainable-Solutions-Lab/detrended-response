@@ -51,6 +51,7 @@ METHOD_COLORS = {
     'method4': 'salmon',
     'method5': 'cyan',
     'method5h4pos': 'teal',
+    'method6': 'green',
     'method0h0': 'gray',
     'method1h0': 'gray',
     'method2h0': 'gray',
@@ -68,6 +69,7 @@ METHOD_LINESTYLES = {
     'method3': (0, (5, 1)),   # densely dashed
     'method4': (0, (5, 1)),   # densely dashed
     'method5': (0, (5, 1)),   # densely dashed
+    'method6': (0, (5, 1)),   # densely dashed
     'method0h0': '--',
     'method1h0': ':',
     'method2h0': ':',
@@ -2664,8 +2666,8 @@ def plot_temperature_response_2panel(
         temp_recent = data.temp[mask_recent]
 
     # Fixed y-axis range for publication consistency
-    y_min, y_max = -0.25, 0.00
-    y_ticks = np.arange(-0.25, 0.01, 0.05)
+    y_min, y_max = -0.15, 0.00
+    y_ticks = np.arange(-0.15, 0.01, 0.03)
 
     # Compute plot data
     plot_data = {}
@@ -4711,7 +4713,7 @@ def plot_method5_persistence_decay(
         ax.set_ylabel('h(T) - h(T_opt)')
         ax.set_title(title)
         ax.set_xlim(T_range)
-        ax.set_ylim(-0.25, 0.0)
+        ax.set_ylim(-0.15, 0.0)
         ax.legend(loc='lower left', fontsize=8)
 
     # Helper function to plot h4 histogram panel
@@ -5066,8 +5068,8 @@ def plot_temperature_response_4panel_variants(
     T_dep = np.linspace(T_dep_range[0], T_dep_range[1], 200)
 
     # Fixed y-axis range for publication consistency
-    y_min, y_max = -0.25, 0.00
-    y_ticks = np.arange(-0.25, 0.01, 0.05)
+    y_min, y_max = -0.15, 0.00
+    y_ticks = np.arange(-0.15, 0.01, 0.03)
 
     # Get temperature data from most recent year for histogram
     temp_recent = None
@@ -5245,9 +5247,9 @@ def plot_temperature_response_4panel_variants(
     ax.set_xlim(T_dep_range)
     ax.set_xticks([-1.5, -1, -0.5, 0, 0.5, 1, 1.5])
     ax.set_xticks([-1.25, -0.75, -0.25, 0.25, 0.75, 1.25], minor=True)
-    # Use 1/10 scale for y-axis on departure panel (matching 1/10 x-axis zoom)
-    y_min_dep, y_max_dep = -0.025, 0.00
-    y_ticks_dep = np.arange(-0.025, 0.001, 0.005)
+    # Use symmetric y-axis for departure panel to show both positive and negative h4 effects
+    y_min_dep, y_max_dep = -0.015, 0.015
+    y_ticks_dep = np.arange(-0.015, 0.016, 0.005)
     ax.set_ylim(y_min_dep, y_max_dep)
     ax.set_yticks(y_ticks_dep)
     ax.grid(True, alpha=0.3, which='both')

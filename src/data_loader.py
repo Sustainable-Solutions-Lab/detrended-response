@@ -185,6 +185,12 @@ def load_data(maddison_path: str, cru_path: str,
     # NOW filter by year range (after growth is computed)
     df = df[(df['year'] >= year_min) & (df['year'] <= year_max)].copy()
 
+    # Filter to countries that have data in both the first and last years
+    countries_with_first_year = set(df[df['year'] == year_min]['iso_id'])
+    countries_with_last_year = set(df[df['year'] == year_max]['iso_id'])
+    countries_with_both = countries_with_first_year & countries_with_last_year
+    df = df[df['iso_id'].isin(countries_with_both)].copy()
+
     # Create country index mapping (sorted for reproducibility)
     unique_countries = sorted(df['iso_id'].unique())
     iso_to_idx = {iso: i for i, iso in enumerate(unique_countries)}
@@ -246,6 +252,12 @@ def load_data_from_csv(csv_path: str,
     # Determine actual year range from data
     actual_year_min = int(df['year'].min())
     actual_year_max = int(df['year'].max())
+
+    # Filter to countries that have data in both the first and last years
+    countries_with_first_year = set(df[df['year'] == actual_year_min]['iso_id'])
+    countries_with_last_year = set(df[df['year'] == actual_year_max]['iso_id'])
+    countries_with_both = countries_with_first_year & countries_with_last_year
+    df = df[df['iso_id'].isin(countries_with_both)].copy()
 
     # Create country index mapping (sorted for reproducibility)
     unique_countries = sorted(df['iso_id'].unique())
