@@ -246,26 +246,28 @@ def plot_cumulative_effects_boxplot(
             # Position for this box
             pos = cluster_center + (j - (n_approaches - 1) / 2) * box_width
 
-            # Draw box
+            # Draw box (only if we have bootstrap data)
             color = APPROACH_COLORS.get(approach, 'gray')
-            box = ax.boxplot(
-                [bootstrap_values],
-                positions=[pos],
-                widths=box_width * 0.8,
-                patch_artist=True,
-                showfliers=False,
-                whis=[5, 95],  # Whiskers at 5th and 95th percentile
-                medianprops=dict(color='black', linewidth=1),
-            )
+            if len(bootstrap_values) > 0:
+                box = ax.boxplot(
+                    [bootstrap_values],
+                    positions=[pos],
+                    widths=box_width * 0.8,
+                    patch_artist=True,
+                    showfliers=False,
+                    whis=[5, 95],  # Whiskers at 5th and 95th percentile
+                    medianprops=dict(color='black', linewidth=1),
+                )
 
-            # Color the box
-            for patch in box['boxes']:
-                patch.set_facecolor(color)
-                patch.set_alpha(0.7)
+                # Color the box
+                for patch in box['boxes']:
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.7)
 
-            # Add point estimate as diamond marker
-            ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
-                    markeredgecolor='black', markeredgewidth=1, zorder=10)
+            # Add point estimate as diamond marker (only if we have a valid estimate)
+            if not np.isnan(point_estimate):
+                ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
+                        markeredgecolor='black', markeredgewidth=1, zorder=10)
 
     # X-axis labels (country codes with percentile info)
     x_labels = [get_country_label(k, representatives) for k in country_keys]
@@ -380,26 +382,28 @@ def plot_cumulative_effects_by_approach_grouped(
             # Position for this box
             pos = cluster_center + (j - (n_countries - 1) / 2) * box_width
 
-            # Draw box - color by country
+            # Draw box - color by country (only if we have bootstrap data)
             color = COUNTRY_COLORS.get(country_key, 'gray')
-            box = ax.boxplot(
-                [bootstrap_values],
-                positions=[pos],
-                widths=box_width * 0.8,
-                patch_artist=True,
-                showfliers=False,
-                whis=[5, 95],  # Whiskers at 5th and 95th percentile
-                medianprops=dict(color='black', linewidth=1),
-            )
+            if len(bootstrap_values) > 0:
+                box = ax.boxplot(
+                    [bootstrap_values],
+                    positions=[pos],
+                    widths=box_width * 0.8,
+                    patch_artist=True,
+                    showfliers=False,
+                    whis=[5, 95],  # Whiskers at 5th and 95th percentile
+                    medianprops=dict(color='black', linewidth=1),
+                )
 
-            # Color the box
-            for patch in box['boxes']:
-                patch.set_facecolor(color)
-                patch.set_alpha(0.7)
+                # Color the box
+                for patch in box['boxes']:
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.7)
 
-            # Add point estimate as diamond marker
-            ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
-                    markeredgecolor='black', markeredgewidth=1, zorder=10)
+            # Add point estimate as diamond marker (only if we have a valid estimate)
+            if not np.isnan(point_estimate):
+                ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
+                        markeredgecolor='black', markeredgewidth=1, zorder=10)
 
     # X-axis labels (approaches)
     ax.set_xticks(range(n_approaches))
@@ -734,7 +738,7 @@ def plot_cumulative_effects_by_approach(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_by_approach.pdf'
+    output_path = output_dir / 'cumulative_effects_by_year.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
