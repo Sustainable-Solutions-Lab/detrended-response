@@ -141,12 +141,20 @@ def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> 
 
 
 def log_transform(pct):
-    """Transform percentage to log scale: log(1 + pct/100)."""
+    """Transform percentage to log scale: log(1 + pct/100).
+
+    Used for y-axis tick positioning: converts percent values to log positions.
+    Example: log_transform(100) ≈ 0.693, log_transform(-50) ≈ -0.693
+    """
     return np.log(1 + pct / 100)
 
 
 def inv_log_transform(y):
-    """Inverse transform: from log scale back to percentage."""
+    """Inverse transform: from log scale back to percentage.
+
+    Converts cumulative log changes to percent: (exp(y) - 1) * 100
+    Example: inv_log_transform(-0.5) ≈ -39.3%, inv_log_transform(0.5) ≈ 64.9%
+    """
     return (np.exp(y) - 1) * 100
 
 
@@ -198,7 +206,9 @@ def plot_cumulative_effects_boxplot(
 ) -> None:
     """Create clustered box-and-whisker plot of cumulative effects.
 
-    Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
+    Plots h_T_delta_cum values directly (already in log space as sum of log changes).
+    Y-axis labels show equivalent percent changes, with symmetric scaling so that
+    -50% and +100% are equidistant from 0.
     Groups by country (min, P5, P25, P50, P75, P95, max) with approach bars per country.
 
     Args:
@@ -232,21 +242,18 @@ def plot_cumulative_effects_boxplot(
         for j, approach in enumerate(approaches):
             # Get bootstrap samples (iterations 0-999) for this country/approach
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
-            bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
-
-            # Transform to log scale
-            bootstrap_values = log_transform(bootstrap_values_pct)
+            # h_T_delta_cum is already in log space (sum of log changes), use directly
+            bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
 
             # Get point estimate (iteration -1)
             mask_point = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] == -1)
-            point_estimate_pct = df_2022.loc[mask_point, 'h_T_delta_cum'].values
-            point_estimate_pct = point_estimate_pct[0] * 100 if len(point_estimate_pct) > 0 else np.nan
-            point_estimate = log_transform(point_estimate_pct)
+            point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
 
             # Position for this box
             pos = cluster_center + (j - (n_approaches - 1) / 2) * box_width
 
-            # Draw box (only if we have bootstrap data)
+            # Draw box (only if we have valid bootstrap data)
             color = APPROACH_COLORS.get(approach, 'gray')
             if len(bootstrap_values) > 0:
                 box = ax.boxplot(
@@ -331,7 +338,9 @@ def plot_cumulative_effects_by_approach_grouped(
 ) -> None:
     """Create clustered box-and-whisker plot grouped by approach.
 
-    Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
+    Plots h_T_delta_cum values directly (already in log space as sum of log changes).
+    Y-axis labels show equivalent percent changes, with symmetric scaling so that
+    -50% and +100% are equidistant from 0.
     Groups by approach with country bars per approach cluster.
 
     Args:
@@ -367,22 +376,18 @@ def plot_cumulative_effects_by_approach_grouped(
             # Get bootstrap samples (iterations 0-999) for this country/approach
             # Note: approach4h4pos already contains only h4-positive iterations
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
-
-            bootstrap_values_pct = df_2022.loc[mask, 'h_T_delta_cum'].values * 100  # Convert to percent
-
-            # Transform to log scale
-            bootstrap_values = log_transform(bootstrap_values_pct)
+            # h_T_delta_cum is already in log space (sum of log changes), use directly
+            bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
 
             # Get point estimate (iteration -1)
             mask_point = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] == -1)
-            point_estimate_pct = df_2022.loc[mask_point, 'h_T_delta_cum'].values
-            point_estimate_pct = point_estimate_pct[0] * 100 if len(point_estimate_pct) > 0 else np.nan
-            point_estimate = log_transform(point_estimate_pct)
+            point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
 
             # Position for this box
             pos = cluster_center + (j - (n_countries - 1) / 2) * box_width
 
-            # Draw box - color by country (only if we have bootstrap data)
+            # Draw box - color by country (only if we have valid bootstrap data)
             color = COUNTRY_COLORS.get(country_key, 'gray')
             if len(bootstrap_values) > 0:
                 box = ax.boxplot(
@@ -669,9 +674,10 @@ def plot_cumulative_effects_by_approach(
         years = sorted(df_approach['year'].unique())
 
         # Calculate percentiles across countries for each year
+        # h_T_delta_cum is already in log space (sum of log changes), use directly
         percentiles_by_year = []
         for year in years:
-            values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values * 100
+            values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
             percentiles_by_year.append({
                 'year': year,
                 'p5': np.percentile(values, 5),
@@ -687,33 +693,33 @@ def plot_cumulative_effects_by_approach(
 
         color = APPROACH_COLORS.get(approach, 'gray')
 
-        # Transform percentiles to log scale
-        p5_log = log_transform(df_pct['p5'])
-        p25_log = log_transform(df_pct['p25'])
-        p50_log = log_transform(df_pct['p50'])
-        p75_log = log_transform(df_pct['p75'])
-        p95_log = log_transform(df_pct['p95'])
-        min_log = log_transform(df_pct['min'])
-        max_log = log_transform(df_pct['max'])
+        # Values are already in log space, use directly
+        p5 = df_pct['p5']
+        p25 = df_pct['p25']
+        p50 = df_pct['p50']
+        p75 = df_pct['p75']
+        p95 = df_pct['p95']
+        min_val = df_pct['min']
+        max_val = df_pct['max']
 
         # Min/max lines (thin)
-        ax.plot(df_pct['year'], min_log, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
-        ax.plot(df_pct['year'], max_log, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
+        ax.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
+        ax.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
 
         # 90% range (lighter)
         ax.fill_between(
-            df_pct['year'], p5_log, p95_log,
+            df_pct['year'], p5, p95,
             alpha=0.2, color=color, label='90% range'
         )
 
         # 50% range (darker)
         ax.fill_between(
-            df_pct['year'], p25_log, p75_log,
+            df_pct['year'], p25, p75,
             alpha=0.4, color=color, label='50% range'
         )
 
         # Median line
-        ax.plot(df_pct['year'], p50_log, color=color, linewidth=2, label='Median')
+        ax.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
 
         # Formatting
         ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
