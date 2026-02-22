@@ -83,7 +83,7 @@ Examples:
     python scripts/run_influence_analysis.py
 
     # Analyze specific approaches
-    python scripts/run_influence_analysis.py --approaches "approach5 method2"
+    python scripts/run_influence_analysis.py --approaches "approach4 approach2"
 
     # Use custom percentiles
     python scripts/run_influence_analysis.py --percentiles "10 50 90"

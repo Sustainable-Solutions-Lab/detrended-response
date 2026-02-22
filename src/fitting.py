@@ -1,14 +1,19 @@
-"""OLS fitting for climate-GDP response methods.
+"""OLS fitting for climate-GDP response approaches.
 
-Methods:
-    method0: Conjoined OLS with country time trends and year fixed effects
-    method1: Pre-computed k with linear T + quadratic GDP detrending
-    method2: Pre-computed k with LOESS trends
-    method3: Piecewise quadratic response with LOESS
+Approaches (publication-ready):
+    approach0: Conjoined OLS with country time trends and year fixed effects
+    approach1: Pre-computed k with linear T + quadratic GDP detrending
+    approach2: Pre-computed k with LOESS trends
+    approach3: Piecewise quadratic response with LOESS
+    approach4: Persistence decay model with LOESS
+    approach0h0: Null model (h1=h2=0) for approach0
+    approach1h0: Null model (h1=h2=0) for approach1
+    approach2h0: Null model (h1=h2=0) for approach2
+
+Exploratory methods (kept as methods):
     method4: T response with quadratic departure term
-    method5: Persistence decay model with LOESS
-    method0h0: Null model (h1=h2=0) for method0
-    method1h0: Null model (h1=h2=0) for method1
+    method6: Interaction model
+    method7: Lagged deviation model
 """
 
 import numpy as np
@@ -455,8 +460,8 @@ class FitResultApproach8:
 
 
 @dataclass
-class FitResultMethod5:
-    """Container for method5 (persistence decay) results.
+class FitResultApproach4:
+    """Container for approach4 (persistence decay) results.
 
     Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
 
@@ -676,10 +681,10 @@ def compute_rms_imbalance(
     return rms
 
 
-def fit_method1_precomputed_k_combined(
+def fit_approach1_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
-    """Approach 5c: Pre-computed k[t] with linear temp + quadratic GDP detrending.
+    """Approach 1: Pre-computed k[t] with linear temp + quadratic GDP detrending.
 
     Like Approach 1 but with precomputed k:
     1. k[t] = mean(dy_i[t]) is computed first
@@ -769,7 +774,7 @@ def fit_method1_precomputed_k_combined(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="5c: Precomputed k Combined",
+        approach="1: Precomputed k Combined",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1023,10 +1028,10 @@ def compute_3d_se_numerical(
     return T_opt_se, sigma_se, alpha_se
 
 
-def fit_method2_precomputed_k_loess(
+def fit_approach2_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
-    """Approach 6: Pre-computed k[t] with LOESS country/temperature trends.
+    """Approach 2: Pre-computed k[t] with LOESS country/temperature trends.
 
     LOESS version of Approach 5:
     1. k[t] = mean(dy_i[t]) is computed first
@@ -1111,7 +1116,7 @@ def fit_method2_precomputed_k_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="6: Precomputed k LOESS",
+        approach="2: Precomputed k LOESS",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1387,13 +1392,13 @@ def compute_2d_se_numerical(
     return f1_se, f2_se
 
 
-def fit_method3_piecewise_loess(
+def fit_approach3_piecewise(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
 ) -> FitResultApproach8:
-    """Approach 8: Piecewise quadratic temperature response with LOESS detrending.
+    """Approach 3: Piecewise quadratic temperature response with LOESS detrending.
 
     Model: h(T) = h2_high * (T - T_opt)²  if T > T_opt
            h(T) = h2_low * (T - T_opt)²   if T ≤ T_opt
@@ -1530,7 +1535,7 @@ def fit_method3_piecewise_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8(
-        approach="8: Piecewise Quadratic LOESS",
+        approach="3: Piecewise Quadratic LOESS",
         h2=h2_low,
         h2_se=h2_low_se,
         h4=h2_high,
@@ -1910,13 +1915,13 @@ def fit_method7_lagged_deviation_loess(
     )
 
 
-def fit_method5_persistence_decay(
+def fit_approach4_persistence_decay(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     h4_bounds: tuple = (0.0, 1.0),
-) -> FitResultMethod5:
-    """Method 5: Persistence decay model with LOESS detrending.
+) -> FitResultApproach4:
+    """Approach 4: Persistence decay model with LOESS detrending.
 
     Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
 
@@ -1939,9 +1944,9 @@ def fit_method5_persistence_decay(
         h4_bounds: Bounds for persistence decay parameter (default [0, 1])
 
     Returns:
-        FitResultMethod5 with h1, h2, h4, T_opt, and standard errors
+        FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
     """
-    # Compute dependent variable: dy - k[t] - j_i[t] (same as method2)
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as approach2)
     y = np.zeros(data.n_obs)
     for i in range(data.n_obs):
         yr = data.year[i]
@@ -2062,8 +2067,8 @@ def fit_method5_persistence_decay(
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
-    return FitResultMethod5(
-        approach="5: Persistence Decay LOESS",
+    return FitResultApproach4(
+        approach="4: Persistence Decay LOESS",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2087,7 +2092,7 @@ def fit_method5_persistence_decay(
     )
 
 
-def fit_method0_no_detrending(data: AnalysisData) -> FitResult:
+def fit_approach0_conjoined(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
     Δy_i(t) = h1*T + h2*T² + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2229,7 +2234,7 @@ def fit_method0_no_detrending(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_method0h0_joint(data: AnalysisData) -> FitResult:
+def fit_approach0h0_joint(data: AnalysisData) -> FitResult:
     """Null model: No climate response, joint OLS fit with country trends and year effects.
 
     Δy_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2322,7 +2327,7 @@ def fit_method0h0_joint(data: AnalysisData) -> FitResult:
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="method0h0: No Climate Response (Joint)",
+        approach="approach0h0: No Climate Response (Joint)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2344,7 +2349,7 @@ def fit_method0h0_joint(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_method1h0_precomputed_k(
+def fit_approach1h0_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
     """Null model: No climate response, precomputed k with quadratic country trends.
@@ -2403,7 +2408,7 @@ def fit_method1h0_precomputed_k(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="method1h0: No Climate Response (Precomputed k)",
+        approach="approach1h0: No Climate Response (Precomputed k)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2425,12 +2430,12 @@ def fit_method1h0_precomputed_k(
     )
 
 
-def fit_method2h0_precomputed_k_loess(
+def fit_approach2h0_precomputed_k_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
     """Null model: No climate response, precomputed k with LOESS country trends.
 
-    LOESS version of method1h0:
+    LOESS version of approach1h0:
     k(t) = mean_i(Δy_i(t)) is precomputed, then country LOESS trends j_i(t)
     are smoothed from Δy_i(t) - k(t). No regression needed — all components are
     already precomputed from trends_loess and year_means.
@@ -2480,7 +2485,7 @@ def fit_method2h0_precomputed_k_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="method2h0: No Climate Response (LOESS Precomputed k)",
+        approach="approach2h0: No Climate Response (LOESS Precomputed k)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2507,57 +2512,62 @@ def fit_all_approaches(
     trends_with_k: CountryTrends = None, year_means: dict = None,
     trends_loess: CountryTrendsLoess = None
 ) -> dict:
-    """Fit all methods and return results.
+    """Fit all approaches and return results.
 
     Returns dict with keys:
-        'method0': Conjoined OLS fit, with j terms and year fixed effects
-        'method1': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
-        'method2': Pre-computed k with LOESS trends (if trends_loess provided)
-        'method3': Piecewise quadratic response with LOESS (if trends_loess provided)
+        Publication-ready approaches:
+        'approach0': Conjoined OLS fit, with j terms and year fixed effects
+        'approach1': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
+        'approach2': Pre-computed k with LOESS trends (if trends_loess provided)
+        'approach3': Piecewise quadratic response with LOESS (if trends_loess provided)
+        'approach4': Persistence decay model with LOESS (if trends_loess provided)
+        'approach0h0': No climate response, joint OLS (country trends + year effects only)
+        'approach1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
+        'approach2h0': No climate response, LOESS precomputed k (if trends_loess provided)
+
+        Exploratory methods (kept as methods):
         'method4': T response with quadratic departure (T-Ttrend)^2 (if trends_loess provided)
-        'method5': Persistence decay model with LOESS (if trends_loess provided)
         'method6': Interaction model h3*(T-Topt)*(T-Ttrend) (if trends_loess provided)
         'method7': Lagged deviation model (if trends_loess provided)
-        'method0h0': No climate response, joint OLS (country trends + year effects only)
-        'method1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
-        'method2h0': No climate response, LOESS precomputed k (if trends_loess provided)
 
     Args:
         data: AnalysisData object
         trends: CountryTrends (unused, kept for API compatibility)
-        trends_with_k: CountryTrends for method1 (fit to dy - k)
-        year_means: Pre-computed k[t] for methods 1-7
-        trends_loess: CountryTrendsLoess for methods 2-7 (LOESS detrending)
+        trends_with_k: CountryTrends for approach1 (fit to dy - k)
+        year_means: Pre-computed k[t] for approaches 1-4 and exploratory methods
+        trends_loess: CountryTrendsLoess for approaches 2-4 and exploratory methods (LOESS detrending)
     """
     results = {
-        'method0': fit_method0_no_detrending(data),
-        'method0h0': fit_method0h0_joint(data),
+        'approach0': fit_approach0_conjoined(data),
+        'approach0h0': fit_approach0h0_joint(data),
     }
 
-    # Add method1 and method1h0 if trends_with_k and year_means are provided
+    # Add approach1 and approach1h0 if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
-        results['method1'] = fit_method1_precomputed_k_combined(
+        results['approach1'] = fit_approach1_precomputed_k(
             data, trends_with_k, year_means
         )
-        results['method1h0'] = fit_method1h0_precomputed_k(
+        results['approach1h0'] = fit_approach1h0_precomputed_k(
             data, trends_with_k, year_means
         )
 
-    # Add methods 2, 3, 4, 5, 6 and method2h0 if trends_loess and year_means are provided
+    # Add approaches 2, 3, 4 and approach2h0 if trends_loess and year_means are provided
+    # Also add exploratory methods 4, 6, 7
     if trends_loess is not None and year_means is not None:
-        results['method2'] = fit_method2_precomputed_k_loess(
+        results['approach2'] = fit_approach2_loess(
             data, trends_loess, year_means
         )
-        results['method2h0'] = fit_method2h0_precomputed_k_loess(
+        results['approach2h0'] = fit_approach2h0_precomputed_k_loess(
             data, trends_loess, year_means
         )
+        results['approach3'] = fit_approach3_piecewise(
+            data, trends_loess, year_means
+        )
+        results['approach4'] = fit_approach4_persistence_decay(
+            data, trends_loess, year_means
+        )
+        # Exploratory methods (kept as methods)
         results['method4'] = fit_method4_quadratic_departure_loess(
-            data, trends_loess, year_means
-        )
-        results['method3'] = fit_method3_piecewise_loess(
-            data, trends_loess, year_means
-        )
-        results['method5'] = fit_method5_persistence_decay(
             data, trends_loess, year_means
         )
         results['method6'] = fit_method6_piecewise_departure_loess(

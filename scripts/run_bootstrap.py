@@ -177,7 +177,7 @@ def main():
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
     # Specify methods for h(T) computation
-    h_T_approaches = ['method0', 'method1', 'method2', 'method4', 'method3', 'method5']
+    h_T_approaches = ['approach0', 'approach1', 'approach2', 'method4', 'approach3', 'approach4']
     bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -255,27 +255,8 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt
-        if name == 'method4' and result.h4_point is not None:
-            print(f"  h1 (T): {result.h1_point:.6f}")
-            print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
-            print(f"  h2 (T): {result.h2_point:.6f}")
-            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
-            print(f"  h4 (departure): {result.h4_point:.6f}")
-            print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
-            if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
-                print(f"  T_opt: {result.T_opt_point:.2f} C")
-                print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
-            else:
-                print(f"  T_opt: N/A")
-            if result.T_dep_opt_point is not None and not np.isnan(result.T_dep_opt_point):
-                print(f"  T_dep_opt (departure opt): {result.T_dep_opt_point:.2f} C")
-                print(f"    90% CI: [{stats['T_dep_opt']['p5']:.2f}, {stats['T_dep_opt']['p95']:.2f}]")
-            else:
-                print(f"  T_dep_opt (departure opt): N/A")
-
-        # method3: h2 (below T_opt), h4 (above T_opt), T_opt
-        elif name == 'method3' and result.h4_point is not None:
+        # approach3: h2 (below T_opt), h4 (above T_opt), T_opt
+        if name == 'approach3' and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (above T_opt): {result.h4_point:.6f}")
@@ -283,8 +264,8 @@ def main():
             print(f"  T_opt: {result.T_opt_point:.2f} C")
             print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
 
-        # method5: h1, h2, h4 (persistence decay), T_opt
-        elif name == 'method5' and result.h4_point is not None:
+        # approach4: h1, h2, h4 (persistence decay), T_opt
+        elif name == 'approach4' and result.h4_point is not None:
             print(f"  h1: {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
@@ -297,9 +278,9 @@ def main():
             else:
                 print(f"  T_opt: N/A")
 
-            # Add filtered statistics for method5
-            from src.bootstrap import compute_method5_filtered_statistics
-            filtered_stats = compute_method5_filtered_statistics(result)
+            # Add filtered statistics for approach4
+            from src.bootstrap import compute_approach4_filtered_statistics
+            filtered_stats = compute_approach4_filtered_statistics(result)
             n_filtered = int(filtered_stats['n_filtered'])
             filter_frac = filtered_stats['filter_fraction']
 
@@ -317,8 +298,27 @@ def main():
                 print(f"  T_opt: {result.T_opt_point:.2f} C")
                 print(f"    90% CI: [{filtered_stats['T_opt']['p5']:.2f}, {filtered_stats['T_opt']['p95']:.2f}]")
 
+        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt (exploratory)
+        elif name == 'method4' and result.h4_point is not None:
+            print(f"  h1 (T): {result.h1_point:.6f}")
+            print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
+            print(f"  h2 (T): {result.h2_point:.6f}")
+            print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
+            print(f"  h4 (departure): {result.h4_point:.6f}")
+            print(f"    90% CI: [{stats['h4']['p5']:.6f}, {stats['h4']['p95']:.6f}]")
+            if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
+                print(f"  T_opt: {result.T_opt_point:.2f} C")
+                print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
+            else:
+                print(f"  T_opt: N/A")
+            if result.T_dep_opt_point is not None and not np.isnan(result.T_dep_opt_point):
+                print(f"  T_dep_opt (departure opt): {result.T_dep_opt_point:.2f} C")
+                print(f"    90% CI: [{stats['T_dep_opt']['p5']:.2f}, {stats['T_dep_opt']['p95']:.2f}]")
+            else:
+                print(f"  T_dep_opt (departure opt): N/A")
+
         else:
-            # Standard methods (method0, method1, method2, null models)
+            # Standard approaches (approach0, approach1, approach2, null models)
             if result.T_opt_point is not None and not np.isnan(result.T_opt_point):
                 print(f"  T_opt: {result.T_opt_point:.2f} C")
                 print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")

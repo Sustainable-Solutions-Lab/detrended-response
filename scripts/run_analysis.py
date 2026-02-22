@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 """Main script for detrended response analysis.
 
-This script implements and compares multiple methods for analyzing
+This script implements and compares multiple approaches for analyzing
 the climate-economy relationship with explicit time trend detrending.
 
-Methods:
-    method0: Conjoined OLS with country time trends and year fixed effects
-    method1: Pre-computed k with linear T + quadratic GDP detrending
-    method2: Pre-computed k with LOESS trends
-    method3: Piecewise quadratic response with LOESS
+Approaches (publication-ready):
+    approach0: Conjoined OLS with country time trends and year fixed effects
+    approach1: Pre-computed k with linear T + quadratic GDP detrending
+    approach2: Pre-computed k with LOESS trends
+    approach3: Piecewise quadratic response with LOESS
+    approach4: Persistence decay model with LOESS
+    approach0h0: Null model (h1=h2=0) for approach0
+    approach1h0: Null model (h1=h2=0) for approach1
+    approach2h0: Null model (h1=h2=0) for approach2
+
+Exploratory methods:
     method4: T response with quadratic departure term (T-Ttrend)^2
-    method5: Persistence decay model with LOESS
     method6: Interaction model h3*(T-Topt)*(T-Ttrend)
     method7: Lagged deviation model
-    method0h0: Null model (h1=h2=0) for method0
-    method1h0: Null model (h1=h2=0) for method1
 
 Usage:
     python scripts/run_analysis.py [--year-min YEAR] [--year-max YEAR] [--output-dir DIR]
@@ -170,8 +173,24 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt
-        if name == 'method4' and hasattr(r, 'h4'):
+        # approach3: h2 (below T_opt), h4 (above T_opt), T_opt
+        if name == 'approach3' and hasattr(r, 'h4'):
+            print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+
+        # approach4: h1, h2, h4 (persistence decay), T_opt
+        elif name == 'approach4' and hasattr(r, 'h4'):
+            print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
+            print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            if not np.isnan(r.T_opt):
+                print(f"  T_opt = {r.T_opt:.2f} C")
+            else:
+                print(f"  T_opt = N/A")
+
+        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt (exploratory)
+        elif name == 'method4' and hasattr(r, 'h4'):
             print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (departure) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
@@ -184,35 +203,19 @@ def main():
             else:
                 print(f"  T_dep_opt (departure opt) = N/A")
 
-        # method3: h2 (below T_opt), h4 (above T_opt), T_opt
-        elif name == 'method3' and hasattr(r, 'h4'):
-            print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
-
-        # method5: h1, h2, h4 (persistence decay), T_opt
-        elif name == 'method5' and hasattr(r, 'h4'):
-            print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
-            print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            if not np.isnan(r.T_opt):
-                print(f"  T_opt = {r.T_opt:.2f} C")
-            else:
-                print(f"  T_opt = N/A")
-
-        # method6: h3 (interaction), T_opt
+        # method6: h3 (interaction), T_opt (exploratory)
         elif name == 'method6' and hasattr(r, 'h4'):
             print(f"  h3 (interaction) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # method7: h2 (quadratic), h4 (lagged change), T_opt
+        # method7: h2 (quadratic), h4 (lagged change), T_opt (exploratory)
         elif name == 'method7' and hasattr(r, 'h4'):
             print(f"  h2 (quadratic) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (lag change) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:
-            # Standard methods (method0, method1, method2, null models)
+            # Standard approaches (approach0, approach1, approach2, null models)
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):

@@ -1,0 +1,11 @@
+{
+  "loess_window": 42.447947771790915,
+  "mean_weight_distance": null,
+  "input_file": "data/input/Maddison_CRU_dataset.csv",
+  "year_min": 1961,
+  "year_max": 2022,
+  "n_countries": 140,
+  "n_obs": 8680,
+  "n_bootstrap": 1000,
+  "random_seed": 42
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare parameters from Approach 0 (conjoined OLS) vs Approach 5c (precomputed k).
+"""Compare parameters from Approach 0 (conjoined OLS) vs Approach 1 (precomputed k).
 
 Generates a 2x2 scatter plot comparing:
   (a) k(t) year fixed effects
@@ -7,12 +7,12 @@ Generates a 2x2 scatter plot comparing:
   (c) j_{1,i} country linear trend coefficients
   (d) j_{2,i} country quadratic trend coefficients
 
-Each panel shows Approach 5c predictions on x-axis vs Approach 0 values on y-axis,
+Each panel shows Approach 1 predictions on x-axis vs Approach 0 values on y-axis,
 with a 1:1 reference line and R^2 annotation.
 
-For the j coefficients, Approach 5c's raw predictions are re-referenced by subtracting
+For the j coefficients, Approach 1's raw predictions are re-referenced by subtracting
 country 0's values (to match Approach 0's identification constraint j=0 for country 0).
-The subtracted quadratic is absorbed into k, so Approach 5c's k becomes:
+The subtracted quadratic is absorbed into k, so Approach 1's k becomes:
   k'(t) = k_mean(t) + j_{0,0} + j_{1,0}*t + j_{2,0}*t^2
 """
 
@@ -33,11 +33,11 @@ from src.detrending import (
     compute_year_means,
     fit_quadratic_trend,
 )
-from src.fitting import fit_method0_no_detrending, fit_method1_precomputed_k_combined
+from src.fitting import fit_approach0_conjoined, fit_approach1_precomputed_k
 from src.output import add_input_file_annotation
 
 
-def extract_method0_j_coefficients(data, result0):
+def extract_approach0_j_coefficients(data, result0):
     """Extract per-country j coefficients from Approach 0 results.
 
     For each country, compute residual r_i(t) = dy_i(t) - h1*T_i(t) - h2*T_i(t)^2 - k(t),
@@ -174,8 +174,8 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str,
-        default="data/output/method0_vs_5c",
-        help="Output directory (default: data/output/method0_vs_5c)"
+        default="data/output/approach0_vs_approach1",
+        help="Output directory (default: data/output/approach0_vs_approach1)"
     )
     args = parser.parse_args()
 
@@ -193,14 +193,14 @@ def main():
 
     # --- Fit both approaches ---
     print("Fitting Approach 0...")
-    result0 = fit_method0_no_detrending(data)
+    result0 = fit_approach0_conjoined(data)
 
     print("Fitting Approach 5c...")
-    result5c = fit_method1_precomputed_k_combined(data, trends_with_k, year_means)
+    result1 = fit_approach1_precomputed_k(data, trends_with_k, year_means)
 
     # --- Plots 2-4 data: j coefficients ---
     print("Extracting Approach 0 j coefficients...")
-    j0_actual, j1_actual, j2_actual = extract_method0_j_coefficients(data, result0)
+    j0_actual, j1_actual, j2_actual = extract_approach0_j_coefficients(data, result0)
 
     print("Computing predicted j coefficients from Approach 5c trends + Approach 0 h1,h2...")
     j0_pred, j1_pred, j2_pred, j_ref = compute_predicted_j(
@@ -251,25 +251,25 @@ def main():
     add_input_file_annotation(fig, args.data_file)
 
     # Save figure
-    pdf_path = output_dir / "method0_vs_5c_scatter.pdf"
+    pdf_path = output_dir / "approach0_vs_approach1_scatter.pdf"
     fig.savefig(pdf_path, bbox_inches='tight', dpi=150)
     print(f"Saved figure to {pdf_path}")
 
     # Save scatter data to CSV
-    csv_path = output_dir / "method0_vs_5c_scatter_data.csv"
+    csv_path = output_dir / "approach0_vs_approach1_scatter_data.csv"
     with open(csv_path, 'w') as f:
         # k(t) section
         f.write("# k(t) scatter data\n")
-        f.write("year,k_method0,k_method1\n")
+        f.write("year,k_approach0,k_approach1\n")
         for i, yr in enumerate(unique_years):
             f.write(f"{yr},{k0_values[i]:.8f},{k5c_values[i]:.8f}\n")
         f.write("\n")
 
         # j coefficients section
         f.write("# j coefficient scatter data\n")
-        f.write("country_idx,iso,j0_method0,j0_method1_pred,"
-                "j1_method0,j1_method1_pred,"
-                "j2_method0,j2_method1_pred\n")
+        f.write("country_idx,iso,j0_approach0,j0_approach1_pred,"
+                "j1_approach0,j1_approach1_pred,"
+                "j2_approach0,j2_approach1_pred\n")
         for c in countries:
             iso = data.idx_to_iso[c]
             f.write(f"{c},{iso},"
