@@ -47,6 +47,7 @@ from .fitting import (
     FitResult,
     compute_persistence_accumulators,
     compute_persistence_accumulators_at_T,
+    compute_pre_first_year_correction,
 )
 
 
@@ -409,13 +410,15 @@ def run_bootstrap(
                     )
 
                 elif name == 'approach4':
-                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag) + h2*(T² - h4*A_T2_lag)
+                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
+                    # The correction term accounts for assumed constant temperature before first year
                     # Store h_conv(T) without trend subtraction (like approach2)
                     # The cumulative effects script handles trend subtraction separately
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    X1 = data.temp - h4 * A_T_lag
-                    X2 = data.temp**2 - h4 * A_T2_lag
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, data.temp)
+                    X1 = data.temp - h4 * A_T_lag - correction_T
+                    X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
 
             n_successful += 1

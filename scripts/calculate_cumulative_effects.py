@@ -94,8 +94,8 @@ def load_run_metadata(directory: Path) -> dict:
 
 # Central approaches for analysis (in display order)
 # approach4h4pos uses median of bootstrap iterations where h4 > 0.001
-CENTRAL_APPROACHES_POINT = ['approach0', 'approach1', 'approach2', 'approach3', 'method4', 'approach4h4pos']
-CENTRAL_APPROACHES_BOXPLOT = ['approach0', 'approach1', 'approach2', 'approach3', 'method4', 'approach4h4pos']
+CENTRAL_APPROACHES_POINT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
+CENTRAL_APPROACHES_BOXPLOT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -109,31 +109,29 @@ REPRESENTATIVE_PERCENTILES = (5, 25, 50, 75, 95)
 # ==============================================================================
 
 def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> np.ndarray:
-    """Calculate compound cumulative effect.
+    """Calculate cumulative effect as simple sum of annual differences.
 
-    For all methods, effects persist forever:
-        h_T_delta_cum(t) = (1 + h_T_delta_cum(t-1)) * (1 + h_T_delta(t)) - 1
-        This compounds each year's climate effect into GDP permanently.
+    Since h_T represents changes in log GDP, the cumulative effect is simply:
+        h_int(t) = Σ_{τ=1961}^{t} (h(T(τ)) - h(T(1961)))
 
-    Note: For method5, the h_T values in bootstrap_h_values.csv already incorporate
+    This is the sum of annual climate effects relative to the baseline year.
+
+    Note: For approach4, the h_T values in bootstrap_h_values.csv already incorporate
     persistence decay via h_conv(T), so no additional decay is applied here.
 
     Args:
         h_T_delta: Array of h_T - h_T(1961) values
-        years: Array of year values (must be sorted)
+        years: Array of year values
 
     Returns:
-        Array of compound cumulative effects
+        Array of cumulative effects (sum of h_T_delta from first year to each year)
     """
     # Sort by year to ensure proper ordering
     sort_idx = np.argsort(years)
     h_T_delta_sorted = h_T_delta[sort_idx]
 
-    # Calculate cumulative - each year's effect compounds into GDP permanently
-    h_T_delta_cum = np.zeros(len(h_T_delta))
-    h_T_delta_cum[0] = h_T_delta_sorted[0]
-    for i in range(1, len(h_T_delta_sorted)):
-        h_T_delta_cum[i] = (1 + h_T_delta_cum[i - 1]) * (1 + h_T_delta_sorted[i]) - 1
+    # Calculate cumulative sum of annual effects
+    h_T_delta_cum = np.cumsum(h_T_delta_sorted)
 
     # Restore original order
     result = np.zeros(len(h_T_delta))
@@ -201,7 +199,7 @@ def plot_cumulative_effects_boxplot(
     """Create clustered box-and-whisker plot of cumulative effects.
 
     Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
-    Groups by country (min, P5, P25, P50, P75, P95, max) with 5 method bars per country.
+    Groups by country (min, P5, P25, P50, P75, P95, max) with approach bars per country.
 
     Args:
         df: DataFrame with cumulative effects for representative countries
@@ -323,16 +321,16 @@ COUNTRY_COLORS = {
 }
 
 
-def plot_cumulative_effects_by_method(
+def plot_cumulative_effects_by_approach_grouped(
     df: pd.DataFrame,
     representatives: dict,
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create clustered box-and-whisker plot grouped by method.
+    """Create clustered box-and-whisker plot grouped by approach.
 
     Uses log(1 + pct/100) transform so that -50% and +100% are equidistant from 0.
-    Groups by method (6 clusters) with 7 country bars per method.
+    Groups by approach with country bars per approach cluster.
 
     Args:
         df: DataFrame with cumulative effects for representative countries
@@ -357,7 +355,7 @@ def plot_cumulative_effects_by_method(
     # Filter to year 2022 for final values
     df_2022 = df[df['year'] == 2022].copy()
 
-    # Create box plots - grouped by method
+    # Create box plots - grouped by approach
     for i, approach in enumerate(approaches):
         cluster_center = i
 
@@ -403,7 +401,7 @@ def plot_cumulative_effects_by_method(
             ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
                     markeredgecolor='black', markeredgewidth=1, zorder=10)
 
-    # X-axis labels (methods)
+    # X-axis labels (approaches)
     ax.set_xticks(range(n_approaches))
     ax.set_xticklabels(approaches)
 
@@ -441,7 +439,7 @@ def plot_cumulative_effects_by_method(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_by_method.pdf'
+    output_path = output_dir / 'cumulative_effects_by_approach_grouped.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
@@ -452,7 +450,7 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
 
     Args:
         group: DataFrame for a single group with columns [year, temp, h_T]
-        approach: Approach name - used to differentiate method5/approach4h4pos logic
+        approach: Approach name (not used in computation, kept for API compatibility)
         loess_window: Window size (unused, kept for API compatibility)
 
     Returns:
@@ -475,49 +473,20 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
         idx_1961 = 0
         h_T_1961 = h_T_sorted[0]
 
-    if approach == 'approach4h4pos':
-        # For approach4h4pos (h4 > 0.001): compound h_conv directly first, then subtract
-        # 1961 baseline cumulative
-        #
-        # h_conv represents the net annual contribution to GDP growth including decay:
-        #   h_conv(t) = h(T(t)) - h4*h(T(t-1)) - h4*(1-h4)*h(T(t-2)) - ...
-        #
-        # When h4 > 0, h_conv decays towards 0 as accumulated past effects build up.
-        # This means each year's NEW contribution to GDP decreases over time.
-        #
-        # The WRONG approach (subtract h_conv(1961) first, then compound) gives large
-        # negative deltas because h_conv(1961) has no past to subtract (≈ h(T_1961)),
-        # while h_conv(2022) ≈ 0 (past effects cancel out).
-        #
-        # The CORRECT approach: compound h_conv values directly (they represent the
-        # annual GDP growth contributions), then subtract 1961's cumulative to make
-        # the result relative to 1961.
-        #
-        # This gives bounded cumulative effects that converge, rather than growing
-        # unboundedly like the no-decay case.
-        GDP_cum_raw = np.zeros(len(h_T_sorted))
-        GDP_cum_raw[0] = h_T_sorted[0]
-        for i in range(1, len(h_T_sorted)):
-            GDP_cum_raw[i] = (1 + GDP_cum_raw[i - 1]) * (1 + h_T_sorted[i]) - 1
-
-        # Make relative to 1961
-        baseline_cum = GDP_cum_raw[idx_1961]
-        h_T_delta_cum_sorted = GDP_cum_raw - baseline_cum
-
-        # Restore original order
-        h_T_delta_cum = np.zeros(len(h_T))
-        h_T_delta_cum[sort_idx] = h_T_delta_cum_sorted
-
-        # For consistency, also compute h_T_delta (though not used for compounding in method5)
-        h_T_delta = h_T - h_T_1961
-
-    else:
-        # For methods 0-4: subtract baseline first, then compound (original behavior)
-        #
-        # h_T_delta = h_T - h_T(1961) represents the annual climate effect relative to 1961
-        # These deltas are then compounded to get cumulative GDP effect
-        h_T_delta = h_T - h_T_1961
-        h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
+    # All approaches use the same logic: subtract 1961 baseline, then sum
+    #
+    # For approaches 0-3: h_T = h(T), so h_T_delta = h(T) - h(T_1961)
+    #
+    # For approach4: h_T = h_conv which already incorporates persistence decay.
+    # We use the same formula: h_T_delta = h_conv - h_conv(1961)
+    # When h4 > 0, h_conv values are smaller due to built-in decay, so cumulative
+    # effects will be smaller/bounded compared to approach2.
+    # When h4 ≈ 0, h_conv ≈ h(T), so results match approach2.
+    #
+    # This unified approach avoids the "double-decay" bug where we incorrectly
+    # applied additional decay to the baseline.
+    h_T_delta = h_T - h_T_1961
+    h_T_delta_cum = calculate_h_T_delta_cumulative(h_T_delta, years)
 
     result = group.copy()
     result['h_T_trend_1961'] = h_T_1961  # Keep column name for compatibility
@@ -534,8 +503,9 @@ def process_all_countries_point_estimate(
 ) -> pd.DataFrame:
     """Process point estimate data for all countries and approaches.
 
-    For methods 0-4, uses point estimates (iteration=-1).
+    For approaches 0-4, uses point estimates (iteration=-1).
     For approach4h4pos, computes median of h4-positive bootstrap iterations.
+    For approach4h4zero, computes median of h4-near-zero bootstrap iterations.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -545,19 +515,19 @@ def process_all_countries_point_estimate(
     Returns:
         DataFrame with cumulative effects for all countries
     """
-    print("      Loading point estimate data (iteration=-1, methods 0-4)...")
+    print("      Loading point estimate data (iteration=-1, all approaches)...")
 
-    # Read CSV in chunks, filtering to only point estimates for methods 0-4
+    # Read CSV in chunks, filtering to only point estimates
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] != 'approach4')]
+        filtered = chunk[chunk['iteration'] == -1]
         if len(filtered) > 0:
             chunks.append(filtered)
 
     df = pd.concat(chunks, ignore_index=True)
-    print(f"      Loaded {len(df):,} rows for methods 0-4")
+    print(f"      Loaded {len(df):,} rows for point estimates")
 
-    # Process each (approach, iso3) group for methods 0-4
+    # Process each (approach, iso3) group for all approaches
     groups = df.groupby(['approach', 'iso3'])
     total_groups = len(groups)
 
@@ -569,51 +539,88 @@ def process_all_countries_point_estimate(
         processed = process_group(group, approach, loess_window)
         results.append(processed)
 
-    print(f"      Completed processing {total_groups:,} groups for methods 0-4")
+    print(f"      Completed processing {total_groups:,} groups")
 
     # Now process approach4h4pos: median of cumulative effects across h4-positive iterations
-    print("      Loading method5 bootstrap data for approach4h4pos...")
+    print("      Loading approach4 bootstrap data for approach4h4pos/approach4h4zero...")
     h4_positive_iters = get_approach4_h4_positive_iterations(bootstrap_dir)
     print(f"      Found {len(h4_positive_iters)} h4-positive iterations")
 
-    # Load method5 bootstrap data for h4-positive iterations
-    chunks_m5 = []
+    # Load approach4 bootstrap data - need both h4-positive and h4-near-zero iterations
+    # Get all approach4 iterations first
+    chunks_a4 = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['approach'] == 'approach4') & (chunk['iteration'].isin(h4_positive_iters))]
+        filtered = chunk[(chunk['approach'] == 'approach4') & (chunk['iteration'] >= 0)]
         if len(filtered) > 0:
-            chunks_m5.append(filtered)
+            chunks_a4.append(filtered)
 
-    df_m5 = pd.concat(chunks_m5, ignore_index=True)
-    print(f"      Loaded {len(df_m5):,} rows for method5 h4-positive iterations")
+    df_a4_orig = pd.concat(chunks_a4, ignore_index=True)
+    all_a4_iters = set(df_a4_orig['iteration'].unique())
+    h4_zero_iters = all_a4_iters - h4_positive_iters
+    print(f"      Loaded {len(df_a4_orig):,} rows for approach4 bootstrap iterations")
+    print(f"      h4-positive: {len(h4_positive_iters)}, h4-near-zero: {len(h4_zero_iters)}")
 
-    # Process each (iteration, iso3) group and compute cumulative effects
-    groups_m5 = df_m5.groupby(['iteration', 'iso3'])
-    total_m5 = len(groups_m5)
+    # Process h4-positive iterations for approach4h4pos
+    df_a4_h4pos = df_a4_orig[df_a4_orig['iteration'].isin(h4_positive_iters)]
+    groups_a4_h4pos = df_a4_h4pos.groupby(['iteration', 'iso3'])
+    total_a4_h4pos = len(groups_a4_h4pos)
 
-    m5_results = []
-    for idx, ((iteration, iso3), group) in enumerate(groups_m5):
+    a4_h4pos_results = []
+    for idx, ((iteration, iso3), group) in enumerate(groups_a4_h4pos):
         if idx % 2000 == 0:
-            print(f"      Progress: {idx:,}/{total_m5:,} method5 groups...")
+            print(f"      Progress: {idx:,}/{total_a4_h4pos:,} approach4 h4-positive groups...")
 
         processed = process_group(group, 'approach4h4pos', loess_window)
-        m5_results.append(processed)
+        a4_h4pos_results.append(processed)
 
-    df_m5_processed = pd.concat(m5_results, ignore_index=True)
+    df_a4_h4pos_processed = pd.concat(a4_h4pos_results, ignore_index=True)
 
-    # Compute median across iterations for each (iso3, year)
+    # Compute median across h4-positive iterations for each (iso3, year)
     print("      Computing median cumulative effects across h4-positive iterations...")
-    m5h4pos_median = df_m5_processed.groupby(['iso3', 'year']).agg({
+    a4h4pos_median = df_a4_h4pos_processed.groupby(['iso3', 'year']).agg({
         'temp': 'median',
         'h_T': 'median',
         'h_T_trend_1961': 'median',
         'h_T_delta': 'median',
         'h_T_delta_cum': 'median'
     }).reset_index()
-    m5h4pos_median['approach'] = 'approach4h4pos'
-    m5h4pos_median['iteration'] = -1  # Mark as point estimate equivalent
+    a4h4pos_median['approach'] = 'approach4h4pos'
+    a4h4pos_median['iteration'] = -1  # Mark as point estimate equivalent
 
-    results.append(m5h4pos_median)
-    print(f"      Created approach4h4pos: {len(m5h4pos_median):,} rows (median of {len(h4_positive_iters)} iterations)")
+    results.append(a4h4pos_median)
+    print(f"      Created approach4h4pos: {len(a4h4pos_median):,} rows (median of {len(h4_positive_iters)} iterations)")
+
+    # Process h4-near-zero iterations for approach4h4zero (diagnostic)
+    # When h4 ≈ 0, h_conv ≈ h(T), so results should match approach2
+    if len(h4_zero_iters) > 0:
+        df_a4_h4zero = df_a4_orig[df_a4_orig['iteration'].isin(h4_zero_iters)]
+        groups_a4_h4zero = df_a4_h4zero.groupby(['iteration', 'iso3'])
+        total_a4_h4zero = len(groups_a4_h4zero)
+
+        a4_h4zero_results = []
+        for idx, ((iteration, iso3), group) in enumerate(groups_a4_h4zero):
+            if idx % 2000 == 0:
+                print(f"      Progress: {idx:,}/{total_a4_h4zero:,} approach4 h4-near-zero groups...")
+
+            processed = process_group(group, 'approach4h4zero', loess_window)
+            a4_h4zero_results.append(processed)
+
+        df_a4_h4zero_processed = pd.concat(a4_h4zero_results, ignore_index=True)
+
+        # Compute median across h4-near-zero iterations for each (iso3, year)
+        print("      Computing median cumulative effects across h4-near-zero iterations...")
+        a4h4zero_median = df_a4_h4zero_processed.groupby(['iso3', 'year']).agg({
+            'temp': 'median',
+            'h_T': 'median',
+            'h_T_trend_1961': 'median',
+            'h_T_delta': 'median',
+            'h_T_delta_cum': 'median'
+        }).reset_index()
+        a4h4zero_median['approach'] = 'approach4h4zero'
+        a4h4zero_median['iteration'] = -1  # Mark as point estimate equivalent
+
+        results.append(a4h4zero_median)
+        print(f"      Created approach4h4zero: {len(a4h4zero_median):,} rows (median of {len(h4_zero_iters)} iterations)")
 
     return pd.concat(results, ignore_index=True)
 
@@ -637,7 +644,7 @@ def plot_cumulative_effects_by_approach(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    # Check for missing approaches (use point estimate methods for this plot)
+    # Check for missing approaches (use point estimate approaches for this plot)
     available_approaches = set(df['approach'].unique())
     missing_approaches = [a for a in CENTRAL_APPROACHES_POINT if a not in available_approaches]
     if missing_approaches:
@@ -647,8 +654,8 @@ def plot_cumulative_effects_by_approach(
             f"You may need to re-run run_bootstrap.py to generate data for all approaches."
         )
 
-    n_methods = len(CENTRAL_APPROACHES_POINT)
-    fig, axes = plt.subplots(1, n_methods, figsize=(3 * n_methods, 4), sharey=True)
+    n_approaches = len(CENTRAL_APPROACHES_POINT)
+    fig, axes = plt.subplots(1, n_approaches, figsize=(3 * n_approaches, 4), sharey=True)
 
     for ax, approach in zip(axes, CENTRAL_APPROACHES_POINT):
         # Filter to this approach
@@ -741,7 +748,7 @@ def select_representative_countries_from_file(
 ) -> dict:
     """Select representative countries using only point estimate data.
 
-    Loads only iteration=-1, approach=method0 to minimize memory usage.
+    Loads only iteration=-1, approach=approach0 to minimize memory usage.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -752,7 +759,7 @@ def select_representative_countries_from_file(
     Returns:
         Dictionary mapping percentile (or 'min'/'max') -> {'iso3': str, 'value': float, 'target': float}
     """
-    print("      Loading point estimate data (iteration=-1, method0)...")
+    print("      Loading point estimate data (iteration=-1, approach0)...")
 
     # Read CSV in chunks, filtering to only needed rows
     chunks = []
@@ -858,26 +865,50 @@ def process_representative_countries(
     print(f"      Completed processing {total_groups:,} groups")
     df_result = pd.concat(results, ignore_index=True)
 
-    # Create approach4h4pos from method5 data filtered to h4-positive iterations
-    # These need to be RE-PROCESSED with 'approach4h4pos' approach to use the correct
-    # cumulative calculation (compound h_conv first, then subtract baseline)
+    # Create approach4h4pos and approach4h4zero from approach4 data
+    # These split approach4 bootstrap iterations by h4 value for diagnostic comparison:
+    # - approach4h4pos: iterations where h4 > 0.001 (persistence decay active)
+    # - approach4h4zero: iterations where h4 <= 0.001 (should match approach2)
     h4_positive_iters = get_approach4_h4_positive_iterations(bootstrap_dir)
+
+    # Get all approach4 iterations and compute h4-near-zero set
+    all_a4_iters = set(df[df['approach'] == 'approach4']['iteration'].unique())
+    all_a4_iters.discard(-1)  # Remove point estimate iteration
+    h4_zero_iters = all_a4_iters - h4_positive_iters
+
     if len(h4_positive_iters) > 0:
-        # Get the raw h_T values for h4-positive iterations (from original data, not processed)
-        method5_raw = df[(df['approach'] == 'approach4') & (df['iteration'].isin(h4_positive_iters))]
+        # Get the raw h_T values for h4-positive iterations
+        approach4_h4pos_raw = df[(df['approach'] == 'approach4') & (df['iteration'].isin(h4_positive_iters))]
 
-        # Re-process with approach4h4pos approach
-        groups_m5h4pos = method5_raw.groupby(['iteration', 'iso3'])
-        m5h4pos_results = []
-        for (iteration, iso3), group in groups_m5h4pos:
+        # Process with standard logic (same as all other approaches)
+        groups_a4_h4pos = approach4_h4pos_raw.groupby(['iteration', 'iso3'])
+        a4_h4pos_results = []
+        for (iteration, iso3), group in groups_a4_h4pos:
             processed = process_group(group, 'approach4h4pos', loess_window)
-            m5h4pos_results.append(processed)
+            a4_h4pos_results.append(processed)
 
-        approach4h4pos_bootstrap = pd.concat(m5h4pos_results, ignore_index=True)
+        approach4h4pos_bootstrap = pd.concat(a4_h4pos_results, ignore_index=True)
         approach4h4pos_bootstrap['approach'] = 'approach4h4pos'
 
         df_result = pd.concat([df_result, approach4h4pos_bootstrap], ignore_index=True)
         print(f"      Created approach4h4pos: {len(approach4h4pos_bootstrap):,} bootstrap rows ({len(h4_positive_iters)} h4-positive iterations)")
+
+    if len(h4_zero_iters) > 0:
+        # Get the raw h_T values for h4-near-zero iterations
+        approach4_h4zero_raw = df[(df['approach'] == 'approach4') & (df['iteration'].isin(h4_zero_iters))]
+
+        # Process with standard logic - when h4 ≈ 0, h_conv ≈ h(T), so should match approach2
+        groups_a4_h4zero = approach4_h4zero_raw.groupby(['iteration', 'iso3'])
+        a4_h4zero_results = []
+        for (iteration, iso3), group in groups_a4_h4zero:
+            processed = process_group(group, 'approach4h4pos', loess_window)
+            a4_h4zero_results.append(processed)
+
+        approach4h4zero_bootstrap = pd.concat(a4_h4zero_results, ignore_index=True)
+        approach4h4zero_bootstrap['approach'] = 'approach4h4zero'
+
+        df_result = pd.concat([df_result, approach4h4zero_bootstrap], ignore_index=True)
+        print(f"      Created approach4h4zero: {len(approach4h4zero_bootstrap):,} bootstrap rows ({len(h4_zero_iters)} h4-near-zero iterations)")
 
     return df_result
 
@@ -1055,8 +1086,8 @@ def main():
     print("\n[6/7] Creating box plot visualization (grouped by country)...")
     plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
 
-    print("\n[7/7] Creating box plot visualization (grouped by method)...")
-    plot_cumulative_effects_by_method(df_summary, representatives, output_dir, input_file)
+    print("\n[7/7] Creating box plot visualization (grouped by approach)...")
+    plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")

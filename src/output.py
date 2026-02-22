@@ -13,6 +13,7 @@ from .fitting import (
     FitResult,
     compute_persistence_accumulators,
     compute_persistence_accumulators_at_T,
+    compute_pre_first_year_correction,
 )
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
@@ -48,10 +49,11 @@ APPROACH_COLORS = {
     'approach3': 'magenta',
     'approach4': 'cyan',
     'approach4h4pos': 'cyan',
+    'approach4h4zero': 'blue',  # Diagnostic: h4 near-zero iterations
     'approach0h0': 'gray',
     'approach1h0': 'gray',
     'approach2h0': 'gray',
-    # Exploratory methods
+    # Exploratory approaches
     'method4': 'salmon',
     'method6': 'green',
     'method7': 'purple',
@@ -70,6 +72,7 @@ APPROACH_LINESTYLES = {
     'approach3': (0, (5, 1)),   # densely dashed
     'approach4': (0, (5, 1)),   # densely dashed
     'approach4h4pos': ':',      # dotted for filtered version
+    'approach4h4zero': ':',     # dotted for diagnostic version
     'approach0h0': '--',
     'approach1h0': ':',
     'approach2h0': ':',
@@ -2051,13 +2054,15 @@ def save_bootstrap_h_values(
                     below = temp_arr <= r.T_opt
                     h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
                 elif name == 'approach4':
-                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag) + h2*(T² - h4*A_T2_lag)
+                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
+                    # The correction term accounts for assumed constant temperature before first year
                     # Store h_conv(T) without trend subtraction (like approach2)
                     # The cumulative effects script handles trend subtraction separately
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    X1 = temp_arr - h4 * A_T_lag
-                    X2 = temp_arr**2 - h4 * A_T2_lag
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, temp_arr)
+                    X1 = temp_arr - h4 * A_T_lag - correction_T
+                    X2 = temp_arr**2 - h4 * A_T2_lag - correction_T2
                     h_T_point = r.h1 * X1 + r.h2 * X2
                 else:
                     continue

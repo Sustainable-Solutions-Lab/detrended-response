@@ -388,6 +388,58 @@ def compute_persistence_accumulators_at_T(
     return A_T_lag, A_T2_lag
 
 
+def compute_pre_first_year_correction(
+    data: AnalysisData, h4: float, T_values: np.ndarray = None
+) -> tuple:
+    """Compute pre-first-year correction for persistence decay model.
+
+    The persistence model assumes temperature was constant at T(first_year) before
+    the first observation. This creates a correction term:
+
+        correction(t) = (1-h4)^(t - first_year) * T(first_year)
+
+    This accounts for the accumulated effect of the assumed constant pre-history.
+
+    Args:
+        data: AnalysisData object
+        h4: Persistence decay parameter [0, 1]
+        T_values: Optional temperature values (default: data.temp)
+
+    Returns:
+        Tuple of (correction_T, correction_T2), each of shape (n_obs,)
+    """
+    if T_values is None:
+        T_values = data.temp
+
+    decay = 1 - h4
+    correction_T = np.zeros(data.n_obs)
+    correction_T2 = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        # Get observation indices for this country, sorted by year
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+        years_for_country = data.year[country_indices]
+        sorted_order = np.argsort(years_for_country)
+        sorted_indices = country_indices[sorted_order]
+        sorted_years = years_for_country[sorted_order]
+
+        # First year's temperature for this country
+        first_year = sorted_years[0]
+        first_idx = sorted_indices[0]
+        T_first = T_values[first_idx]
+        T2_first = T_first ** 2
+
+        # Compute correction for each year
+        for i, idx in enumerate(sorted_indices):
+            years_since_first = sorted_years[i] - first_year
+            decay_factor = decay ** years_since_first
+            correction_T[idx] = decay_factor * T_first
+            correction_T2[idx] = decay_factor * T2_first
+
+    return correction_T, correction_T2
+
+
 @dataclass
 class FitResult:
     """Container for regression results."""
@@ -1963,12 +2015,17 @@ def fit_approach4_persistence_decay(
         A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
             data, h4_val, T_trend
         )
+        # Compute pre-first-year correction (assumes T was constant before first year)
+        correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_val, T)
+        correction_T_trend, correction_T2_trend = compute_pre_first_year_correction(
+            data, h4_val, T_trend
+        )
 
-        # Modified regressors with detrending
-        # X1 = (T - h4*A_T_lag) - (T_trend - h4*A_T_trend_lag)
-        X1 = (T - h4_val * A_T_lag) - (T_trend - h4_val * A_T_trend_lag)
-        # X2 = (T^2 - h4*A_T2_lag) - (T_trend^2 - h4*A_T2_trend_lag)
-        X2 = (T**2 - h4_val * A_T2_lag) - (T_trend**2 - h4_val * A_T2_trend_lag)
+        # Modified regressors with detrending and pre-first-year correction
+        # X1 = (T - h4*A_T_lag - correction_T) - (T_trend - h4*A_T_trend_lag - correction_T_trend)
+        X1 = (T - h4_val * A_T_lag - correction_T) - (T_trend - h4_val * A_T_trend_lag - correction_T_trend)
+        # X2 = (T^2 - h4*A_T2_lag - correction_T2) - (T_trend^2 - h4*A_T2_trend_lag - correction_T2_trend)
+        X2 = (T**2 - h4_val * A_T2_lag - correction_T2) - (T_trend**2 - h4_val * A_T2_trend_lag - correction_T2_trend)
 
         X = np.column_stack([X1, X2])
 
@@ -2001,9 +2058,13 @@ def fit_approach4_persistence_decay(
     A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
         data, h4_opt, T_trend
     )
+    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_opt, T)
+    correction_T_trend, correction_T2_trend = compute_pre_first_year_correction(
+        data, h4_opt, T_trend
+    )
 
-    X1 = (T - h4_opt * A_T_lag) - (T_trend - h4_opt * A_T_trend_lag)
-    X2 = (T**2 - h4_opt * A_T2_lag) - (T_trend**2 - h4_opt * A_T2_trend_lag)
+    X1 = (T - h4_opt * A_T_lag - correction_T) - (T_trend - h4_opt * A_T_trend_lag - correction_T_trend)
+    X2 = (T**2 - h4_opt * A_T2_lag - correction_T2) - (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
     X_opt = np.column_stack([X1, X2])
 
     beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)

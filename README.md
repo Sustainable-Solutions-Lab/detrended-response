@@ -229,11 +229,14 @@ Models persistent effects of past temperatures on current GDP growth. The climat
 ```
 
 **Climate response function with persistence:**
+
+The net climate effect at time t accounts for the current temperature effect minus the decaying contribution of all prior temperatures:
+
 ```
-h_conv(T(t)) = h(T(t)) - h₄ · Σₖ (1-h₄)^(k-1) · h(T(t-k))
+h_net(T(t)) = h(T(t)) - h₄ · Σₖ (1-h₄)^(k-1) · h(T(t-k)) - (1-h₄)^(t-t₀) · h(T(t₀))
 ```
 
-where `h(T) = h₁·T + h₂·T²` and the sum runs over all prior years in the country's record.
+where `h(T) = h₁·T + h₂·T²`, the sum runs over all prior years in the country's record, and `t₀` is the first observation year (1961). The final term is the **pre-first-year correction**: it accounts for the assumption that temperature was constant at `T(t₀)` before the first observation.
 
 **Efficient computation using accumulators:**
 ```
@@ -241,10 +244,16 @@ A_T(t) = T(t) + (1-h₄) · A_T(t-1)
 A_T²(t) = T²(t) + (1-h₄) · A_T²(t-1)
 ```
 
+**Pre-first-year correction:**
+```
+C_T(t) = (1-h₄)^(t-t₀) · T(t₀)
+C_T²(t) = (1-h₄)^(t-t₀) · T²(t₀)
+```
+
 **Modified regressors:**
 ```
-X₁(t) = [T(t) - h₄·A_T(t-1)] - [T_trend(t) - h₄·A_T_trend(t-1)]
-X₂(t) = [T²(t) - h₄·A_T²(t-1)] - [T_trend²(t) - h₄·A_T²_trend(t-1)]
+X₁(t) = [T(t) - h₄·A_T(t-1) - C_T(t)] - [T_trend(t) - h₄·A_T_trend(t-1) - C_T_trend(t)]
+X₂(t) = [T²(t) - h₄·A_T²(t-1) - C_T²(t)] - [T_trend²(t) - h₄·A_T²_trend(t-1) - C_T²_trend(t)]
 ```
 
 **Parameters:**
@@ -254,7 +263,7 @@ X₂(t) = [T²(t) - h₄·A_T²(t-1)] - [T_trend²(t) - h₄·A_T²_trend(t-1)]
 - `T_opt`: Optimal temperature = -h₁/(2h₂)
 
 **Edge cases:**
-- `h₄ = 0`: Full persistence (accumulated temperature effects persist indefinitely)
+- `h₄ = 0`: Full persistence (accumulated temperature effects persist indefinitely). Note: when h₄=0, the pre-first-year correction C_T(t) = T(t₀) for all t, which cancels with the constant contribution from the infinite past.
 - `h₄ = 1`: No persistence (first-difference behavior, only current year matters)
 
 **Optimization strategy:**
@@ -262,7 +271,7 @@ X₂(t) = [T²(t) - h₄·A_T²(t-1)] - [T_trend²(t) - h₄·A_T²_trend(t-1)]
 2. Refine with Brent's method in the best region
 3. Inner OLS: For each h₄, solve for h₁ and h₂
 
-**Key insight:** This model tests whether past temperatures have lingering effects on current growth, or whether only the current year's temperature matters.
+**Key insight:** This model tests whether past temperatures have lingering effects on current growth, or whether only the current year's temperature matters. The pre-first-year correction ensures that h_net values are bounded and decay properly over time when h₄ > 0.
 
 **Degrees of freedom:** 3 (h₁, h₂, h₄)
 
@@ -590,10 +599,14 @@ python scripts/calculate_cumulative_effects.py
 
 **What it does:**
 1. Loads bootstrap h(T) values for all countries
-2. Fits trend to h(T) and evaluates at 1961 as baseline
-3. Computes cumulative climate effects from 1961-2022
+2. Computes h(T) - h(T₁₉₆₁) for each year relative to the 1961 baseline
+3. Calculates cumulative climate effects as the sum of annual differences:
+   ```
+   h_int(t) = Σ_{τ=1961}^{t} (h(T(τ)) - h(T(1961)))
+   ```
+   Since h(T) represents changes in log GDP, the cumulative sum gives the integrated effect on log GDP over time.
 4. Selects representative countries at percentiles (5, 25, 50, 75, 95)
-5. Creates box-and-whisker visualizations grouped by country and by method
+5. Creates box-and-whisker visualizations grouped by country and by approach
 
 **Options:**
 ```
