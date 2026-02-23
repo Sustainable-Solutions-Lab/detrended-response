@@ -33,11 +33,11 @@ from src.detrending import (
     compute_year_means,
     fit_quadratic_trend,
 )
-from src.fitting import fit_approach0_conjoined, fit_approach1_precomputed_k
+from src.fitting import fit_Approach1J_conjoined, fit_Approach1P_precomputed_k
 from src.output import add_input_file_annotation
 
 
-def extract_approach0_j_coefficients(data, result0):
+def extract_Approach1J_j_coefficients(data, result0):
     """Extract per-country j coefficients from Approach 0 results.
 
     For each country, compute residual r_i(t) = dy_i(t) - h1*T_i(t) - h2*T_i(t)^2 - k(t),
@@ -174,8 +174,8 @@ def main():
     )
     parser.add_argument(
         "--output-dir", type=str,
-        default="data/output/approach0_vs_approach1",
-        help="Output directory (default: data/output/approach0_vs_approach1)"
+        default="data/output/Approach1J_vs_Approach1P",
+        help="Output directory (default: data/output/Approach1J_vs_Approach1P)"
     )
     args = parser.parse_args()
 
@@ -193,14 +193,14 @@ def main():
 
     # --- Fit both approaches ---
     print("Fitting Approach 0...")
-    result0 = fit_approach0_conjoined(data)
+    result0 = fit_Approach1J_conjoined(data)
 
     print("Fitting Approach 5c...")
-    result1 = fit_approach1_precomputed_k(data, trends_with_k, year_means)
+    result1 = fit_Approach1P_precomputed_k(data, trends_with_k, year_means)
 
     # --- Plots 2-4 data: j coefficients ---
     print("Extracting Approach 0 j coefficients...")
-    j0_actual, j1_actual, j2_actual = extract_approach0_j_coefficients(data, result0)
+    j0_actual, j1_actual, j2_actual = extract_Approach1J_j_coefficients(data, result0)
 
     print("Computing predicted j coefficients from Approach 5c trends + Approach 0 h1,h2...")
     j0_pred, j1_pred, j2_pred, j_ref = compute_predicted_j(
@@ -251,25 +251,25 @@ def main():
     add_input_file_annotation(fig, args.data_file)
 
     # Save figure
-    pdf_path = output_dir / "approach0_vs_approach1_scatter.pdf"
+    pdf_path = output_dir / "Approach1J_vs_Approach1P_scatter.pdf"
     fig.savefig(pdf_path, bbox_inches='tight', dpi=150)
     print(f"Saved figure to {pdf_path}")
 
     # Save scatter data to CSV
-    csv_path = output_dir / "approach0_vs_approach1_scatter_data.csv"
+    csv_path = output_dir / "Approach1J_vs_Approach1P_scatter_data.csv"
     with open(csv_path, 'w') as f:
         # k(t) section
         f.write("# k(t) scatter data\n")
-        f.write("year,k_approach0,k_approach1\n")
+        f.write("year,k_Approach1J,k_Approach1P\n")
         for i, yr in enumerate(unique_years):
             f.write(f"{yr},{k0_values[i]:.8f},{k5c_values[i]:.8f}\n")
         f.write("\n")
 
         # j coefficients section
         f.write("# j coefficient scatter data\n")
-        f.write("country_idx,iso,j0_approach0,j0_approach1_pred,"
-                "j1_approach0,j1_approach1_pred,"
-                "j2_approach0,j2_approach1_pred\n")
+        f.write("country_idx,iso,j0_Approach1J,j0_Approach1P_pred,"
+                "j1_Approach1J,j1_Approach1P_pred,"
+                "j2_Approach1J,j2_Approach1P_pred\n")
         for c in countries:
             iso = data.idx_to_iso[c]
             f.write(f"{c},{iso},"

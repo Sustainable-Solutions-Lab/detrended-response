@@ -51,7 +51,17 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 - Reference outputs in `./data/output/reference/` should only be updated deliberately when establishing new baselines
 
 ### Naming Conventions
-- **Approaches**: Use `approach0`, `approach1`, `approach2`, `approach3`, `approach4` consistently throughout
+- **Approaches**: Use the systematic naming convention where:
+  - First digit (0-3) indicates climate response function type:
+    - 0 = No climate response (null models)
+    - 1 = Quadratic response function
+    - 2 = Piecewise quadratic response function
+    - 3 = Quadratic with persistence time scale
+  - Letter suffix indicates trend identification method:
+    - J = Joint OLS solution
+    - P = Polynomial trend identification (linear/quadratic)
+    - L = LOESS trend identification
+  - Examples: `Approach1J`, `Approach1P`, `Approach1L`, `Approach2L`, `Approach3L`, etc.
 - **Coefficients**: Use `h1`, `h2`, `T_optimal`, `h2_low`, `h2_high` consistently
 - **Bootstrap results**: Use `_samples` suffix for arrays of bootstrap values, `_point` for point estimates
 - Descriptive names preferred - long, clear names are better than short, ambiguous ones
@@ -64,11 +74,16 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 ### Plotting Conventions
 - **Temperature axis range**: Always use 0°C to 30°C for temperature axes in climate-growth plots
 - **Approach colors**: Use consistent color scheme defined in `APPROACH_COLORS` in output.py:
-  - approach0: black
-  - approach1: red
-  - approach2: orange
-  - approach3: magenta
-  - approach4: cyan
+  - Approach1J: black
+  - Approach1P: red
+  - Approach1L: orange
+  - Approach2L: magenta
+  - Approach3L: cyan
+  - Approach2J: darkgreen
+  - Approach3J: darkblue
+  - Approach2P: olive
+  - Approach3P: teal
+  - Approach0J/Approach0P/Approach0L (null models): gray
 - **Uncertainty bands**: Show 90% CI (lighter) and IQR (darker) for bootstrap results
 - **Year effects**: Plot k(t) with bootstrap uncertainty bands, shared y-axis across methods
 - **Diverging colormaps**: For difference plots or any plot using a diverging colormap (e.g., RdBu_r where white is in the middle), always use symmetric bounds with equal magnitude and opposite sign, so that white represents zero. Example: if data ranges from -0.03 to 0.05, use bounds of (-0.05, 0.05) not the raw data range.

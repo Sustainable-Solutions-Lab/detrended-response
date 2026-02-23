@@ -5,18 +5,18 @@ This script implements and compares multiple approaches for analyzing
 the climate-economy relationship with explicit time trend detrending.
 
 Approaches (publication-ready):
-    approach0: Conjoined OLS with country time trends and year fixed effects
-    approach1: Pre-computed k with linear T + quadratic GDP detrending
-    approach2: Pre-computed k with LOESS trends
-    approach3: Piecewise quadratic response with LOESS
-    approach4: Persistence decay model with LOESS
-    approach5: Piecewise quadratic with full OLS (like approach3 + approach0)
-    approach6: Persistence decay with full OLS (like approach4 + approach0)
-    approach7: Piecewise quadratic with linear T + quadratic GDP detrending (like approach3 + approach1)
-    approach8: Persistence decay with linear T + quadratic GDP detrending (like approach4 + approach1)
-    approach0h0: Null model (h1=h2=0) for approach0
-    approach1h0: Null model (h1=h2=0) for approach1
-    approach2h0: Null model (h1=h2=0) for approach2
+    Approach0J: Null model (h1=h2=0) with joint OLS (country trends + year effects only)
+    Approach0P: Null model (h1=h2=0) with polynomial trend identification
+    Approach0L: Null model (h1=h2=0) with LOESS trend identification
+    Approach1J: Quadratic response with joint OLS (country time trends and year fixed effects)
+    Approach1P: Quadratic response with polynomial trend identification (linear T + quadratic GDP)
+    Approach1L: Quadratic response with LOESS trend identification
+    Approach2J: Piecewise quadratic response with joint OLS
+    Approach2P: Piecewise quadratic response with polynomial trend identification
+    Approach2L: Piecewise quadratic response with LOESS trend identification
+    Approach3J: Persistence decay model with joint OLS
+    Approach3P: Persistence decay model with polynomial trend identification
+    Approach3L: Persistence decay model with LOESS trend identification
 
 Usage:
     python scripts/run_analysis.py [--year-min YEAR] [--year-max YEAR] [--output-dir DIR]
@@ -181,14 +181,14 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # approach3/approach5/approach7: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise)
-        if name in ['approach3', 'approach5', 'approach7'] and hasattr(r, 'h4'):
+        # Approach2L/Approach2J/Approach2P: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise)
+        if name in ['Approach2L', 'Approach2J', 'Approach2P'] and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # approach4/approach6/approach8: h1, h2, h4 (persistence decay), T_opt
-        elif name in ['approach4', 'approach6', 'approach8'] and hasattr(r, 'h4'):
+        # Approach3L/Approach3J/Approach3P: h1, h2, h4 (persistence decay), T_opt
+        elif name in ['Approach3L', 'Approach3J', 'Approach3P'] and hasattr(r, 'h4'):
             print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
@@ -198,7 +198,7 @@ def main():
                 print(f"  T_opt = N/A")
 
         else:
-            # Standard approaches (approach0, approach1, approach2, null models)
+            # Standard approaches (Approach1J, Approach1P, Approach1L, null models)
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):

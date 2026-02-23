@@ -21,14 +21,14 @@ STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_opt']
 NULL_MODEL_COEFFICIENTS = ['r_squared']
 APPROACH_COEFFICIENTS = {
     # Standard methods (quadratic response)
-    'method0': STANDARD_COEFFICIENTS,
-    'method1': STANDARD_COEFFICIENTS,
-    'method2': STANDARD_COEFFICIENTS,
+    'Approach1J': STANDARD_COEFFICIENTS,
+    'Approach1P': STANDARD_COEFFICIENTS,
+    'Approach1L': STANDARD_COEFFICIENTS,
     # Null models (h1=h2=0, no climate response)
-    'method0h0': NULL_MODEL_COEFFICIENTS,
-    'method1h0': NULL_MODEL_COEFFICIENTS,
-    # method3: h2 (below T_opt), h4 (above T_opt), T_opt
-    'method3': ['h2', 'h4', 'T_opt'],
+    'Approach0J': NULL_MODEL_COEFFICIENTS,
+    'Approach0P': NULL_MODEL_COEFFICIENTS,
+    # Approach2L: h2 (below T_opt), h4 (above T_opt), T_opt
+    'Approach2L': ['h2', 'h4', 'T_opt'],
 }
 
 

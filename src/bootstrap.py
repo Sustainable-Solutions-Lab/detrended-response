@@ -59,7 +59,7 @@ def _get_T_loess_at_base_year(
 ) -> np.ndarray:
     """Get T_loess at base year for each observation's country.
 
-    For approach4's pre-history assumption, we want to use T_loess at 1961
+    For Approach3L's pre-history assumption, we want to use T_loess at 1961
     (not the actual temperature at first observation). This function creates
     an array where each observation has its country's T_loess at base_year.
 
@@ -267,7 +267,7 @@ def run_bootstrap(
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
         h_T_approaches: List of method names to compute h(T) for (default: None means skip)
-            Example: ['approach0', 'approach1', 'approach2', 'approach3']
+            Example: ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L']
 
     Returns:
         Tuple of:
@@ -345,11 +345,11 @@ def run_bootstrap(
         original_year_means = compute_year_means(data)
         original_trends_loess = compute_country_trends_loess(data, original_year_means, loess_window)
 
-        # Precompute T_loess at base year (1961) for approach4's pre-history assumption
+        # Precompute T_loess at base year (1961) for Approach3L's pre-history assumption
         # This ensures the pre-history is based on LOESS-smoothed temperature, not actual
         T_loess_at_base_year = _get_T_loess_at_base_year(data, original_trends_loess, base_year=1961)
 
-        # Precompute T_linear at first year for approach6's pre-history assumption
+        # Precompute T_linear at first year for Approach3J's pre-history assumption
         # Uses linear OLS fit to temperature for each country
         T_linear_at_first_year = compute_T_linear_at_first_year(data)
 
@@ -441,11 +441,11 @@ def run_bootstrap(
                     continue
                 r = boot_results[name]
 
-                if name in ['approach0', 'approach1', 'approach2']:
+                if name in ['Approach1J', 'Approach1P', 'Approach1L']:
                     # Standard quadratic: h(T) = h1*T + h2*T²
                     h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
 
-                elif name == 'approach3':
+                elif name == 'Approach2L':
                     # Piecewise: h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
                     T_opt = r.T_opt
                     below = data.temp <= T_opt
@@ -455,7 +455,7 @@ def run_bootstrap(
                         r.h4 * (data.temp - T_opt)**2
                     )
 
-                elif name == 'approach4':
+                elif name == 'Approach3L':
                     # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
                     # The correction term accounts for assumed constant temperature before first year
                     # We assume pre-history temperature was T_loess_1961 (not actual T at first year)
@@ -467,8 +467,8 @@ def run_bootstrap(
                     X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
 
-                elif name == 'approach5':
-                    # Piecewise conjoined: same formula as approach3
+                elif name == 'Approach2J':
+                    # Piecewise conjoined: same formula as Approach2L
                     T_opt = r.T_opt
                     below = data.temp <= T_opt
                     h_T_samples[name][b] = np.where(
@@ -477,8 +477,8 @@ def run_bootstrap(
                         r.h4 * (data.temp - T_opt)**2
                     )
 
-                elif name == 'approach6':
-                    # Persistence decay conjoined: same formula as approach4
+                elif name == 'Approach3J':
+                    # Persistence decay conjoined: same formula as Approach3L
                     # Use T_linear_at_first_year for pre-history correction (linear OLS fit baseline)
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
@@ -487,8 +487,8 @@ def run_bootstrap(
                     X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
 
-                elif name == 'approach7':
-                    # Piecewise with linear detrend: same formula as approach3/approach5
+                elif name == 'Approach2P':
+                    # Piecewise with linear detrend: same formula as Approach2L/Approach2J
                     T_opt = r.T_opt
                     below = data.temp <= T_opt
                     h_T_samples[name][b] = np.where(
@@ -497,8 +497,8 @@ def run_bootstrap(
                         r.h4 * (data.temp - T_opt)**2
                     )
 
-                elif name == 'approach8':
-                    # Persistence with linear detrend: same formula as approach4/approach6
+                elif name == 'Approach3P':
+                    # Persistence with linear detrend: same formula as Approach3L/Approach3J
                     # Use T_linear_at_first_year for pre-history correction
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
@@ -531,13 +531,13 @@ def run_bootstrap(
         else:
             print(f"  Bootstrap complete: {n_successful}/{n_bootstrap} successful iterations")
 
-    # For approach0 and approach0h0, detrend k_samples by subtracting best-fit quadratic
+    # For Approach1J and Approach0J, detrend k_samples by subtracting best-fit quadratic
     # from each bootstrap. This removes the arbitrary quadratic that can shift between
     # bootstrap samples due to different country identification constraints.
     # These approaches set the first country's j terms to zero, which means k(t) can
     # absorb any arbitrary quadratic; different bootstrap samples have different countries
     # as "first", causing systematic quadratic shifts in k(t).
-    approaches_to_detrend = ['approach0', 'approach0h0']
+    approaches_to_detrend = ['Approach1J', 'Approach0J']
     years_array = np.array(unique_years, dtype=float)
     # Center years for numerical stability
     year_center = years_array.mean()
@@ -561,7 +561,7 @@ def run_bootstrap(
             for i, yr in enumerate(unique_years):
                 k_samples[approach_name][yr][b] = k_vals[i] - k_fitted[i]
 
-    # Also detrend k_point for approach0 and approach0h0 to match the detrended samples
+    # Also detrend k_point for Approach1J and Approach0J to match the detrended samples
     k_point_detrended = {}
     for approach_name in approaches_to_detrend:
         if approach_name in original_results and original_results[approach_name].k is not None:
@@ -584,7 +584,7 @@ def run_bootstrap(
         f2_point = getattr(orig, 'f2', None)
         T_dep_opt_point = getattr(orig, 'T_dep_opt', None)
 
-        # Use detrended k_point for approach0 and approach0h0
+        # Use detrended k_point for Approach1J and Approach0J
         if name in k_point_detrended:
             k_point_to_use = k_point_detrended[name]
         else:
@@ -695,18 +695,18 @@ def compute_bootstrap_statistics(
     return stats
 
 
-def compute_approach4_filtered_statistics(
+def compute_Approach3L_filtered_statistics(
     result: BootstrapResult,
     h4_threshold: float = 0.001,
     percentiles: Tuple[float, ...] = DEFAULT_PERCENTILES
 ) -> Dict[str, Dict[str, float]]:
-    """Compute bootstrap statistics for approach4 filtered to h4 > threshold.
+    """Compute bootstrap statistics for Approach3L filtered to h4 > threshold.
 
-    When h4 ≈ 0, approach4 behaves like approach2 (no persistence), so filtering
+    When h4 ≈ 0, Approach3L behaves like Approach1L (no persistence), so filtering
     to h4 > threshold represents cases where persistence decay is genuinely estimated.
 
     Args:
-        result: BootstrapResult for approach4
+        result: BootstrapResult for Approach3L
         h4_threshold: Minimum h4 value to include (default: 0.001)
         percentiles: Percentiles to compute (default: 5, 25, 50, 75, 95)
 

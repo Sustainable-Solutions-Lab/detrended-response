@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Sweep h4 (persistence decay) parameter for approach4.
+"""Sweep h4 (persistence decay) parameter for Approach3L.
 
-This script evaluates approach4 at fixed h4 values across a range,
+This script evaluates Approach3L at fixed h4 values across a range,
 computing and reporting metrics at each value.
 
 - h4 = 0: Full persistence (accumulated temperature effects persist)
@@ -35,8 +35,8 @@ from src.fitting import (
 )
 
 
-def fit_approach4_at_h4(data, trends_loess, year_means, h4):
-    """Fit approach4 at a fixed h4 value and return metrics.
+def fit_Approach3L_at_h4(data, trends_loess, year_means, h4):
+    """Fit Approach3L at a fixed h4 value and return metrics.
 
     Returns dict with h4, h1, h2, T_optimal, SSE, RMSE, r_squared, total_r_squared.
     """
@@ -97,7 +97,7 @@ def fit_approach4_at_h4(data, trends_loess, year_means, h4):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Sweep h4 (persistence decay) parameter for approach4"
+        description="Sweep h4 (persistence decay) parameter for Approach3L"
     )
     parser.add_argument(
         "--h4-min", type=float, default=0.0, help="Minimum h4 value"
@@ -174,7 +174,7 @@ def main():
     print(f"\nSweeping h4 from {args.h4_min} to {args.h4_max} ({args.h4_steps} steps)...\n")
 
     for h4 in h4_values:
-        result = fit_approach4_at_h4(data, trends_loess, year_means, h4)
+        result = fit_Approach3L_at_h4(data, trends_loess, year_means, h4)
         results.append(result)
 
     # Print results table

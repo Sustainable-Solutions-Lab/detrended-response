@@ -35,45 +35,45 @@ HISTOGRAM_BINS = 30
 CONFIDENCE_Z_SCORE = 1.96
 
 # Color scheme for approaches
-# - approach0 (Conjoined OLS): black
-# - approach1 (Precomputed k): red
-# - approach2 (LOESS): orange
-# - approach3 (Piecewise): magenta
-# - approach4 (Persistence Decay): cyan
-# - Null models: gray
+# - Approach1J (Quadratic Joint OLS): black
+# - Approach1P (Quadratic Polynomial): red
+# - Approach1L (Quadratic LOESS): orange
+# - Approach2L (Piecewise LOESS): magenta
+# - Approach3L (Persistence Decay LOESS): cyan
+# - Null models (Approach0J/0P/0L): gray
 APPROACH_COLORS = {
-    'approach0': 'black',
-    'approach1': 'red',
-    'approach2': 'orange',
-    'approach3': 'magenta',
-    'approach4': 'cyan',
-    'approach5': 'darkgreen',
-    'approach6': 'darkblue',
-    'approach7': 'olive',
-    'approach8': 'teal',
-    'approach0h0': 'gray',
-    'approach1h0': 'gray',
-    'approach2h0': 'gray',
+    'Approach1J': 'black',
+    'Approach1P': 'red',
+    'Approach1L': 'orange',
+    'Approach2L': 'magenta',
+    'Approach3L': 'cyan',
+    'Approach2J': 'darkgreen',
+    'Approach3J': 'darkblue',
+    'Approach2P': 'olive',
+    'Approach3P': 'teal',
+    'Approach0J': 'gray',
+    'Approach0P': 'gray',
+    'Approach0L': 'gray',
 }
 
 # Line style scheme for approaches
-# - approach0 (Conjoined OLS): solid
-# - approach1 (Precomputed k): dash-dot
-# - LOESS approaches (2-4): densely dashed
+# - Approach1J (Quadratic Joint): solid
+# - Approach1P (Quadratic Polynomial): dash-dot
+# - LOESS approaches (1L, 2L, 3L): densely dashed
 # - Null models: dashed/dotted
 APPROACH_LINESTYLES = {
-    'approach0': '-',
-    'approach1': '-.',
-    'approach2': (0, (5, 1)),   # densely dashed
-    'approach3': (0, (5, 1)),   # densely dashed
-    'approach4': (0, (5, 1)),   # densely dashed
-    'approach5': '-',           # solid (conjoined)
-    'approach6': '-',           # solid (conjoined)
-    'approach7': '-.',          # dash-dot (like approach1)
-    'approach8': '-.',          # dash-dot (like approach1)
-    'approach0h0': '--',
-    'approach1h0': ':',
-    'approach2h0': ':',
+    'Approach1J': '-',
+    'Approach1P': '-.',
+    'Approach1L': (0, (5, 1)),   # densely dashed
+    'Approach2L': (0, (5, 1)),   # densely dashed
+    'Approach3L': (0, (5, 1)),   # densely dashed
+    'Approach2J': '-',           # solid (conjoined)
+    'Approach3J': '-',           # solid (conjoined)
+    'Approach2P': '-.',          # dash-dot (like Approach1P)
+    'Approach3P': '-.',          # dash-dot (like Approach1P)
+    'Approach0J': '--',
+    'Approach0P': ':',
+    'Approach0L': ':',
 }
 
 
@@ -114,18 +114,18 @@ def get_valid_bootstrap_samples(
 
 
 def is_piecewise_result(result) -> bool:
-    """Check if result is from piecewise quadratic model (approach3/approach5/approach7).
+    """Check if result is from piecewise quadratic model (Approach2L/Approach2J/Approach2P).
 
     Piecewise results have T_opt, h2, and h4 as primary parameters and h1=0.
-    For approach3/approach5/approach7, h2 is curvature below T_opt, h4 is curvature above T_opt.
+    For Approach2L/Approach2J/Approach2P, h2 is curvature below T_opt, h4 is curvature above T_opt.
 
     Checks approach name first (most reliable), then falls back to h1==0 check.
     """
     # Check approach name first (works for both FitResult and BootstrapResult)
     approach = getattr(result, 'approach', '')
-    if 'piecewise' in approach.lower() or approach in ('approach3', 'approach5', 'approach7'):
+    if 'piecewise' in approach.lower() or approach in ('Approach2L', 'Approach2J', 'Approach2P'):
         return True
-    # Also check for approach3/approach5/approach7 in approach name string (e.g., "3: Piecewise LOESS", "5: Piecewise Conjoined", "7: Piecewise Linear Detrend")
+    # Also check for Approach2L/Approach2J/Approach2P in approach name string (e.g., "2L: Piecewise LOESS", "2J: Piecewise Conjoined", "2P: Piecewise Linear Detrend")
     if approach.startswith('3:') or approach.startswith('5:') or approach.startswith('7:'):
         return True
     # Fallback to h1==0 check for backward compatibility
@@ -652,7 +652,7 @@ def plot_temperature_response(
     # Plot 1: Basic methods (method0, method1)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1'],
+        approaches=['Approach1J', 'Approach1P'],
         filename='temperature_response_all.pdf',
         title_suffix='Basic Methods',
         T_range=T_range,
@@ -661,16 +661,16 @@ def plot_temperature_response(
     # Plot 2: Precomputed k methods (method1)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1'],
+        approaches=['Approach1J', 'Approach1P'],
         filename='temperature_response_precomputed_k.pdf',
         title_suffix='Precomputed k Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: LOESS methods (approach2, approach3, approach4)
+    # Plot 3: LOESS methods (Approach1L, Approach2L, Approach3L)
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['approach2', 'approach3', 'approach4'],
+        approaches=['Approach1L', 'Approach2L', 'Approach3L'],
         filename='temperature_response_loess.pdf',
         title_suffix='LOESS Methods',
         T_range=T_range,
@@ -729,7 +729,7 @@ def plot_temperature_derivative(
     # Plot 1: Basic methods (method0, method1)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1'],
+        approaches=['Approach1J', 'Approach1P'],
         filename='temperature_derivative_all.pdf',
         title_suffix='Basic Methods',
         T_range=T_range,
@@ -738,16 +738,16 @@ def plot_temperature_derivative(
     # Plot 2: Precomputed k methods (method1)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach0', 'approach1'],
+        approaches=['Approach1J', 'Approach1P'],
         filename='temperature_derivative_precomputed_k.pdf',
         title_suffix='Precomputed k Methods',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 3: LOESS methods (approach2, approach3, approach4)
+    # Plot 3: LOESS methods (Approach1L, Approach2L, Approach3L)
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['approach2', 'approach3', 'approach4'],
+        approaches=['Approach1L', 'Approach2L', 'Approach3L'],
         filename='temperature_derivative_loess.pdf',
         title_suffix='LOESS Methods',
         T_range=T_range,
@@ -856,7 +856,7 @@ def plot_year_effects(
     fig, ax = plt.subplots(figsize=(12, 6))
 
     # Plot year means k[t] used by methods 1-4 as a heavy line
-    for name in ('approach1', 'approach2', 'approach3'):
+    for name in ('Approach1P', 'Approach1L', 'Approach2L'):
         if name in results:
             k_year_means = np.array([results[name].k[yr] for yr in unique_years])
             ax.plot(unique_years, k_year_means, color='black', linestyle='-', linewidth=3,
@@ -864,14 +864,14 @@ def plot_year_effects(
             break  # Only plot once since all share the same k
 
     for name, result in results.items():
-        # Skip methods that use the same k values as approach1 (already plotted above)
-        if name in ('approach1', 'approach2', 'approach3'):
+        # Skip methods that use the same k values as Approach1P (already plotted above)
+        if name in ('Approach1P', 'Approach1L', 'Approach2L'):
             continue
 
         # k is stored with actual year as key
         k_values = np.array([result.k[yr] for yr in unique_years])
 
-        if name == 'approach0':
+        if name == 'Approach1J':
             # For Approach 0, subtract least-squares best-fit quadratic
             # Fit quadratic: k(t) = a + b*t + c*t^2
             # Use normalized time for numerical stability
@@ -1975,7 +1975,7 @@ def _get_T_loess_at_base_year(
 ) -> np.ndarray:
     """Get T_loess at base year for each observation's country.
 
-    For approach4's pre-history assumption, we want to use T_loess at 1961
+    For Approach3L's pre-history assumption, we want to use T_loess at 1961
     (not the actual temperature at first observation). This function creates
     an array where each observation has its country's T_loess at base_year.
 
@@ -2031,9 +2031,9 @@ def save_bootstrap_h_values(
     - h_T: computed h(T) value
 
     The h(T) formula varies by approach:
-    - approach0, approach1, approach2: h(T) = h1*T + h2*T²
-    - approach3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
-    - approach4: h_conv = h1*X1 + h2*X2 with persistence-decay accumulators
+    - Approach1J, Approach1P, Approach1L: h(T) = h1*T + h2*T²
+    - Approach2L: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+    - Approach3L: h_conv = h1*X1 + h2*X2 with persistence-decay accumulators
 
     Note: This file can be large (~2GB for 1000 iterations × 5 approaches × 9405 obs).
     Consider gzip compression after generation if needed.
@@ -2081,12 +2081,12 @@ def save_bootstrap_h_values(
                 approach_key = name
 
                 # Compute h(T) for each observation based on approach type
-                if name in ['approach0', 'approach1', 'approach2']:
+                if name in ['Approach1J', 'Approach1P', 'Approach1L']:
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
-                elif name == 'approach3':
+                elif name == 'Approach2L':
                     below = temp_arr <= r.T_opt
                     h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
-                elif name == 'approach4':
+                elif name == 'Approach3L':
                     # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
                     # The correction term accounts for assumed constant temperature before first year
                     # We assume pre-history temperature was T_loess_1961 (not actual T at first year)
@@ -2157,13 +2157,13 @@ def save_bootstrap_h_baselines(
     - h_T_baseline: h(T_loess_base) value
 
     The h(T) formula varies by approach:
-    - approach0, approach1, approach2: h(T) = h1*T + h2*T²
-    - approach3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
-    - approach4: h_T_baseline = 0 if h4 > 0, else h1*T + h2*T²
+    - Approach1J, Approach1P, Approach1L: h(T) = h1*T + h2*T²
+    - Approach2L: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+    - Approach3L: h_T_baseline = 0 if h4 > 0, else h1*T + h2*T²
 
-    Note: For approach4 with h4 > 0, constant temperature gives X1=X2=0 due to
-    the persistence decay structure, so h_T_baseline = 0. If h4 = 0, approach4
-    reduces to approach2 and uses the standard quadratic baseline.
+    Note: For Approach3L with h4 > 0, constant temperature gives X1=X2=0 due to
+    the persistence decay structure, so h_T_baseline = 0. If h4 = 0, Approach3L
+    reduces to Approach1L and uses the standard quadratic baseline.
 
     Args:
         bootstrap_results: Dict mapping method name to BootstrapResult
@@ -2201,7 +2201,7 @@ def save_bootstrap_h_baselines(
             country_T_loess_base[iso3] = T_loess[earliest_idx]
 
     # Approaches to process (matching h_T_samples keys)
-    approaches_to_save = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5', 'approach6', 'approach7', 'approach8']
+    approaches_to_save = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L', 'Approach2J', 'Approach3J', 'Approach2P', 'Approach3P']
     available_approaches = [a for a in approaches_to_save if a in bootstrap_results]
 
     rows = []
@@ -2225,13 +2225,13 @@ def save_bootstrap_h_baselines(
         # Process each country
         for iso3, T_base in country_T_loess_base.items():
             # Point estimate (iteration = -1)
-            if approach_key in ['approach3', 'approach5', 'approach7']:
+            if approach_key in ['Approach2L', 'Approach2J', 'Approach2P']:
                 # Piecewise: h2*(T-T_opt)² below, h4*(T-T_opt)² above
                 if T_base <= T_opt_point:
                     h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
                 else:
                     h_T_baseline = h4_point * (T_base - T_opt_point) ** 2
-            elif approach_key in ['approach4', 'approach6', 'approach8'] and h4_point > 0:
+            elif approach_key in ['Approach3L', 'Approach3J', 'Approach3P'] and h4_point > 0:
                 # Approach4/6/8 with persistence: baseline = 0
                 # (constant temperature gives X1=X2=0 due to persistence decay)
                 h_T_baseline = 0.0
@@ -2252,14 +2252,14 @@ def save_bootstrap_h_baselines(
                 h1_b = h1_samples[b]
                 h2_b = h2_samples[b]
 
-                if approach_key in ['approach3', 'approach5', 'approach7']:
+                if approach_key in ['Approach2L', 'Approach2J', 'Approach2P']:
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     T_opt_b = T_opt_samples[b]
                     if T_base <= T_opt_b:
                         h_T_baseline_b = h2_b * (T_base - T_opt_b) ** 2
                     else:
                         h_T_baseline_b = h4_b * (T_base - T_opt_b) ** 2
-                elif approach_key in ['approach4', 'approach6', 'approach8']:
+                elif approach_key in ['Approach3L', 'Approach3J', 'Approach3P']:
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     if h4_b > 0:
                         # Approach4/6/8 with persistence: baseline = 0
@@ -2318,7 +2318,7 @@ def plot_year_effects_bootstrap(
     # Default to methods that have meaningful year effects
     if approaches_to_plot is None:
         approaches_to_plot = [
-            'approach0', 'approach1', 'approach2', 'approach3', 'approach4'
+            'Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L'
         ]
 
     # Filter to approaches that exist and have k_samples
@@ -2469,9 +2469,9 @@ def plot_combined_temp_response_and_year_effects(
         input_file: Optional input file path for annotation
     """
     if temp_response_approaches is None:
-        temp_response_approaches = ['approach0', 'approach1']
+        temp_response_approaches = ['Approach1J', 'Approach1P']
     if year_effects_approaches is None:
-        year_effects_approaches = ['approach0', 'approach2']
+        year_effects_approaches = ['Approach1J', 'Approach1L']
 
     # Validate approaches exist
     temp_approaches = [a for a in temp_response_approaches if a in results]
@@ -2666,7 +2666,7 @@ def plot_temperature_response_4panel(
     """Plot 4-panel temperature response figure (h(T) - h(T_opt)).
 
     Creates a 2x2 figure with temperature response curves and uncertainty bands.
-    Default layout: approach0, approach1 on top row; approach2, approach3 on bottom row.
+    Default layout: Approach1J, Approach1P on top row; Approach1L, Approach2L on bottom row.
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -2678,7 +2678,7 @@ def plot_temperature_response_4panel(
         input_file: Optional input file path for annotation
     """
     if approaches is None:
-        approaches = ['approach0', 'approach1', 'approach2', 'approach3']
+        approaches = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L']
 
     # Validate approaches exist
     valid_approaches = [a for a in approaches if a in results]
@@ -2778,7 +2778,7 @@ def plot_temperature_derivative_4panel(
     """Plot 4-panel temperature derivative figure (dh/dT).
 
     Creates a 2x2 figure with temperature derivative curves and uncertainty bands.
-    Default layout: approach0, approach1 on top row; approach2, approach3 on bottom row.
+    Default layout: Approach1J, Approach1P on top row; Approach1L, Approach2L on bottom row.
 
     Args:
         results: Dict of BootstrapResult for each approach
@@ -2789,7 +2789,7 @@ def plot_temperature_derivative_4panel(
         input_file: Optional input file path for annotation
     """
     if approaches is None:
-        approaches = ['approach0', 'approach1', 'approach2', 'approach3']
+        approaches = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L']
 
     # Validate approaches exist
     valid_approaches = [a for a in approaches if a in results]
@@ -2874,7 +2874,7 @@ def plot_temperature_response_2panel(
         input_file: Optional input file path for annotation
     """
     if approaches is None:
-        approaches = ['approach0', 'approach1']
+        approaches = ['Approach1J', 'Approach1P']
 
     # Validate approaches exist
     valid_approaches = [a for a in approaches if a in results]
@@ -2982,7 +2982,7 @@ def plot_year_effects_2panel(
         input_file: Optional input file path for annotation
     """
     if approaches is None:
-        approaches = ['approach0', 'approach2']
+        approaches = ['Approach1J', 'Approach1L']
 
     # Validate approaches exist and have k_samples
     valid_approaches = [a for a in approaches if a in results and results[a].k_samples is not None]
@@ -3112,7 +3112,7 @@ def plot_climate_response_contours(
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        approaches: List of approach keys to include (default: ['approach2'])
+        approaches: List of approach keys to include (default: ['Approach1L'])
         filename: Output filename
         Ttrend_range: Trend temperature range for x-axis (default: (0, 30))
         deltaT_range: Temperature deviation (T - Ttrend) range for y-axis (default: (-5, 5))
@@ -3122,7 +3122,7 @@ def plot_climate_response_contours(
     from matplotlib.backends.backend_pdf import PdfPages
 
     if approaches is None:
-        approaches = ['approach2']
+        approaches = ['Approach1L']
 
     # Filter to approaches that exist
     available = [a for a in approaches if a in results]
@@ -3410,20 +3410,20 @@ def compute_h_response_uncertainty_bands(
     Returns percentile bands across all bootstrap samples.
 
     For quadratic models: h(T) = h1*T + h2*T²
-    For piecewise (approach3/approach5): h(T) - h(T_opt) = h2*(T-T_opt)² or h4*(T-T_opt)²
+    For piecewise (Approach2L/Approach2J): h(T) - h(T_opt) = h2*(T-T_opt)² or h4*(T-T_opt)²
     For method2b/8a variants: uses appropriate coefficients (h3,h4 for trend)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach3'/'approach5' for piecewise,
+        approach_key: Approach identifier (e.g., 'Approach2L'/'Approach2J' for piecewise,
                       'method2b', 'method3a_high', 'method3a_low')
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('approach3', 'approach5'))
+    is_piecewise = (approach_key in ('Approach2L', 'Approach2J'))
 
     # Handle approach 6b (trend only)
     if approach_key == 'method2b':
@@ -3572,7 +3572,7 @@ def plot_bootstrap_parameter_distributions(
         result: BootstrapResult for this approach
         stats: Statistics dict from compute_bootstrap_statistics
         output_dir: Directory to save the plot
-        approach_key: Key like 'approach0' for filename
+        approach_key: Key like 'Approach1J' for filename
     """
     params = [
         ('h1', result.h1_samples, result.h1_point, stats['h1'], 'h₁ (Linear Coefficient)'),
@@ -3637,7 +3637,7 @@ def _get_distribution_params_for_approach(name: str, result, stats: dict) -> lis
         return params if params else _get_standard_params(result, stats)
 
     # Approach 8: piecewise quadratic (h2 for T<=T_opt, h4 for T>T_opt)
-    if name in ('approach3', 'approach3'):
+    if name in ('Approach2L', 'Approach2L'):
         params = []
         # h2 is curvature below T_opt
         if result.h2_samples is not None and 'h2' in stats:
@@ -3872,8 +3872,8 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
         h_point = h2 * (T - T_opt) ** 2
         return h_point, T_opt
 
-    # Handle method3/approach3/approach5 (asymmetric piecewise): h2 for T <= T_opt, h4 for T > T_opt
-    if approach_key in ('approach3', 'approach5') and result.h4_point is not None:
+    # Handle piecewise approaches Approach2L/Approach2J/Approach2P (asymmetric): h2 for T <= T_opt, h4 for T > T_opt
+    if approach_key in ('Approach2L', 'Approach2J') and result.h4_point is not None:
         T_opt = result.T_opt_point
         h2_low = result.h2_point
         h2_high = result.h4_point
@@ -4146,13 +4146,13 @@ def compute_derivative_uncertainty_bands(
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach3' for piecewise quadratic,
+        approach_key: Approach identifier (e.g., 'Approach2L' for piecewise quadratic,
                       'method2b', 'method3a_high', 'method3a_low')
 
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('approach3', 'approach5'))
+    is_piecewise = (approach_key in ('Approach2L', 'Approach2J'))
 
     # Handle approach 6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'method2b':
@@ -4310,8 +4310,8 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
         T_opt = result.T_opt_point
         return 2 * h2 * (T - T_opt)
 
-    # Handle method3/approach3 (asymmetric piecewise: h2 for T <= T_opt, h4 for T > T_opt)
-    if approach_key in ('approach3', 'approach3') and result.h4_point is not None:
+    # Handle piecewise approaches Approach2L/Approach2J/Approach2P (asymmetric: h2 for T <= T_opt, h4 for T > T_opt)
+    if approach_key in ('Approach2L', 'Approach2L') and result.h4_point is not None:
         T_opt = result.T_opt_point
         h2_low = result.h2_point
         h2_high = result.h4_point
@@ -4607,7 +4607,7 @@ def plot_h2_histograms(
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
         filename: Output filename (should end in .pdf)
-        approaches: List of approaches to include (default: ['approach2', 'approach3'])
+        approaches: List of approaches to include (default: ['Approach1L', 'Approach2L'])
         x_range: Fixed x-axis range as (x_min, x_max) for h2/h2_low panels
         bin_width: Width of histogram bins for h2/h2_low panels (default: 0.0001)
         x_range_h2_high: Fixed x-axis range for h2_high panel (default: same as x_range)
@@ -4615,7 +4615,7 @@ def plot_h2_histograms(
         input_file: Path to input data file (for annotation)
     """
     if approaches is None:
-        approaches = ['approach2', 'approach3']
+        approaches = ['Approach1L', 'Approach2L']
 
     # Default h2_high settings to main settings if not specified
     if x_range_h2_high is None:
@@ -4632,7 +4632,7 @@ def plot_h2_histograms(
 
         result = results[approach]
 
-        if approach in ('approach3', 'approach3'):
+        if approach in ('Approach2L', 'Approach2L'):
             # Piecewise quadratic: h2 for T <= T_opt, h4 for T > T_opt
             if result.h2_samples is not None:
                 valid_low = result.h2_samples[~np.isnan(result.h2_samples)]
@@ -4640,7 +4640,7 @@ def plot_h2_histograms(
                     panels.append((
                         valid_low,
                         result.h2_point,
-                        get_color('approach3', 'magenta'),
+                        get_color('Approach2L', 'magenta'),
                         'Approach 8: h₂ (T ≤ T_opt)',
                         False  # not h4
                     ))
@@ -4651,7 +4651,7 @@ def plot_h2_histograms(
                     panels.append((
                         valid_high,
                         result.h4_point,
-                        get_color('approach3', 'magenta'),
+                        get_color('Approach2L', 'magenta'),
                         'Approach 8: h₄ (T > T_opt)',
                         True  # is h4
                     ))
@@ -4764,25 +4764,25 @@ def plot_persistence_decay(
     output_dir: Path,
     data: AnalysisData = None,
     T_range: tuple = (0, 30),
-    filename: str = 'fig_approach4_persistence_decay.pdf',
+    filename: str = 'fig_Approach3L_persistence_decay.pdf',
     input_file: str = None,
 ) -> None:
-    """Plot approach4 (persistence decay) 2-panel figure.
+    """Plot Approach3L (persistence decay) 2-panel figure.
 
     Panel layout:
         [0] h(T) - h(T_opt) temperature response (all samples)
         [1] h4 distribution histogram (all samples)
 
     Args:
-        results: Dict of BootstrapResult (must contain 'approach4')
+        results: Dict of BootstrapResult (must contain 'Approach3L')
         output_dir: Directory to save the plot
         data: AnalysisData for temperature histogram overlay
         T_range: Temperature range for x-axis (default: 0-30°C)
         filename: Output filename
         input_file: Path to input data file (for annotation)
     """
-    result = results['approach4']
-    color = get_color('approach4', 'cyan')
+    result = results['Approach3L']
+    color = get_color('Approach3L', 'cyan')
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
@@ -4947,22 +4947,22 @@ def plot_persistence_decay_derivative(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
     T_range: tuple = (0, 30),
-    filename: str = 'fig_approach4_persistence_decay_derivative.pdf',
+    filename: str = 'fig_Approach3L_persistence_decay_derivative.pdf',
     input_file: str = None,
 ) -> None:
-    """Plot approach4 (persistence decay) derivative figure (dh/dT).
+    """Plot Approach3L (persistence decay) derivative figure (dh/dT).
 
     Single panel showing dh/dT with bootstrap uncertainty.
 
     Args:
-        results: Dict of BootstrapResult (must contain 'approach4')
+        results: Dict of BootstrapResult (must contain 'Approach3L')
         output_dir: Directory to save the plot
         T_range: Temperature range for x-axis (default: 0-30°C)
         filename: Output filename
         input_file: Path to input data file (for annotation)
     """
-    result = results['approach4']
-    color = get_color('approach4', 'cyan')
+    result = results['Approach3L']
+    color = get_color('Approach3L', 'cyan')
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
@@ -5170,7 +5170,7 @@ def save_all_bootstrap_plots(
     # Temperature response PDF 1: Basic methods (method0, method1)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach0', 'approach1'],
+        approaches=['Approach1J', 'Approach1P'],
         filename='bootstrap_temperature_response_basic.pdf',
         T_range=T_range,
         data=data,
@@ -5181,7 +5181,7 @@ def save_all_bootstrap_plots(
     # Temperature response PDF 2: Precomputed k methods (method1, method2)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach1', 'approach2'],
+        approaches=['Approach1P', 'Approach1L'],
         filename='bootstrap_temperature_response_precomputed.pdf',
         T_range=T_range,
         data=data,
@@ -5189,10 +5189,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_precomputed.pdf")
 
-    # Temperature response PDF 3: LOESS methods (approach2, approach3, approach4)
+    # Temperature response PDF 3: LOESS methods (Approach1L, Approach2L, Approach3L)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach2', 'approach3', 'approach4'],
+        approaches=['Approach1L', 'Approach2L', 'Approach3L'],
         filename='bootstrap_temperature_response_loess.pdf',
         T_range=T_range,
         data=data,
@@ -5200,11 +5200,11 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_loess.pdf")
 
-    # Temperature response PDF 4: Conjoined approaches (approach5, approach6)
+    # Temperature response PDF 4: Conjoined approaches (Approach2J, Approach3J)
     # These combine piecewise/persistence climate response with full OLS for j_i(t) and k(t)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach5', 'approach6'],
+        approaches=['Approach2J', 'Approach3J'],
         filename='bootstrap_temperature_response_conjoined.pdf',
         T_range=T_range,
         data=data,
@@ -5212,10 +5212,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_conjoined.pdf")
 
-    # Temperature response PDF 5: Comparison of piecewise approaches (approach3 vs approach5)
+    # Temperature response PDF 5: Comparison of piecewise approaches (Approach2L vs Approach2J)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach3', 'approach5'],
+        approaches=['Approach2L', 'Approach2J'],
         filename='bootstrap_temperature_response_piecewise_comparison.pdf',
         T_range=T_range,
         data=data,
@@ -5223,10 +5223,10 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_piecewise_comparison.pdf")
 
-    # Temperature response PDF 6: Comparison of persistence approaches (approach4 vs approach6)
+    # Temperature response PDF 6: Comparison of persistence approaches (Approach3L vs Approach3J)
     plot_bootstrap_temperature_response(
         results, output_dir,
-        approaches=['approach4', 'approach6'],
+        approaches=['Approach3L', 'Approach3J'],
         filename='bootstrap_temperature_response_persistence_comparison.pdf',
         T_range=T_range,
         data=data,
@@ -5237,7 +5237,7 @@ def save_all_bootstrap_plots(
     # Temperature derivative plot - all methods in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5', 'approach6'],
+        approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L', 'Approach2J', 'Approach3J'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
@@ -5279,7 +5279,7 @@ def plot_temperature_response_4panel_variants(
         T_dep_range: Unused, kept for API compatibility
         input_file: Optional input file path for annotation
     """
-    required = ['approach2', 'approach3', 'approach4']
+    required = ['Approach1L', 'Approach2L', 'Approach3L']
     valid_approaches = [a for a in required if a in results]
     if len(valid_approaches) < 3:
         print(f"  WARNING: Not enough valid approaches for 4-panel figure (found {valid_approaches})")
@@ -5311,12 +5311,12 @@ def plot_temperature_response_4panel_variants(
 
     # Top-left: Approach 6 (standard quadratic)
     ax = axes[0, 0]
-    result6 = results['approach2']
-    color6 = get_color('approach2', 'orange')
+    result6 = results['Approach1L']
+    color6 = get_color('Approach1L', 'orange')
     h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach2'
+        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach1L'
     )
-    h_point6, T_opt6 = _compute_point_estimate_response(result6, T, 'approach2', None)
+    h_point6, T_opt6 = _compute_point_estimate_response(result6, T, 'Approach1L', None)
 
     if temp_recent is not None:
         ax2 = ax.twinx()
@@ -5346,12 +5346,12 @@ def plot_temperature_response_4panel_variants(
 
     # Top-right: Approach 8 (piecewise quadratic)
     ax = axes[0, 1]
-    result8 = results['approach3']
-    color8 = get_color('approach3', 'magenta')
+    result8 = results['Approach2L']
+    color8 = get_color('Approach2L', 'magenta')
     h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach3'
+        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach2L'
     )
-    h_point8, T_opt8 = _compute_point_estimate_response(result8, T, 'approach3', None)
+    h_point8, T_opt8 = _compute_point_estimate_response(result8, T, 'Approach2L', None)
 
     if temp_recent is not None:
         ax2 = ax.twinx()
@@ -5381,12 +5381,12 @@ def plot_temperature_response_4panel_variants(
 
     # Bottom-left: Approach 4 (persistence decay)
     ax = axes[1, 0]
-    result4 = results['approach4']
-    color4 = get_color('approach4', 'cyan')
+    result4 = results['Approach3L']
+    color4 = get_color('Approach3L', 'cyan')
     h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-        result4, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach4'
+        result4, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach3L'
     )
-    h_point4, T_opt4 = _compute_point_estimate_response(result4, T, 'approach4', None)
+    h_point4, T_opt4 = _compute_point_estimate_response(result4, T, 'Approach3L', None)
 
     if temp_recent is not None:
         ax2 = ax.twinx()
@@ -5467,7 +5467,7 @@ def plot_temperature_derivative_4panel_variants(
         T_dep_range: Unused, kept for API compatibility
         input_file: Optional input file path for annotation
     """
-    required = ['approach2', 'approach3', 'approach4']
+    required = ['Approach1L', 'Approach2L', 'Approach3L']
     valid_approaches = [a for a in required if a in results]
     if len(valid_approaches) < 3:
         print(f"  WARNING: Not enough valid approaches for 4-panel derivative figure (found {valid_approaches})")
@@ -5482,13 +5482,13 @@ def plot_temperature_derivative_4panel_variants(
 
     # Top-left: Approach 6 (standard quadratic derivative)
     ax = axes[0, 0]
-    result6 = results['approach2']
-    color6 = get_color('approach2', 'orange')
+    result6 = results['Approach1L']
+    color6 = get_color('Approach1L', 'orange')
 
     dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
-        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach2'
+        result6, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach1L'
     )
-    dh_point6 = _compute_derivative_point_estimate(result6, T, 'approach2', None)
+    dh_point6 = _compute_derivative_point_estimate(result6, T, 'Approach1L', None)
 
     ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color6, label='90% CI')
     ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color6, label='IQR')
@@ -5503,13 +5503,13 @@ def plot_temperature_derivative_4panel_variants(
 
     # Top-right: Approach 8 (piecewise quadratic derivative)
     ax = axes[0, 1]
-    result8 = results['approach3']
-    color8 = get_color('approach3', 'magenta')
+    result8 = results['Approach2L']
+    color8 = get_color('Approach2L', 'magenta')
 
     dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
-        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach3'
+        result8, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach2L'
     )
-    dh_point8 = _compute_derivative_point_estimate(result8, T, 'approach3', None)
+    dh_point8 = _compute_derivative_point_estimate(result8, T, 'Approach2L', None)
 
     ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color8, label='90% CI')
     ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color8, label='IQR')
@@ -5524,13 +5524,13 @@ def plot_temperature_derivative_4panel_variants(
 
     # Bottom-left: Approach 4 derivative (persistence decay)
     ax = axes[1, 0]
-    result4 = results['approach4']
-    color4 = get_color('approach4', 'cyan')
+    result4 = results['Approach3L']
+    color4 = get_color('Approach3L', 'cyan')
 
     dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
-        result4, T, percentiles=(5, 25, 50, 75, 95), approach_key='approach4'
+        result4, T, percentiles=(5, 25, 50, 75, 95), approach_key='Approach3L'
     )
-    dh_point4 = _compute_derivative_point_estimate(result4, T, 'approach4', None)
+    dh_point4 = _compute_derivative_point_estimate(result4, T, 'Approach3L', None)
 
     ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color4, label='90% CI')
     ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color4, label='IQR')

@@ -72,8 +72,8 @@ def load_run_metadata(directory: Path) -> dict:
 # ==============================================================================
 
 # Central approaches for analysis (in display order)
-CENTRAL_APPROACHES_POINT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
-CENTRAL_APPROACHES_BOXPLOT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
+CENTRAL_APPROACHES_POINT = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
+CENTRAL_APPROACHES_BOXPLOT = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -94,7 +94,7 @@ def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> 
 
     This is the sum of annual climate effects relative to the baseline year.
 
-    Note: For approach4, the h_T values in bootstrap_h_values.csv already incorporate
+    Note: For Approach3L, the h_T values in bootstrap_h_values.csv already incorporate
     persistence decay via h_conv(T), so no additional decay is applied here.
 
     Args:
@@ -483,13 +483,13 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int, h_T_bas
 
     # All approaches use the same logic: subtract 1961 baseline, then sum
     #
-    # For approaches 0-3: h_T = h(T), so h_T_delta = h(T) - h(T_baseline)
+    # For approaches Approach1J, Approach1P, Approach1L, Approach2L: h_T = h(T), so h_T_delta = h(T) - h(T_baseline)
     #
-    # For approach4: h_T = h_conv which already incorporates persistence decay.
+    # For Approach3L: h_T = h_conv which already incorporates persistence decay.
     # We use the same formula: h_T_delta = h_conv - h_conv(baseline)
     # When h4 > 0, h_conv values are smaller due to built-in decay, so cumulative
-    # effects will be smaller/bounded compared to approach2.
-    # When h4 ≈ 0, h_conv ≈ h(T), so results match approach2.
+    # effects will be smaller/bounded compared to Approach1L.
+    # When h4 ≈ 0, h_conv ≈ h(T), so results match Approach1L.
     #
     # This unified approach avoids the "double-decay" bug where we incorrectly
     # applied additional decay to the baseline.
@@ -707,14 +707,14 @@ def plot_cumulative_effects_by_approach(
     print(f"      Saved: {output_path}")
 
 
-def plot_cumulative_effects_approach4(
+def plot_cumulative_effects_Approach3L(
     df_all_countries: pd.DataFrame,
     df_representative: pd.DataFrame,
     representatives: dict,
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create 2-panel plot for approach4 with symmetric y-axis auto-scaled to data.
+    """Create 2-panel plot for Approach3L with symmetric y-axis auto-scaled to data.
 
     Left panel: Cumulative effects by year (all countries)
     Right panel: Box-and-whisker plot for representative countries (2022)
@@ -728,13 +728,13 @@ def plot_cumulative_effects_approach4(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    approach = 'approach4'
+    approach = 'Approach3L'
 
-    # Filter to approach4
+    # Filter to Approach3L
     df_approach = df_all_countries[df_all_countries['approach'] == approach]
 
     if len(df_approach) == 0:
-        print(f"      Warning: No data for {approach}, skipping approach4 plot")
+        print(f"      Warning: No data for {approach}, skipping Approach3L plot")
         return
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
@@ -803,7 +803,7 @@ def plot_cumulative_effects_approach4(
     country_keys = get_country_ordering(representatives)
     n_countries = len(country_keys)
 
-    # Filter to year 2022 and approach4
+    # Filter to year 2022 and Approach3L
     df_2022 = df_representative[(df_representative['year'] == 2022) & (df_representative['approach'] == approach)].copy()
 
     box_width = 0.7
@@ -889,7 +889,7 @@ def plot_cumulative_effects_approach4(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_approach4.pdf'
+    output_path = output_dir / 'cumulative_effects_Approach3L.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
@@ -904,7 +904,7 @@ def select_representative_countries_from_file(
 ) -> dict:
     """Select representative countries using only point estimate data.
 
-    Loads only iteration=-1, approach=approach0 to minimize memory usage.
+    Loads only iteration=-1, approach=Approach1J to minimize memory usage.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -916,27 +916,27 @@ def select_representative_countries_from_file(
     Returns:
         Dictionary mapping percentile (or 'min'/'max') -> {'iso3': str, 'value': float, 'target': float}
     """
-    print("      Loading point estimate data (iteration=-1, approach0)...")
+    print("      Loading point estimate data (iteration=-1, Approach1J)...")
 
     # Read CSV in chunks, filtering to only needed rows
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'approach0')]
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'Approach1J')]
         if len(filtered) > 0:
             chunks.append(filtered)
 
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for country selection")
 
-    # Load baselines (point estimates only, approach0)
+    # Load baselines (point estimates only, Approach1J)
     baselines = load_baselines(bootstrap_dir, iteration=-1)
     if baselines is not None:
-        baselines_approach0 = baselines[baselines['approach'] == 'approach0']
+        baselines_Approach1J = baselines[baselines['approach'] == 'Approach1J']
         baselines_dict = {
             row['iso3']: row['h_T_baseline']
-            for _, row in baselines_approach0.iterrows()
+            for _, row in baselines_Approach1J.iterrows()
         }
-        print(f"      Loaded {len(baselines_dict):,} baseline values for approach0")
+        print(f"      Loaded {len(baselines_dict):,} baseline values for Approach1J")
     else:
         baselines_dict = {}
 
@@ -944,7 +944,7 @@ def select_representative_countries_from_file(
     results = []
     for iso3, group in df.groupby('iso3'):
         h_T_baseline = baselines_dict.get(iso3)
-        processed = process_group(group, 'approach0', loess_window, h_T_baseline=h_T_baseline)
+        processed = process_group(group, 'Approach1J', loess_window, h_T_baseline=h_T_baseline)
         # Get 2022 value
         row_2022 = processed[processed['year'] == 2022]
         if len(row_2022) > 0:
@@ -1246,9 +1246,9 @@ def main():
     print("\n[7/7] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
 
-    # Additional: Create 2-panel approach4 plot
-    print("\n[Bonus] Creating approach4 2-panel visualization...")
-    plot_cumulative_effects_approach4(df_all_countries, df_summary, representatives, output_dir, input_file)
+    # Additional: Create 2-panel Approach3L plot
+    print("\n[Bonus] Creating Approach3L 2-panel visualization...")
+    plot_cumulative_effects_Approach3L(df_all_countries, df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")

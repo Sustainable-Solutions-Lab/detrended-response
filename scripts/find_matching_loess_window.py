@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find LOESS window that makes approach2h0 Total R² equal to approach1h0 Total R².
+"""Find LOESS window that makes Approach0L Total R² equal to Approach0P Total R².
 
 This script uses Brent's method to find the LOESS smoothing window width
 where the null models (no climate response) have equal explanatory power.
@@ -24,12 +24,12 @@ from src.detrending import (
     compute_country_trends_with_k,
     compute_country_trends_loess,
 )
-from src.fitting import fit_approach1h0_precomputed_k, fit_approach2h0_precomputed_k_loess
+from src.fitting import fit_Approach0P_precomputed_k, fit_Approach0L_precomputed_k_loess
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Find LOESS window matching approach1h0 and approach2h0 Total R²"
+        description="Find LOESS window matching Approach0P and Approach0L Total R²"
     )
     parser.add_argument(
         "--tol",
@@ -56,21 +56,21 @@ def main():
     print(f"  Observations: {data.n_obs}")
     print(f"  Year range: {data.year_range[0]} - {data.year_range[1]}")
 
-    # Compute trends for approach1h0 (independent of LOESS window)
-    print("\nComputing approach1h0 (quadratic trends)...")
+    # Compute trends for Approach0P (independent of LOESS window)
+    print("\nComputing Approach0P (quadratic trends)...")
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
 
-    # Fit approach1h0
-    result1h0 = fit_approach1h0_precomputed_k(data, trends_with_k, year_means)
+    # Fit Approach0P
+    result1h0 = fit_Approach0P_precomputed_k(data, trends_with_k, year_means)
     target_r2 = result1h0.total_r_squared
-    print(f"  approach1h0 Total R² = {target_r2:.15f}")
+    print(f"  Approach0P Total R² = {target_r2:.15f}")
 
-    # Define objective function: difference between approach2h0 and approach1h0 Total R²
+    # Define objective function: difference between Approach0L and Approach0P Total R²
     def objective(window):
         trends_loess = compute_country_trends_loess(data, year_means, window)
-        result2h0 = fit_approach2h0_precomputed_k_loess(data, trends_loess, year_means)
+        result2h0 = fit_Approach0L_precomputed_k_loess(data, trends_loess, year_means)
         return result2h0.total_r_squared - target_r2
 
     # Find bracket - LOESS with very small window overfits (higher R²),
@@ -96,15 +96,15 @@ def main():
 
     # Verify result
     trends_loess = compute_country_trends_loess(data, year_means, optimal_window)
-    result2h0 = fit_approach2h0_precomputed_k_loess(data, trends_loess, year_means)
+    result2h0 = fit_Approach0L_precomputed_k_loess(data, trends_loess, year_means)
     final_diff = result2h0.total_r_squared - target_r2
 
     print("\n" + "=" * 70)
     print("Result")
     print("=" * 70)
     print(f"\n  Optimal LOESS window: {optimal_window:.15f} years")
-    print(f"\n  approach1h0 Total R²:   {target_r2:.15f}")
-    print(f"  approach2h0 Total R²:   {result2h0.total_r_squared:.15f}")
+    print(f"\n  Approach0P Total R²:   {target_r2:.15f}")
+    print(f"  Approach0L Total R²:   {result2h0.total_r_squared:.15f}")
     print(f"  Difference:           {final_diff:+.2e}")
 
     # Also compute mean weight distance (inverse of the 44/7 factor)

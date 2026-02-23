@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Create diagnostic CSV for Finland's approach4 cumulative effects calculation.
+"""Create diagnostic CSV for Finland's Approach3L cumulative effects calculation.
 
 This script generates a CSV file showing all intermediate values for Finland's
-approach4 forward simulation (point estimate only), allowing step-by-step
+Approach3L forward simulation (point estimate only), allowing step-by-step
 verification that the calculation is correct.
 
 Usage:
@@ -126,7 +126,7 @@ def compute_finland_diagnostic(data, trends_loess, h1, h2, h4):
         # Climate response: h_T = h1*X1 + h2*X2
         h_T = h1 * X1 + h2 * X2
 
-        # Baseline for approach4:
+        # Baseline for Approach3L:
         # If h4 > 0: baseline = 0 (constant temperature gives X1=X2=0 due to persistence)
         # If h4 = 0: baseline = h(T_loess_1961) = h1*T_loess_1961 + h2*T_loess_1961^2
         if h4 > 0:
@@ -165,13 +165,13 @@ def compute_finland_diagnostic(data, trends_loess, h1, h2, h4):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Create diagnostic CSV for Finland's approach4 calculation"
+        description="Create diagnostic CSV for Finland's Approach3L calculation"
     )
     parser.add_argument(
         "--output",
         type=str,
-        default="finland_approach4_diagnostic.csv",
-        help="Output CSV file path (default: finland_approach4_diagnostic.csv)",
+        default="finland_Approach3L_diagnostic.csv",
+        help="Output CSV file path (default: finland_Approach3L_diagnostic.csv)",
     )
     parser.add_argument(
         "--use-csv",
@@ -208,7 +208,7 @@ def main():
     print(f"      LOESS window: {args.loess_window:.1f} years")
 
     # Fit all approaches to get coefficients
-    print("\n[3/4] Fitting approach4...")
+    print("\n[3/4] Fitting Approach3L...")
     results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
@@ -216,16 +216,16 @@ def main():
         trends_loess=trends_loess
     )
 
-    # Get approach4 coefficients
-    approach4_result = results['approach4']
-    h1 = approach4_result.h1
-    h2 = approach4_result.h2
-    h4 = approach4_result.h4
+    # Get Approach3L coefficients
+    Approach3L_result = results['Approach3L']
+    h1 = Approach3L_result.h1
+    h2 = Approach3L_result.h2
+    h4 = Approach3L_result.h4
 
     print(f"      h1 = {h1:.10f}")
     print(f"      h2 = {h2:.10f}")
     print(f"      h4 = {h4:.10f}")
-    print(f"      T_opt = {approach4_result.T_opt:.4f}")
+    print(f"      T_opt = {Approach3L_result.T_opt:.4f}")
 
     # Compute diagnostic values for Finland
     print("\n[4/4] Computing Finland diagnostic values...")

@@ -214,7 +214,7 @@ def generate_variance_decomposition_table(
     # Default approaches to include (publication set)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4']
+        approaches = ['Approach1J', 'Approach0J', 'Approach1P', 'Approach0P', 'Approach1L', 'Approach2L', 'Approach3L']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -590,7 +590,7 @@ def generate_bootstrap_comparison_table(
     # Default approaches to include (publication set, same as variance decomposition table)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['approach0', 'approach0h0', 'approach1', 'approach1h0', 'approach2', 'approach3', 'approach4']
+        approaches = ['Approach1J', 'Approach0J', 'Approach1P', 'Approach0P', 'Approach1L', 'Approach2L', 'Approach3L']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -603,7 +603,7 @@ def generate_bootstrap_comparison_table(
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
     # Additional parameters for approach 6b/6c/6e (departure/trend coefficients: h3, h4)
     trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
-    # Note: For piecewise approach3, h2 = curvature below T_opt, h4 = curvature above T_opt
+    # Note: For piecewise Approach2L, h2 = curvature below T_opt, h4 = curvature above T_opt
     # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
 
     # Percentiles to include
@@ -703,8 +703,8 @@ def generate_tables(
     """
     # Approaches to include in tables
     table_approaches = [
-        'approach0', 'approach0h0', 'approach1', 'approach1h0',
-        'approach2', 'approach3', 'approach4'
+        'Approach1J', 'Approach0J', 'Approach1P', 'Approach0P',
+        'Approach1L', 'Approach2L', 'Approach3L'
     ]
 
     # Generate variance decomposition table
@@ -756,22 +756,22 @@ def generate_figures(
 
     # Define approach patterns for publication figures
     # Only includes approaches, not exploratory methods
-    # 4-panel layout: [[row0: approach0, approach1], [row1: approach2, approach3]]
-    approaches_4panel = ['approach0', 'approach1', 'approach2', 'approach3']
-    # 2-panel layout: [col0: approach2, col1: approach3]
-    approaches_2panel = ['approach2', 'approach3']
-    # 5-panel layout: includes approach4 (persistence decay)
-    approaches_5panel = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
+    # 4-panel layout: [[row0: Approach1J, Approach1P], [row1: Approach1L, Approach2L]]
+    approaches_4panel = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L']
+    # 2-panel layout: [col0: Approach1L, col1: Approach2L]
+    approaches_2panel = ['Approach1L', 'Approach2L']
+    # 5-panel layout: includes Approach3L (persistence decay)
+    approaches_5panel = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
 
     # Figure 1a: Temperature response (4 panels)
-    # Top row: approach0, approach1; Bottom row: approach2, approach3
+    # Top row: Approach1J, Approach1P; Bottom row: Approach1L, Approach2L
     if data is not None:
         print("      [Figures] Generating temperature response figure (4 panels)...")
         plot_temperature_response_4panel(
             results,
             data,
             output_dir,
-            approaches=['approach0', 'approach1', 'approach2', 'approach3'],
+            approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
             filename='fig_temperature_response_main.pdf',
             T_range=(0, 30),
             input_file=None,
@@ -779,12 +779,12 @@ def generate_figures(
         print("      [Figures] Saved fig_temperature_response_main.pdf")
 
         # Figure 1b: Temperature derivative (4 panels)
-        # Top row: approach0, approach1; Bottom row: approach2, approach3
+        # Top row: Approach1J, Approach1P; Bottom row: Approach1L, Approach2L
         print("      [Figures] Generating temperature derivative figure (4 panels)...")
         plot_temperature_derivative_4panel(
             results,
             output_dir,
-            approaches=['approach0', 'approach1', 'approach2', 'approach3'],
+            approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
             filename='fig_temperature_derivative_main.pdf',
             T_range=(0, 30),
             input_file=None,
@@ -797,7 +797,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['approach0', 'approach2'],
+            approaches=['Approach1J', 'Approach1L'],
             filename='fig_year_effects_main.pdf',
             input_file=None,
         )
@@ -851,7 +851,7 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
 
-    # Figure 6b: T_optimal histograms - 5 panels (all main approaches including approach4)
+    # Figure 6b: T_optimal histograms - 5 panels (all main approaches including Approach3L)
     print("      [Figures] Generating T_optimal histogram figure (5 panels)...")
     plot_T_optimal_histograms(
         results,
@@ -862,12 +862,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_T_optimal_histogram_5panel.pdf")
 
-    # Figure 7: h2 coefficient histograms - 4 panels [[approach0, approach1], [approach2, approach3]]
+    # Figure 7: h2 coefficient histograms - 4 panels [[Approach1J, Approach1P], [Approach1L, Approach2L]]
     print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3'],
+        approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         filename='fig_h2_histogram_4panel.pdf',
@@ -875,7 +875,7 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
 
-    # Figure 7b: h2 coefficient histograms - 5 panels (all main approaches including approach4)
+    # Figure 7b: h2 coefficient histograms - 5 panels (all main approaches including Approach3L)
     print("      [Figures] Generating h2 coefficient histogram figure (5 panels)...")
     plot_h2_histograms(
         results,
@@ -888,12 +888,12 @@ def generate_figures(
     )
     print("      [Figures] Saved fig_h2_histogram_5panel.pdf")
 
-    # Figure 8: h2 coefficient histograms - 3 panels (approach2 h2, approach3 h2_low, approach3 h2_high)
+    # Figure 8: h2 coefficient histograms - 3 panels (Approach1L h2, Approach2L h2_low, Approach2L h2_high)
     print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
     plot_h2_histograms(
         results,
         output_dir,
-        approaches=['approach2', 'approach3'],
+        approaches=['Approach1L', 'Approach2L'],
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
         x_range_h2_high=(-0.01, 0.001),
@@ -917,27 +917,27 @@ def generate_figures(
     print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
 
     # Figure 10: Approach4 persistence decay (h(T) response + h4 distribution)
-    print("      [Figures] Generating approach4 persistence decay figure...")
+    print("      [Figures] Generating Approach3L persistence decay figure...")
     from .output import plot_persistence_decay, plot_persistence_decay_derivative
     plot_persistence_decay(
         results,
         output_dir,
         data=data,
         T_range=(0, 30),
-        filename='fig_approach4_persistence_decay.pdf',
+        filename='fig_Approach3L_persistence_decay.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_approach4_persistence_decay.pdf")
+    print("      [Figures] Saved fig_Approach3L_persistence_decay.pdf")
 
     # Figure 10b: Approach4 persistence decay derivative (dh/dT)
-    print("      [Figures] Generating approach4 persistence decay derivative figure...")
+    print("      [Figures] Generating Approach3L persistence decay derivative figure...")
     plot_persistence_decay_derivative(
         results,
         output_dir,
         T_range=(0, 30),
-        filename='fig_approach4_persistence_decay_derivative.pdf',
+        filename='fig_Approach3L_persistence_decay_derivative.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_approach4_persistence_decay_derivative.pdf")
+    print("      [Figures] Saved fig_Approach3L_persistence_decay_derivative.pdf")
 
     # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)
