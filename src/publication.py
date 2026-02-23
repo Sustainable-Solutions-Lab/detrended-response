@@ -28,97 +28,6 @@ from src.output import (
 )
 
 
-def add_approach4h4pos_to_bootstrap_results(bootstrap_results: dict) -> dict:
-    """Add approach4h4pos (h4 > 0.001 filtered) to bootstrap results.
-
-    Creates filtered versions of approach4 data where only samples with h4 > 0.001
-    are included, and adds these as 'approach4h4pos' entries to the dataframes.
-
-    Parameters
-    ----------
-    bootstrap_results : dict
-        Dictionary containing bootstrap data (modified in place)
-
-    Returns
-    -------
-    dict
-        The modified bootstrap_results dictionary
-    """
-    coefficients_df = bootstrap_results.get('bootstrap_coefficients')
-    summary_df = bootstrap_results.get('bootstrap_summary')
-    var_attrib_df = bootstrap_results.get('bootstrap_var_attrib')
-
-    if coefficients_df is None or 'approach4' not in coefficients_df['approach'].values:
-        return bootstrap_results
-
-    # Get approach4 coefficient samples
-    approach4_mask = coefficients_df['approach'] == 'approach4'
-    approach4_coef = coefficients_df[approach4_mask].copy()
-
-    # Filter for h4 > 0.001
-    h4_positive_mask = approach4_coef['h4'] > 0.001
-    approach4h4pos_coef = approach4_coef[h4_positive_mask].copy()
-    approach4h4pos_coef['approach'] = 'approach4h4pos'
-
-    # Add to coefficients dataframe
-    bootstrap_results['bootstrap_coefficients'] = pd.concat(
-        [coefficients_df, approach4h4pos_coef], ignore_index=True
-    )
-
-    # Create summary row for approach4h4pos
-    if summary_df is not None and 'approach4' in summary_df['approach'].values:
-        approach4_summary = summary_df[summary_df['approach'] == 'approach4'].iloc[0].to_dict()
-
-        # Compute new statistics from filtered samples
-        n_filtered = len(approach4h4pos_coef)
-
-        new_summary = {
-            'approach': 'approach4h4pos',
-            'approach_name': f'9b: Persistence Decay (h₄ > 0, n={n_filtered})',
-            'n_bootstrap': n_filtered,
-            'n_successful': n_filtered,
-        }
-
-        # Compute percentiles for each parameter
-        for param in ['h1', 'h2', 'h4', 'T_opt', 'total_r_squared']:
-            if param in approach4h4pos_coef.columns:
-                valid_samples = approach4h4pos_coef[param].dropna()
-                if len(valid_samples) > 0:
-                    new_summary[f'{param}_point'] = approach4_summary.get(f'{param}_point', np.nan)
-                    new_summary[f'{param}_median'] = np.median(valid_samples)
-                    new_summary[f'{param}_p5'] = np.percentile(valid_samples, 5)
-                    new_summary[f'{param}_p25'] = np.percentile(valid_samples, 25)
-                    new_summary[f'{param}_p75'] = np.percentile(valid_samples, 75)
-                    new_summary[f'{param}_p95'] = np.percentile(valid_samples, 95)
-
-        # Add new row to summary
-        new_summary_df = pd.DataFrame([new_summary])
-        bootstrap_results['bootstrap_summary'] = pd.concat(
-            [summary_df, new_summary_df], ignore_index=True
-        )
-
-    # Create var_attrib rows for approach4h4pos
-    if var_attrib_df is not None and 'approach4' in var_attrib_df['approach'].values:
-        approach4_var = var_attrib_df[var_attrib_df['approach'] == 'approach4'].copy()
-
-        # Get the sample indices that match h4 > 0.001
-        # The var_attrib samples should align with coefficient samples by bootstrap_idx
-        if 'bootstrap_idx' in approach4_var.columns and 'bootstrap_idx' in approach4_coef.columns:
-            valid_bootstrap_idx = approach4_coef[h4_positive_mask]['bootstrap_idx'].values
-            approach4h4pos_var = approach4_var[approach4_var['bootstrap_idx'].isin(valid_bootstrap_idx)].copy()
-        else:
-            # If no bootstrap_idx, assume same ordering and use mask directly
-            approach4h4pos_var = approach4_var.iloc[h4_positive_mask.values[h4_positive_mask.index.isin(approach4_var.index)]].copy()
-
-        approach4h4pos_var['approach'] = 'approach4h4pos'
-
-        bootstrap_results['bootstrap_var_attrib'] = pd.concat(
-            [var_attrib_df, approach4h4pos_var], ignore_index=True
-        )
-
-    return bootstrap_results
-
-
 def reconstruct_bootstrap_results(
     coefficients_df: pd.DataFrame,
     summary_df: pd.DataFrame,
@@ -792,13 +701,10 @@ def generate_tables(
     output_dir : Path
         Directory to save generated tables
     """
-    # Add approach4h4pos (h4 > 0.001 filtered) to bootstrap results
-    add_approach4h4pos_to_bootstrap_results(bootstrap_results)
-
-    # Approaches to include in tables (with approach4h4pos after approach4)
+    # Approaches to include in tables
     table_approaches = [
         'approach0', 'approach0h0', 'approach1', 'approach1h0',
-        'approach2', 'approach3', 'approach4', 'approach4h4pos'
+        'approach2', 'approach3', 'approach4'
     ]
 
     # Generate variance decomposition table

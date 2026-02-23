@@ -32,6 +32,7 @@ from src.output import (
     save_bootstrap_var_attrib_csv,
     save_bootstrap_country_samples_csv,
     save_bootstrap_h_values,
+    save_bootstrap_h_baselines,
     save_bootstrap_summary_txt,
     save_bootstrap_summary_table,
     save_variance_decomposition_table,
@@ -215,6 +216,11 @@ def main():
             input_file=input_file,
             original_results=original_results,
             trends_loess=trends_loess
+        )
+        save_bootstrap_h_baselines(
+            bootstrap_results, data, trends_loess, output_dir,
+            input_file=input_file,
+            original_results=original_results
         )
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)

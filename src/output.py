@@ -48,8 +48,6 @@ APPROACH_COLORS = {
     'approach2': 'orange',
     'approach3': 'magenta',
     'approach4': 'cyan',
-    'approach4h4pos': 'cyan',
-    'approach4h4zero': 'blue',  # Diagnostic: h4 near-zero iterations
     'approach0h0': 'gray',
     'approach1h0': 'gray',
     'approach2h0': 'gray',
@@ -71,8 +69,6 @@ APPROACH_LINESTYLES = {
     'approach2': (0, (5, 1)),   # densely dashed
     'approach3': (0, (5, 1)),   # densely dashed
     'approach4': (0, (5, 1)),   # densely dashed
-    'approach4h4pos': ':',      # dotted for filtered version
-    'approach4h4zero': ':',     # dotted for diagnostic version
     'approach0h0': '--',
     'approach1h0': ':',
     'approach2h0': ':',
@@ -1974,6 +1970,50 @@ def save_bootstrap_country_samples_csv(
     print(f"  Saved bootstrap_country_samples.csv ({n_bootstrap} x {n_countries})")
 
 
+def _get_T_loess_at_base_year(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    base_year: int = 1961
+) -> np.ndarray:
+    """Get T_loess at base year for each observation's country.
+
+    For approach4's pre-history assumption, we want to use T_loess at 1961
+    (not the actual temperature at first observation). This function creates
+    an array where each observation has its country's T_loess at base_year.
+
+    Args:
+        data: AnalysisData with country/year info
+        trends_loess: CountryTrendsLoess with T_loess values
+        base_year: Base year (default: 1961)
+
+    Returns:
+        Array of shape (n_obs,) with T_loess at base_year for each observation's country
+    """
+    T_loess = trends_loess.T_loess
+    year_arr = data.year.astype(int)
+    result = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+        years_for_country = year_arr[country_indices]
+
+        # Find T_loess at base_year for this country
+        base_year_mask = years_for_country == base_year
+        if base_year_mask.any():
+            base_idx = country_indices[np.where(base_year_mask)[0][0]]
+            T_loess_base = T_loess[base_idx]
+        else:
+            # If no observation at base year, use earliest year
+            earliest_idx = country_indices[np.argmin(years_for_country)]
+            T_loess_base = T_loess[earliest_idx]
+
+        # Set all observations for this country to T_loess_base
+        result[country_mask] = T_loess_base
+
+    return result
+
+
 def save_bootstrap_h_values(
     h_T_samples: Dict[str, np.ndarray],
     data: AnalysisData,
@@ -2056,11 +2096,13 @@ def save_bootstrap_h_values(
                 elif name == 'approach4':
                     # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
                     # The correction term accounts for assumed constant temperature before first year
-                    # Store h_conv(T) without trend subtraction (like approach2)
-                    # The cumulative effects script handles trend subtraction separately
+                    # We assume pre-history temperature was T_loess_1961 (not actual T at first year)
+                    # This makes the baseline consistent with using T_loess_1961 in cumulative effects
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, temp_arr)
+                    # Build array with T_loess at base year (1961) for each country's pre-history
+                    T_loess_base = _get_T_loess_at_base_year(data, trends_loess, base_year=1961)
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_loess_base)
                     X1 = temp_arr - h4 * A_T_lag - correction_T
                     X2 = temp_arr**2 - h4 * A_T2_lag - correction_T2
                     h_T_point = r.h1 * X1 + r.h2 * X2
@@ -2097,6 +2139,149 @@ def save_bootstrap_h_values(
                 f.write(''.join(buffer))
 
     print(f"  Saved bootstrap_h_values.csv ({total_rows} rows)")
+
+
+def save_bootstrap_h_baselines(
+    bootstrap_results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    output_dir: Path,
+    input_file: str = None,
+    original_results: Dict[str, FitResult] = None,
+    base_year: int = 1961,
+) -> None:
+    """Save h(T_loess_base_year) baseline values for cumulative effects calculation.
+
+    For each country, computes h(T_loess_1961) where T_loess_1961 is the LOESS-smoothed
+    temperature at the base year. This provides a stable baseline that isn't affected
+    by inter-annual temperature variability.
+
+    Creates: bootstrap_h_baselines.csv with columns:
+    - iteration: bootstrap iteration number (-1 for point estimate, 0+ for bootstrap)
+    - approach: approach key
+    - iso3: country ISO3 code
+    - T_loess_base: LOESS temperature at base year for this country
+    - h_T_baseline: h(T_loess_base) value
+
+    The h(T) formula varies by approach:
+    - approach0, approach1, approach2, approach4: h(T) = h1*T + h2*T²
+    - approach3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+
+    Note: For approach4, assuming T(t) = T_loess_1961 for t < 1961, the persistence
+    decay component contributes nothing when temperature is constant, so the
+    baseline simplifies to h1*T + h2*T².
+
+    Args:
+        bootstrap_results: Dict mapping method name to BootstrapResult
+        data: AnalysisData with country/year info
+        trends_loess: CountryTrendsLoess with T_loess values
+        output_dir: Output directory
+        input_file: Input data filename for header comment
+        original_results: Dict of FitResult for point estimates (iteration=-1)
+        base_year: Base year for cumulative effects (default: 1961)
+    """
+    output_path = output_dir / 'bootstrap_h_baselines.csv'
+
+    # Pre-compute country info
+    iso3_arr = np.array([data.idx_to_iso[idx] for idx in data.country_idx])
+    year_arr = data.year.astype(int)
+    T_loess = trends_loess.T_loess
+
+    # Build mapping: iso3 -> T_loess at base_year
+    # Find the observation index for each country at base_year
+    country_T_loess_base = {}
+    for c in range(data.n_countries):
+        iso3 = data.idx_to_iso[c]
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+        years_for_country = year_arr[country_indices]
+
+        # Find the base year observation
+        base_year_mask = years_for_country == base_year
+        if base_year_mask.any():
+            base_idx = country_indices[np.where(base_year_mask)[0][0]]
+            country_T_loess_base[iso3] = T_loess[base_idx]
+        else:
+            # If no observation at base year, use earliest year
+            earliest_idx = country_indices[np.argmin(years_for_country)]
+            country_T_loess_base[iso3] = T_loess[earliest_idx]
+
+    # Approaches to process (matching h_T_samples keys)
+    approaches_to_save = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
+    available_approaches = [a for a in approaches_to_save if a in bootstrap_results]
+
+    rows = []
+
+    for approach_key in available_approaches:
+        br = bootstrap_results[approach_key]
+        n_bootstrap = br.n_bootstrap
+
+        # Get point estimates
+        h1_point = br.h1_point
+        h2_point = br.h2_point
+        h4_point = getattr(br, 'h4_point', None)
+        T_opt_point = br.T_opt_point
+
+        # Get bootstrap samples
+        h1_samples = br.h1_samples
+        h2_samples = br.h2_samples
+        h4_samples = getattr(br, 'h4_samples', None)
+        T_opt_samples = br.T_opt_samples
+
+        # Process each country
+        for iso3, T_base in country_T_loess_base.items():
+            # Point estimate (iteration = -1)
+            if approach_key == 'approach3':
+                # Piecewise: h2*(T-T_opt)² below, h4*(T-T_opt)² above
+                if T_base <= T_opt_point:
+                    h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
+                else:
+                    h_T_baseline = h4_point * (T_base - T_opt_point) ** 2
+            else:
+                # Standard quadratic: h1*T + h2*T²
+                h_T_baseline = h1_point * T_base + h2_point * T_base ** 2
+
+            rows.append({
+                'iteration': -1,
+                'approach': approach_key,
+                'iso3': iso3,
+                'T_loess_base': T_base,
+                'h_T_baseline': h_T_baseline,
+            })
+
+            # Bootstrap samples (iteration = 0, 1, ..., N-1)
+            for b in range(n_bootstrap):
+                h1_b = h1_samples[b]
+                h2_b = h2_samples[b]
+
+                if approach_key == 'approach3':
+                    h4_b = h4_samples[b] if h4_samples is not None else 0.0
+                    T_opt_b = T_opt_samples[b]
+                    if T_base <= T_opt_b:
+                        h_T_baseline_b = h2_b * (T_base - T_opt_b) ** 2
+                    else:
+                        h_T_baseline_b = h4_b * (T_base - T_opt_b) ** 2
+                else:
+                    h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
+
+                rows.append({
+                    'iteration': b,
+                    'approach': approach_key,
+                    'iso3': iso3,
+                    'T_loess_base': T_base,
+                    'h_T_baseline': h_T_baseline_b,
+                })
+
+    # Write to CSV
+    df = pd.DataFrame(rows)
+    with open(output_path, 'w') as f:
+        if input_file:
+            f.write(f'# Input data: {Path(input_file).name}\n')
+        f.write(f'# Baseline values at T_loess({base_year}) for cumulative effects\n')
+    df.to_csv(output_path, mode='a', index=False)
+
+    total_rows = len(df)
+    print(f"  Saved bootstrap_h_baselines.csv ({total_rows} rows)")
 
 
 def plot_year_effects_bootstrap(
@@ -4646,14 +4831,11 @@ def plot_persistence_decay(
     filename: str = 'fig_approach4_persistence_decay.pdf',
     input_file: str = None,
 ) -> None:
-    """Plot approach4 (persistence decay) 4-panel figure.
-
-    Top row: Temperature response h(T) - h(T_opt)
-    Bottom row: h4 distribution histograms
+    """Plot approach4 (persistence decay) 2-panel figure.
 
     Panel layout:
-        [0,0] h(T) response (all samples)     [0,1] h(T) response (h4 > 0 only)
-        [1,0] h4 distribution (all samples)   [1,1] h4 distribution (h4 > 0 only)
+        [0] h(T) - h(T_opt) temperature response (all samples)
+        [1] h4 distribution histogram (all samples)
 
     Args:
         results: Dict of BootstrapResult (must contain 'approach4')
@@ -4666,7 +4848,7 @@ def plot_persistence_decay(
     result = results['approach4']
     color = get_color('approach4', 'cyan')
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
     T = np.linspace(T_range[0], T_range[1], 200)
 
@@ -4810,52 +4992,13 @@ def plot_persistence_decay(
             ax.text(0.5, 0.5, 'No h4 samples available', ha='center', va='center',
                     transform=ax.transAxes, fontsize=12)
 
-    # Filter to samples where h4 is away from the boundary (h4=0)
-    # Values < 0.001 are effectively at the h4=0 boundary due to optimizer precision
-    h4_positive_mask = h4_samples > 0.001
-    n_total = len(h4_samples[~np.isnan(h4_samples)])
-    n_positive = np.sum(h4_positive_mask)
-
-    h1_positive = h1_samples[h4_positive_mask]
-    h2_positive = h2_samples[h4_positive_mask]
-    h4_positive = h4_samples[h4_positive_mask]
-
-    # Compute median T_opt for the h4 > 0 subset
-    T_opt_positive = -h1_positive / (2 * h2_positive)
-    T_opt_median = np.nanmedian(T_opt_positive)
-
-    # ==================== TOP ROW: Temperature responses ====================
-
-    # Top-left: h(T) response (all samples)
+    # ==================== LEFT PANEL: Temperature response ====================
     h_p5_all, h_p25_all, h_p75_all, h_p95_all = compute_h_samples_and_percentiles(h1_samples, h2_samples)
-    plot_h_T_panel(axes[0, 0], h_p5_all, h_p25_all, h_p75_all, h_p95_all,
-                   'Approach 4: Temperature Response (All Samples)')
+    plot_h_T_panel(axes[0], h_p5_all, h_p25_all, h_p75_all, h_p95_all,
+                   'Approach 4: Temperature Response')
 
-    # Top-right: h(T) response (h4 > 0 only)
-    if n_positive > 0:
-        h_p5_pos, h_p25_pos, h_p75_pos, h_p95_pos = compute_h_samples_and_percentiles(h1_positive, h2_positive)
-        plot_h_T_panel(axes[0, 1], h_p5_pos, h_p25_pos, h_p75_pos, h_p95_pos,
-                       f'Approach 4: Temperature Response (h₄ > 0 Only, n={n_positive})',
-                       T_opt_override=T_opt_median,
-                       T_opt_label=f'T_opt (median) = {T_opt_median:.1f}°C')
-    else:
-        axes[0, 1].text(0.5, 0.5, 'No samples with h₄ > 0', ha='center', va='center',
-                        transform=axes[0, 1].transAxes, fontsize=12)
-        axes[0, 1].set_title('Approach 4: Temperature Response (h₄ > 0 Only)')
-
-    # ==================== BOTTOM ROW: h4 distributions ====================
-
-    # Bottom-left: h4 distribution (all samples)
-    plot_h4_panel(axes[1, 0], h4_samples, 'Approach 4: h₄ Distribution (All Samples)')
-
-    # Bottom-right: h4 distribution (h4 > 0 only)
-    if n_positive > 0:
-        plot_h4_panel(axes[1, 1], h4_positive, 'Approach 4: h₄ Distribution (h₄ > 0 Only)',
-                      show_count_annotation=True, total_count=n_total, show_median=True)
-    else:
-        axes[1, 1].text(0.5, 0.5, 'No samples with h₄ > 0', ha='center', va='center',
-                        transform=axes[1, 1].transAxes, fontsize=12)
-        axes[1, 1].set_title('Approach 4: h₄ Distribution (h₄ > 0 Only)')
+    # ==================== RIGHT PANEL: h4 distribution ====================
+    plot_h4_panel(axes[1], h4_samples, 'Approach 4: h₄ Distribution')
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
@@ -4873,9 +5016,7 @@ def plot_persistence_decay_derivative(
 ) -> None:
     """Plot approach4 (persistence decay) derivative figure (dh/dT).
 
-    Two panels side by side:
-        [0] dh/dT (all samples)
-        [1] dh/dT (h4 > 0 only)
+    Single panel showing dh/dT with bootstrap uncertainty.
 
     Args:
         results: Dict of BootstrapResult (must contain 'approach4')
@@ -4887,14 +5028,13 @@ def plot_persistence_decay_derivative(
     result = results['approach4']
     color = get_color('approach4', 'cyan')
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
 
     T = np.linspace(T_range[0], T_range[1], 200)
 
     # Get bootstrap samples
     h1_samples = result.h1_samples
     h2_samples = result.h2_samples
-    h4_samples = result.h4_samples
 
     # Point estimates
     h1_point = result.h1_point
@@ -4903,63 +5043,35 @@ def plot_persistence_decay_derivative(
     # Compute point estimate dh/dT curve: dh/dT = h1 + 2*h2*T
     dh_point = h1_point + 2 * h2_point * T
 
-    # Helper function to compute dh/dT samples and percentiles
-    def compute_dh_samples_and_percentiles(h1_vals, h2_vals):
-        """Compute dh/dT for each bootstrap sample and return percentiles."""
-        valid_mask = ~np.isnan(h1_vals) & ~np.isnan(h2_vals)
-        h1_valid = h1_vals[valid_mask]
-        h2_valid = h2_vals[valid_mask]
+    # Compute dh/dT samples and percentiles
+    valid_mask = ~np.isnan(h1_samples) & ~np.isnan(h2_samples)
+    h1_valid = h1_samples[valid_mask]
+    h2_valid = h2_samples[valid_mask]
 
-        n_valid = len(h1_valid)
-        dh_samples = np.zeros((n_valid, len(T)))
-        for i in range(n_valid):
-            h1_i, h2_i = h1_valid[i], h2_valid[i]
-            dh_samples[i] = h1_i + 2 * h2_i * T
+    n_valid = len(h1_valid)
+    dh_samples = np.zeros((n_valid, len(T)))
+    for i in range(n_valid):
+        h1_i, h2_i = h1_valid[i], h2_valid[i]
+        dh_samples[i] = h1_i + 2 * h2_i * T
 
-        dh_p5 = np.nanpercentile(dh_samples, 5, axis=0)
-        dh_p25 = np.nanpercentile(dh_samples, 25, axis=0)
-        dh_p75 = np.nanpercentile(dh_samples, 75, axis=0)
-        dh_p95 = np.nanpercentile(dh_samples, 95, axis=0)
-        return dh_p5, dh_p25, dh_p75, dh_p95
+    dh_p5 = np.nanpercentile(dh_samples, 5, axis=0)
+    dh_p25 = np.nanpercentile(dh_samples, 25, axis=0)
+    dh_p75 = np.nanpercentile(dh_samples, 75, axis=0)
+    dh_p95 = np.nanpercentile(dh_samples, 95, axis=0)
 
-    # Helper function to plot dh/dT panel
-    def plot_dh_panel(ax, dh_p5, dh_p25, dh_p75, dh_p95, title):
-        """Plot dh/dT derivative panel."""
-        # Plot uncertainty bands
-        ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color, label='90% CI')
-        ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color, label='IQR')
-        ax.plot(T, dh_point, color=color, linewidth=2, label='Point estimate')
+    # Plot uncertainty bands
+    ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color, label='90% CI')
+    ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color, label='IQR')
+    ax.plot(T, dh_point, color=color, linewidth=2, label='Point estimate')
 
-        ax.axhline(0, color='gray', linewidth=0.5)
-        ax.set_xlabel('Temperature (°C)')
-        ax.set_ylabel('dh/dT')
-        ax.set_title(title)
-        ax.set_xlim(T_range)
-        ax.set_ylim(-0.025, 0.015)
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc='upper right', fontsize=8)
-
-    # Filter to samples where h4 is away from the boundary (h4=0)
-    h4_positive_mask = h4_samples > 0.001
-    n_positive = np.sum(h4_positive_mask)
-
-    h1_positive = h1_samples[h4_positive_mask]
-    h2_positive = h2_samples[h4_positive_mask]
-
-    # Left panel: dh/dT (all samples)
-    dh_p5_all, dh_p25_all, dh_p75_all, dh_p95_all = compute_dh_samples_and_percentiles(h1_samples, h2_samples)
-    plot_dh_panel(axes[0], dh_p5_all, dh_p25_all, dh_p75_all, dh_p95_all,
-                  'Approach 4: dh/dT (All Samples)')
-
-    # Right panel: dh/dT (h4 > 0 only)
-    if n_positive > 0:
-        dh_p5_pos, dh_p25_pos, dh_p75_pos, dh_p95_pos = compute_dh_samples_and_percentiles(h1_positive, h2_positive)
-        plot_dh_panel(axes[1], dh_p5_pos, dh_p25_pos, dh_p75_pos, dh_p95_pos,
-                      f'Approach 4: dh/dT (h₄ > 0 Only, n={n_positive})')
-    else:
-        axes[1].text(0.5, 0.5, 'No samples with h₄ > 0', ha='center', va='center',
-                     transform=axes[1].transAxes, fontsize=12)
-        axes[1].set_title('Approach 4: dh/dT (h₄ > 0 Only)')
+    ax.axhline(0, color='gray', linewidth=0.5)
+    ax.set_xlabel('Temperature (°C)')
+    ax.set_ylabel('dh/dT')
+    ax.set_title('Approach 4: dh/dT')
+    ax.set_xlim(T_range)
+    ax.set_ylim(-0.025, 0.015)
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='upper right', fontsize=8)
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)

@@ -25,27 +25,6 @@ from src.detrending import DEFAULT_LOESS_WINDOW_YEARS
 from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annotation
 
 
-def get_approach4_h4_positive_iterations(bootstrap_dir: Path, threshold: float = 0.001) -> set:
-    """Get iteration numbers where approach4 h4 > threshold.
-
-    For approach4, h4 is constrained to [0, 1]. When the optimizer finds h4=0 is optimal,
-    it returns a boundary value like 6e-9 (not exactly 0). This function identifies
-    iterations where h4 is genuinely away from the boundary.
-
-    Args:
-        bootstrap_dir: Directory containing bootstrap_coefficients.csv
-        threshold: h4 threshold to distinguish boundary from non-boundary (default 0.001)
-
-    Returns:
-        Set of iteration numbers where h4 > threshold
-    """
-    coef_path = bootstrap_dir / 'bootstrap_coefficients.csv'
-    df = pd.read_csv(coef_path, comment='#')
-    approach4 = df[df['approach'] == 'approach4']
-    positive_mask = approach4['h4'] > threshold
-    return set(approach4.loc[positive_mask, 'iteration'].values)
-
-
 def find_most_recent_dir(pattern: str) -> str:
     """Find the most recent directory matching a glob pattern.
 
@@ -93,9 +72,8 @@ def load_run_metadata(directory: Path) -> dict:
 # ==============================================================================
 
 # Central approaches for analysis (in display order)
-# approach4h4pos uses median of bootstrap iterations where h4 > 0.001
-CENTRAL_APPROACHES_POINT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
-CENTRAL_APPROACHES_BOXPLOT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach4h4pos']
+CENTRAL_APPROACHES_POINT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
+CENTRAL_APPROACHES_BOXPLOT = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -182,6 +160,10 @@ def get_country_ordering(representatives: dict) -> list:
 def get_country_label(key, representatives: dict) -> str:
     """Get display label for a country key.
 
+    Labels clarify that percentiles are of the cumulative effect distribution:
+    - Low percentiles (P5) = most negative effect = most hurt by climate
+    - High percentiles (P95) = most positive effect = most helped by climate
+
     Args:
         key: Either 'min', 'max', or an integer percentile
         representatives: Dictionary with country info
@@ -191,9 +173,13 @@ def get_country_label(key, representatives: dict) -> str:
     """
     iso3 = representatives[key]['iso3']
     if key == 'min':
-        return f"{iso3}\n(Min)"
+        return f"{iso3}\n(most hurt)"
     elif key == 'max':
-        return f"{iso3}\n(Max)"
+        return f"{iso3}\n(most helped)"
+    elif key == 5:
+        return f"{iso3}\n(P5, hurt)"
+    elif key == 95:
+        return f"{iso3}\n(P95, helped)"
     else:
         return f"{iso3}\n(P{key})"
 
@@ -374,7 +360,6 @@ def plot_cumulative_effects_by_approach_grouped(
             iso3 = representatives[country_key]['iso3']
 
             # Get bootstrap samples (iterations 0-999) for this country/approach
-            # Note: approach4h4pos already contains only h4-positive iterations
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
             # h_T_delta_cum is already in log space (sum of log changes), use directly
             bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
@@ -428,6 +413,9 @@ def plot_cumulative_effects_by_approach_grouped(
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
 
     # Legend for countries
+    # Labels clarify that percentiles are of the cumulative effect distribution:
+    # - Low percentiles (P5) = most negative effect = most hurt by climate
+    # - High percentiles (P95) = most positive effect = most helped by climate
     legend_handles = []
     legend_labels = []
     for country_key in country_keys:
@@ -435,9 +423,13 @@ def plot_cumulative_effects_by_approach_grouped(
         legend_handles.append(plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.7))
         iso3 = representatives[country_key]['iso3']
         if country_key == 'min':
-            legend_labels.append(f'{iso3} (Min)')
+            legend_labels.append(f'{iso3} (most hurt)')
         elif country_key == 'max':
-            legend_labels.append(f'{iso3} (Max)')
+            legend_labels.append(f'{iso3} (most helped)')
+        elif country_key == 5:
+            legend_labels.append(f'{iso3} (P5, hurt)')
+        elif country_key == 95:
+            legend_labels.append(f'{iso3} (P95, helped)')
         else:
             legend_labels.append(f'{iso3} (P{country_key})')
     ax.legend(legend_handles, legend_labels, loc='best', fontsize=8)
@@ -454,13 +446,16 @@ def plot_cumulative_effects_by_approach_grouped(
     print(f"      Saved: {output_path}")
 
 
-def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.DataFrame:
+def process_group(group: pd.DataFrame, approach: str, loess_window: int, h_T_baseline: float = None) -> pd.DataFrame:
     """Process a single (iteration, approach, iso3) group to compute cumulative effects.
 
     Args:
         group: DataFrame for a single group with columns [year, temp, h_T]
         approach: Approach name (not used in computation, kept for API compatibility)
         loess_window: Window size (unused, kept for API compatibility)
+        h_T_baseline: h(T_loess_1961) baseline value. If provided, uses this instead of
+                      the actual h(T) at 1961. This provides a stable baseline that
+                      isn't affected by inter-annual temperature variability.
 
     Returns:
         DataFrame with added columns [h_T_trend_1961, h_T_delta, h_T_delta_cum]
@@ -473,21 +468,25 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
     years_sorted = years[sort_idx]
     h_T_sorted = h_T[sort_idx]
 
-    # Find 1961 index and baseline value
-    year_1961_mask = years_sorted == BASE_YEAR
-    if year_1961_mask.any():
-        idx_1961 = np.where(year_1961_mask)[0][0]
-        h_T_1961 = h_T_sorted[idx_1961]
+    # Use LOESS baseline if provided, otherwise fall back to actual 1961 value
+    if h_T_baseline is not None:
+        h_T_1961 = h_T_baseline
     else:
-        idx_1961 = 0
-        h_T_1961 = h_T_sorted[0]
+        # Find 1961 index and baseline value
+        year_1961_mask = years_sorted == BASE_YEAR
+        if year_1961_mask.any():
+            idx_1961 = np.where(year_1961_mask)[0][0]
+            h_T_1961 = h_T_sorted[idx_1961]
+        else:
+            idx_1961 = 0
+            h_T_1961 = h_T_sorted[0]
 
     # All approaches use the same logic: subtract 1961 baseline, then sum
     #
-    # For approaches 0-3: h_T = h(T), so h_T_delta = h(T) - h(T_1961)
+    # For approaches 0-3: h_T = h(T), so h_T_delta = h(T) - h(T_baseline)
     #
     # For approach4: h_T = h_conv which already incorporates persistence decay.
-    # We use the same formula: h_T_delta = h_conv - h_conv(1961)
+    # We use the same formula: h_T_delta = h_conv - h_conv(baseline)
     # When h4 > 0, h_conv values are smaller due to built-in decay, so cumulative
     # effects will be smaller/bounded compared to approach2.
     # When h4 ≈ 0, h_conv ≈ h(T), so results match approach2.
@@ -505,6 +504,27 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int) -> pd.D
     return result
 
 
+def load_baselines(bootstrap_dir: Path, iteration: int = None) -> pd.DataFrame:
+    """Load baseline values from bootstrap_h_baselines.csv.
+
+    Args:
+        bootstrap_dir: Directory containing bootstrap_h_baselines.csv
+        iteration: If specified, filter to only this iteration (-1 for point estimate)
+
+    Returns:
+        DataFrame with columns [iteration, approach, iso3, T_loess_base, h_T_baseline]
+    """
+    baselines_path = bootstrap_dir / 'bootstrap_h_baselines.csv'
+    if not baselines_path.exists():
+        print(f"      Warning: {baselines_path} not found, using actual 1961 values")
+        return None
+
+    df = pd.read_csv(baselines_path, comment='#')
+    if iteration is not None:
+        df = df[df['iteration'] == iteration]
+    return df
+
+
 def process_all_countries_point_estimate(
     input_path: Path,
     bootstrap_dir: Path,
@@ -512,13 +532,11 @@ def process_all_countries_point_estimate(
 ) -> pd.DataFrame:
     """Process point estimate data for all countries and approaches.
 
-    For approaches 0-4, uses point estimates (iteration=-1).
-    For approach4h4pos, computes median of h4-positive bootstrap iterations.
-    For approach4h4zero, computes median of h4-near-zero bootstrap iterations.
+    Uses point estimates (iteration=-1) for all approaches.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
-        bootstrap_dir: Directory containing bootstrap_coefficients.csv (for h4 filtering)
+        bootstrap_dir: Directory containing bootstrap_coefficients.csv
         loess_window: Window size for LOESS smoothing
 
     Returns:
@@ -536,6 +554,18 @@ def process_all_countries_point_estimate(
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for point estimates")
 
+    # Load baselines (point estimates only)
+    baselines = load_baselines(bootstrap_dir, iteration=-1)
+    if baselines is not None:
+        # Create lookup dict for baselines: (approach, iso3) -> h_T_baseline
+        baselines_dict = {
+            (row['approach'], row['iso3']): row['h_T_baseline']
+            for _, row in baselines.iterrows()
+        }
+        print(f"      Loaded {len(baselines_dict):,} baseline values")
+    else:
+        baselines_dict = {}
+
     # Process each (approach, iso3) group for all approaches
     groups = df.groupby(['approach', 'iso3'])
     total_groups = len(groups)
@@ -545,91 +575,12 @@ def process_all_countries_point_estimate(
         if idx % 500 == 0:
             print(f"      Progress: {idx:,}/{total_groups:,} groups...")
 
-        processed = process_group(group, approach, loess_window)
+        # Get baseline value if available
+        h_T_baseline = baselines_dict.get((approach, iso3))
+        processed = process_group(group, approach, loess_window, h_T_baseline=h_T_baseline)
         results.append(processed)
 
     print(f"      Completed processing {total_groups:,} groups")
-
-    # Now process approach4h4pos: median of cumulative effects across h4-positive iterations
-    print("      Loading approach4 bootstrap data for approach4h4pos/approach4h4zero...")
-    h4_positive_iters = get_approach4_h4_positive_iterations(bootstrap_dir)
-    print(f"      Found {len(h4_positive_iters)} h4-positive iterations")
-
-    # Load approach4 bootstrap data - need both h4-positive and h4-near-zero iterations
-    # Get all approach4 iterations first
-    chunks_a4 = []
-    for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['approach'] == 'approach4') & (chunk['iteration'] >= 0)]
-        if len(filtered) > 0:
-            chunks_a4.append(filtered)
-
-    df_a4_orig = pd.concat(chunks_a4, ignore_index=True)
-    all_a4_iters = set(df_a4_orig['iteration'].unique())
-    h4_zero_iters = all_a4_iters - h4_positive_iters
-    print(f"      Loaded {len(df_a4_orig):,} rows for approach4 bootstrap iterations")
-    print(f"      h4-positive: {len(h4_positive_iters)}, h4-near-zero: {len(h4_zero_iters)}")
-
-    # Process h4-positive iterations for approach4h4pos
-    df_a4_h4pos = df_a4_orig[df_a4_orig['iteration'].isin(h4_positive_iters)]
-    groups_a4_h4pos = df_a4_h4pos.groupby(['iteration', 'iso3'])
-    total_a4_h4pos = len(groups_a4_h4pos)
-
-    a4_h4pos_results = []
-    for idx, ((iteration, iso3), group) in enumerate(groups_a4_h4pos):
-        if idx % 2000 == 0:
-            print(f"      Progress: {idx:,}/{total_a4_h4pos:,} approach4 h4-positive groups...")
-
-        processed = process_group(group, 'approach4h4pos', loess_window)
-        a4_h4pos_results.append(processed)
-
-    df_a4_h4pos_processed = pd.concat(a4_h4pos_results, ignore_index=True)
-
-    # Compute median across h4-positive iterations for each (iso3, year)
-    print("      Computing median cumulative effects across h4-positive iterations...")
-    a4h4pos_median = df_a4_h4pos_processed.groupby(['iso3', 'year']).agg({
-        'temp': 'median',
-        'h_T': 'median',
-        'h_T_trend_1961': 'median',
-        'h_T_delta': 'median',
-        'h_T_delta_cum': 'median'
-    }).reset_index()
-    a4h4pos_median['approach'] = 'approach4h4pos'
-    a4h4pos_median['iteration'] = -1  # Mark as point estimate equivalent
-
-    results.append(a4h4pos_median)
-    print(f"      Created approach4h4pos: {len(a4h4pos_median):,} rows (median of {len(h4_positive_iters)} iterations)")
-
-    # Process h4-near-zero iterations for approach4h4zero (diagnostic)
-    # When h4 ≈ 0, h_conv ≈ h(T), so results should match approach2
-    if len(h4_zero_iters) > 0:
-        df_a4_h4zero = df_a4_orig[df_a4_orig['iteration'].isin(h4_zero_iters)]
-        groups_a4_h4zero = df_a4_h4zero.groupby(['iteration', 'iso3'])
-        total_a4_h4zero = len(groups_a4_h4zero)
-
-        a4_h4zero_results = []
-        for idx, ((iteration, iso3), group) in enumerate(groups_a4_h4zero):
-            if idx % 2000 == 0:
-                print(f"      Progress: {idx:,}/{total_a4_h4zero:,} approach4 h4-near-zero groups...")
-
-            processed = process_group(group, 'approach4h4zero', loess_window)
-            a4_h4zero_results.append(processed)
-
-        df_a4_h4zero_processed = pd.concat(a4_h4zero_results, ignore_index=True)
-
-        # Compute median across h4-near-zero iterations for each (iso3, year)
-        print("      Computing median cumulative effects across h4-near-zero iterations...")
-        a4h4zero_median = df_a4_h4zero_processed.groupby(['iso3', 'year']).agg({
-            'temp': 'median',
-            'h_T': 'median',
-            'h_T_trend_1961': 'median',
-            'h_T_delta': 'median',
-            'h_T_delta_cum': 'median'
-        }).reset_index()
-        a4h4zero_median['approach'] = 'approach4h4zero'
-        a4h4zero_median['iteration'] = -1  # Mark as point estimate equivalent
-
-        results.append(a4h4zero_median)
-        print(f"      Created approach4h4zero: {len(a4h4zero_median):,} rows (median of {len(h4_zero_iters)} iterations)")
 
     return pd.concat(results, ignore_index=True)
 
@@ -730,8 +681,14 @@ def plot_cumulative_effects_by_approach(
             ax.set_ylabel('Cumulative Climate Effect')
             ax.legend(loc='lower left', fontsize=7)
 
+    # Set y-axis limits to -66.67% to 150% (symmetric in log space)
+    y_min = log_transform(-200/3)  # -66.67%
+    y_max = log_transform(150)
+    for ax in axes:
+        ax.set_ylim(y_min, y_max)
+
     # Set y-axis ticks at nice percentage values (in log-transformed positions)
-    tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
+    tick_pcts = [-50, -25, 0, 25, 50, 100]
     tick_positions = [log_transform(p) for p in tick_pcts]
     tick_labels = [f'{p}%' for p in tick_pcts]
     for ax in axes:
@@ -750,8 +707,226 @@ def plot_cumulative_effects_by_approach(
     print(f"      Saved: {output_path}")
 
 
+def plot_cumulative_effects_approach4(
+    df_all_countries: pd.DataFrame,
+    df_representative: pd.DataFrame,
+    representatives: dict,
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Create 2-panel plot for approach4 with symmetric y-axis auto-scaled to data.
+
+    Left panel: Cumulative effects by year (all countries)
+    Right panel: Box-and-whisker plot for representative countries (2022)
+
+    Y-axis is symmetric around 0% and just large enough to show all data.
+
+    Args:
+        df_all_countries: DataFrame with cumulative effects for all countries (point estimate)
+        df_representative: DataFrame with cumulative effects for representative countries (bootstrap)
+        representatives: Dictionary mapping percentile -> country info
+        output_dir: Directory to save plot
+        input_file: Input file for annotation
+    """
+    approach = 'approach4'
+
+    # Filter to approach4
+    df_approach = df_all_countries[df_all_countries['approach'] == approach]
+
+    if len(df_approach) == 0:
+        print(f"      Warning: No data for {approach}, skipping approach4 plot")
+        return
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    ax_left, ax_right = axes
+
+    # ==================== LEFT PANEL: Cumulative effects by year ====================
+    # Get unique years
+    years = sorted(df_approach['year'].unique())
+
+    # Calculate percentiles across countries for each year
+    percentiles_by_year = []
+    for year in years:
+        values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
+        percentiles_by_year.append({
+            'year': year,
+            'p5': np.percentile(values, 5),
+            'p25': np.percentile(values, 25),
+            'p50': np.percentile(values, 50),
+            'p75': np.percentile(values, 75),
+            'p95': np.percentile(values, 95),
+            'min': np.min(values),
+            'max': np.max(values),
+        })
+
+    df_pct = pd.DataFrame(percentiles_by_year)
+
+    color = APPROACH_COLORS.get(approach, 'cyan')
+
+    # Values are already in log space
+    p5 = df_pct['p5']
+    p25 = df_pct['p25']
+    p50 = df_pct['p50']
+    p75 = df_pct['p75']
+    p95 = df_pct['p95']
+    min_val = df_pct['min']
+    max_val = df_pct['max']
+
+    # Min/max lines (thin)
+    ax_left.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
+    ax_left.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
+
+    # 90% range (lighter)
+    ax_left.fill_between(
+        df_pct['year'], p5, p95,
+        alpha=0.2, color=color, label='90% range'
+    )
+
+    # 50% range (darker)
+    ax_left.fill_between(
+        df_pct['year'], p25, p75,
+        alpha=0.4, color=color, label='50% range'
+    )
+
+    # Median line
+    ax_left.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
+
+    # Formatting
+    ax_left.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+    ax_left.set_xlabel('Year')
+    ax_left.set_ylabel('Cumulative Climate Effect')
+    ax_left.set_title('Approach 4: Cumulative Effects by Year')
+    ax_left.legend(loc='lower left', fontsize=7)
+
+    # ==================== RIGHT PANEL: Box-and-whisker for representative countries ====================
+    # Get ordered country keys
+    country_keys = get_country_ordering(representatives)
+    n_countries = len(country_keys)
+
+    # Filter to year 2022 and approach4
+    df_2022 = df_representative[(df_representative['year'] == 2022) & (df_representative['approach'] == approach)].copy()
+
+    box_width = 0.7
+
+    for j, country_key in enumerate(country_keys):
+        iso3 = representatives[country_key]['iso3']
+
+        # Get bootstrap samples (iterations 0-999) for this country
+        mask = (df_2022['iso3'] == iso3) & (df_2022['iteration'] >= 0)
+        bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
+
+        # Get point estimate (iteration -1)
+        mask_point = (df_2022['iso3'] == iso3) & (df_2022['iteration'] == -1)
+        point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+        point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
+
+        # Draw box - color by country
+        box_color = COUNTRY_COLORS.get(country_key, 'gray')
+        if len(bootstrap_values) > 0:
+            box = ax_right.boxplot(
+                [bootstrap_values],
+                positions=[j],
+                widths=box_width * 0.8,
+                patch_artist=True,
+                showfliers=False,
+                whis=[5, 95],
+                medianprops=dict(color='black', linewidth=1),
+            )
+
+            for patch in box['boxes']:
+                patch.set_facecolor(box_color)
+                patch.set_alpha(0.7)
+
+        # Add point estimate as diamond marker
+        if not np.isnan(point_estimate):
+            ax_right.plot(j, point_estimate, 'd', color='white', markersize=6,
+                          markeredgecolor='black', markeredgewidth=1, zorder=10)
+
+    # X-axis labels (countries)
+    # Labels clarify that percentiles are of the cumulative effect distribution:
+    # - Low percentiles (P5) = most negative effect = most hurt by climate
+    # - High percentiles (P95) = most positive effect = most helped by climate
+    x_labels = []
+    for country_key in country_keys:
+        iso3 = representatives[country_key]['iso3']
+        if country_key == 'min':
+            x_labels.append(f'{iso3}\n(most hurt)')
+        elif country_key == 'max':
+            x_labels.append(f'{iso3}\n(most helped)')
+        elif country_key == 5:
+            x_labels.append(f'{iso3}\n(P5, hurt)')
+        elif country_key == 95:
+            x_labels.append(f'{iso3}\n(P95, helped)')
+        else:
+            x_labels.append(f'{iso3}\n(P{country_key})')
+
+    ax_right.set_xticks(range(n_countries))
+    ax_right.set_xticklabels(x_labels, fontsize=8)
+    ax_right.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+    ax_right.set_ylabel('Cumulative Climate Effect (2022)')
+    ax_right.set_title('Approach 4: Representative Countries')
+
+    # ==================== Shared y-axis scaling ====================
+    # Compute symmetric y-axis limits based on data extent from both panels
+    data_min_left = min_val.min()
+    data_max_left = max_val.max()
+
+    # Get min/max from right panel
+    all_bootstrap = df_2022[df_2022['iteration'] >= 0]['h_T_delta_cum'].values
+    data_min_right = np.min(all_bootstrap) if len(all_bootstrap) > 0 else 0
+    data_max_right = np.max(all_bootstrap) if len(all_bootstrap) > 0 else 0
+
+    data_min = min(data_min_left, data_min_right)
+    data_max = max(data_max_left, data_max_right)
+    y_extent = max(abs(data_min), abs(data_max))
+
+    # Convert to percentage to find nice tick values
+    max_pct = 100 * (np.exp(y_extent) - 1)
+
+    # Choose tick values that fit within the range
+    possible_ticks = [10, 25, 50, 100, 200, 500, 1000]
+    for max_tick in possible_ticks:
+        if max_tick >= max_pct:
+            break
+
+    # Generate symmetric tick positions
+    # Note: -100% is undefined in log space (log(0) = -inf), so cap negative ticks at -75%
+    tick_pcts = []
+    for t in possible_ticks:
+        if t <= max_tick:
+            if t < 100:  # Only add negative version if less than 100
+                tick_pcts.append(-t)
+            else:
+                tick_pcts.append(-75)  # Use -75% instead of -100%
+            tick_pcts.append(t)
+    tick_pcts.append(0)
+    tick_pcts = sorted(set(tick_pcts))
+
+    tick_positions = [log_transform(p) for p in tick_pcts]
+    tick_labels = [f'{p}%' for p in tick_pcts]
+
+    # Set symmetric y-limits on both panels (use the positive limit for both sides)
+    y_limit = log_transform(max_tick)
+    for ax in axes:
+        ax.set_ylim(-y_limit, y_limit)
+        ax.set_yticks(tick_positions)
+        ax.set_yticklabels(tick_labels)
+
+    plt.tight_layout()
+
+    # Add input file annotation
+    add_input_file_annotation(fig, input_file)
+
+    # Save
+    output_path = output_dir / 'cumulative_effects_approach4.pdf'
+    fig.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    print(f"      Saved: {output_path}")
+
+
 def select_representative_countries_from_file(
     input_path: Path,
+    bootstrap_dir: Path,
     loess_window: int = DEFAULT_LOESS_WINDOW_YEARS,
     percentiles: tuple = REPRESENTATIVE_PERCENTILES,
     include_min_max: bool = True
@@ -762,6 +937,7 @@ def select_representative_countries_from_file(
 
     Args:
         input_path: Path to bootstrap_h_values.csv
+        bootstrap_dir: Directory containing bootstrap_h_baselines.csv
         loess_window: Window size for LOESS smoothing
         percentiles: Percentiles for selecting representatives
         include_min_max: Whether to include min and max countries
@@ -781,10 +957,23 @@ def select_representative_countries_from_file(
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for country selection")
 
+    # Load baselines (point estimates only, approach0)
+    baselines = load_baselines(bootstrap_dir, iteration=-1)
+    if baselines is not None:
+        baselines_approach0 = baselines[baselines['approach'] == 'approach0']
+        baselines_dict = {
+            row['iso3']: row['h_T_baseline']
+            for _, row in baselines_approach0.iterrows()
+        }
+        print(f"      Loaded {len(baselines_dict):,} baseline values for approach0")
+    else:
+        baselines_dict = {}
+
     # Process each country to get cumulative effects
     results = []
     for iso3, group in df.groupby('iso3'):
-        processed = process_group(group, 'approach0', loess_window)
+        h_T_baseline = baselines_dict.get(iso3)
+        processed = process_group(group, 'approach0', loess_window, h_T_baseline=h_T_baseline)
         # Get 2022 value
         row_2022 = processed[processed['year'] == 2022]
         if len(row_2022) > 0:
@@ -795,8 +984,26 @@ def select_representative_countries_from_file(
 
     df_results = pd.DataFrame(results)
 
-    # Calculate target percentile values
+    # Diagnostic: print distribution statistics
     values = df_results['h_T_delta_cum'].values
+    print(f"      Cumulative effect distribution (2022):")
+    print(f"        Min: {np.min(values):.4f} ({inv_log_transform(np.min(values)):.1f}%)")
+    print(f"        P5:  {np.percentile(values, 5):.4f} ({inv_log_transform(np.percentile(values, 5)):.1f}%)")
+    print(f"        P25: {np.percentile(values, 25):.4f} ({inv_log_transform(np.percentile(values, 25)):.1f}%)")
+    print(f"        P50: {np.percentile(values, 50):.4f} ({inv_log_transform(np.percentile(values, 50)):.1f}%)")
+    print(f"        P75: {np.percentile(values, 75):.4f} ({inv_log_transform(np.percentile(values, 75)):.1f}%)")
+    print(f"        P95: {np.percentile(values, 95):.4f} ({inv_log_transform(np.percentile(values, 95)):.1f}%)")
+    print(f"        Max: {np.max(values):.4f} ({inv_log_transform(np.max(values)):.1f}%)")
+
+    # Diagnostic: check specific countries
+    for test_iso in ['FIN', 'SDN', 'USA', 'BRA']:
+        row = df_results[df_results['iso3'] == test_iso]
+        if len(row) > 0:
+            val = row['h_T_delta_cum'].values[0]
+            pct_rank = (values < val).sum() / len(values) * 100
+            print(f"        {test_iso}: {val:.4f} ({inv_log_transform(val):.1f}%) - percentile rank: {pct_rank:.1f}")
+
+    # Calculate target percentile values
     targets = {p: np.percentile(values, p) for p in percentiles}
 
     # Find country closest to each percentile
@@ -839,7 +1046,7 @@ def process_representative_countries(
     Args:
         input_path: Path to bootstrap_h_values.csv
         representative_iso3s: List of ISO3 country codes to process
-        bootstrap_dir: Directory containing bootstrap_coefficients.csv (for h4 filtering)
+        bootstrap_dir: Directory containing bootstrap_h_baselines.csv
         loess_window: Window size for LOESS smoothing
 
     Returns:
@@ -860,6 +1067,20 @@ def process_representative_countries(
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for representative countries")
 
+    # Load all baselines for representative countries
+    baselines = load_baselines(bootstrap_dir)
+    if baselines is not None:
+        # Filter to representative countries
+        baselines = baselines[baselines['iso3'].isin(iso3_set)]
+        # Create lookup dict: (iteration, approach, iso3) -> h_T_baseline
+        baselines_dict = {
+            (row['iteration'], row['approach'], row['iso3']): row['h_T_baseline']
+            for _, row in baselines.iterrows()
+        }
+        print(f"      Loaded {len(baselines_dict):,} baseline values for representative countries")
+    else:
+        baselines_dict = {}
+
     # Process each (iteration, approach, iso3) group
     groups = df.groupby(['iteration', 'approach', 'iso3'])
     total_groups = len(groups)
@@ -869,58 +1090,13 @@ def process_representative_countries(
         if idx % 1000 == 0:
             print(f"      Progress: {idx:,}/{total_groups:,} groups...")
 
-        processed = process_group(group, approach, loess_window)
+        # Get baseline value if available
+        h_T_baseline = baselines_dict.get((iteration, approach, iso3))
+        processed = process_group(group, approach, loess_window, h_T_baseline=h_T_baseline)
         results.append(processed)
 
     print(f"      Completed processing {total_groups:,} groups")
-    df_result = pd.concat(results, ignore_index=True)
-
-    # Create approach4h4pos and approach4h4zero from approach4 data
-    # These split approach4 bootstrap iterations by h4 value for diagnostic comparison:
-    # - approach4h4pos: iterations where h4 > 0.001 (persistence decay active)
-    # - approach4h4zero: iterations where h4 <= 0.001 (should match approach2)
-    h4_positive_iters = get_approach4_h4_positive_iterations(bootstrap_dir)
-
-    # Get all approach4 iterations and compute h4-near-zero set
-    all_a4_iters = set(df[df['approach'] == 'approach4']['iteration'].unique())
-    all_a4_iters.discard(-1)  # Remove point estimate iteration
-    h4_zero_iters = all_a4_iters - h4_positive_iters
-
-    if len(h4_positive_iters) > 0:
-        # Get the raw h_T values for h4-positive iterations
-        approach4_h4pos_raw = df[(df['approach'] == 'approach4') & (df['iteration'].isin(h4_positive_iters))]
-
-        # Process with standard logic (same as all other approaches)
-        groups_a4_h4pos = approach4_h4pos_raw.groupby(['iteration', 'iso3'])
-        a4_h4pos_results = []
-        for (iteration, iso3), group in groups_a4_h4pos:
-            processed = process_group(group, 'approach4h4pos', loess_window)
-            a4_h4pos_results.append(processed)
-
-        approach4h4pos_bootstrap = pd.concat(a4_h4pos_results, ignore_index=True)
-        approach4h4pos_bootstrap['approach'] = 'approach4h4pos'
-
-        df_result = pd.concat([df_result, approach4h4pos_bootstrap], ignore_index=True)
-        print(f"      Created approach4h4pos: {len(approach4h4pos_bootstrap):,} bootstrap rows ({len(h4_positive_iters)} h4-positive iterations)")
-
-    if len(h4_zero_iters) > 0:
-        # Get the raw h_T values for h4-near-zero iterations
-        approach4_h4zero_raw = df[(df['approach'] == 'approach4') & (df['iteration'].isin(h4_zero_iters))]
-
-        # Process with standard logic - when h4 ≈ 0, h_conv ≈ h(T), so should match approach2
-        groups_a4_h4zero = approach4_h4zero_raw.groupby(['iteration', 'iso3'])
-        a4_h4zero_results = []
-        for (iteration, iso3), group in groups_a4_h4zero:
-            processed = process_group(group, 'approach4h4pos', loess_window)
-            a4_h4zero_results.append(processed)
-
-        approach4h4zero_bootstrap = pd.concat(a4_h4zero_results, ignore_index=True)
-        approach4h4zero_bootstrap['approach'] = 'approach4h4zero'
-
-        df_result = pd.concat([df_result, approach4h4zero_bootstrap], ignore_index=True)
-        print(f"      Created approach4h4zero: {len(approach4h4zero_bootstrap):,} bootstrap rows ({len(h4_zero_iters)} h4-near-zero iterations)")
-
-    return df_result
+    return pd.concat(results, ignore_index=True)
 
 
 def main():
@@ -1024,9 +1200,8 @@ def main():
     else:
         output_dir = create_output_dir(prefix="cumulative_")
 
-    # Phase 1: Process all countries with point estimate
-    # For approach4h4pos, uses iteration with median h4 among h4-positive iterations
-    print("\n[1/7] Processing all countries (point estimates + approach4h4pos)...")
+    # Phase 1: Process all countries with point estimates
+    print("\n[1/7] Processing all countries (point estimates)...")
     df_all_countries = process_all_countries_point_estimate(input_path, input_dir, loess_window)
 
     # Save all countries cumulative effects
@@ -1044,21 +1219,22 @@ def main():
     # Phase 3: Select representative countries using point estimate only
     print("\n[3/7] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
-        input_path, loess_window
+        input_path, input_dir, loess_window
     )
 
-    # Print selected countries
-    print("      Selected countries:")
+    # Print selected countries with percentage interpretation
+    print("      Selected countries (log value → percent equivalent):")
     country_order = get_country_ordering(representatives)
     for key in country_order:
         info = representatives[key]
         if key == 'min':
-            label = "Min"
+            label = "Min (most hurt)"
         elif key == 'max':
-            label = "Max"
+            label = "Max (most helped)"
         else:
-            label = f"P{key}"
-        print(f"        {label}: {info['iso3']} (value={info['value']:.4f}, target={info['target']:.4f})")
+            label = f"P{key:2d}"
+        pct = inv_log_transform(info['value'])
+        print(f"        {label}: {info['iso3']} (log={info['value']:+.4f} → {pct:+.1f}%)")
 
     # Save representative countries info
     rep_rows = []
@@ -1098,6 +1274,10 @@ def main():
 
     print("\n[7/7] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
+
+    # Additional: Create 2-panel approach4 plot
+    print("\n[Bonus] Creating approach4 2-panel visualization...")
+    plot_cumulative_effects_approach4(df_all_countries, df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
