@@ -2164,12 +2164,13 @@ def save_bootstrap_h_baselines(
     - h_T_baseline: h(T_loess_base) value
 
     The h(T) formula varies by approach:
-    - approach0, approach1, approach2, approach4: h(T) = h1*T + h2*T²
+    - approach0, approach1, approach2: h(T) = h1*T + h2*T²
     - approach3: h(T) = h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
+    - approach4: h_T_baseline = 0 if h4 > 0, else h1*T + h2*T²
 
-    Note: For approach4, assuming T(t) = T_loess_1961 for t < 1961, the persistence
-    decay component contributes nothing when temperature is constant, so the
-    baseline simplifies to h1*T + h2*T².
+    Note: For approach4 with h4 > 0, constant temperature gives X1=X2=0 due to
+    the persistence decay structure, so h_T_baseline = 0. If h4 = 0, approach4
+    reduces to approach2 and uses the standard quadratic baseline.
 
     Args:
         bootstrap_results: Dict mapping method name to BootstrapResult
@@ -2237,6 +2238,10 @@ def save_bootstrap_h_baselines(
                     h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
                 else:
                     h_T_baseline = h4_point * (T_base - T_opt_point) ** 2
+            elif approach_key == 'approach4' and h4_point > 0:
+                # Approach4 with persistence: baseline = 0
+                # (constant temperature gives X1=X2=0 due to persistence decay)
+                h_T_baseline = 0.0
             else:
                 # Standard quadratic: h1*T + h2*T²
                 h_T_baseline = h1_point * T_base + h2_point * T_base ** 2
@@ -2261,6 +2266,13 @@ def save_bootstrap_h_baselines(
                         h_T_baseline_b = h2_b * (T_base - T_opt_b) ** 2
                     else:
                         h_T_baseline_b = h4_b * (T_base - T_opt_b) ** 2
+                elif approach_key == 'approach4':
+                    h4_b = h4_samples[b] if h4_samples is not None else 0.0
+                    if h4_b > 0:
+                        # Approach4 with persistence: baseline = 0
+                        h_T_baseline_b = 0.0
+                    else:
+                        h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
                 else:
                     h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
 

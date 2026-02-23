@@ -866,51 +866,22 @@ def plot_cumulative_effects_approach4(
     ax_right.set_ylabel('Cumulative Climate Effect (2022)')
     ax_right.set_title('Approach 4: Representative Countries')
 
-    # ==================== Shared y-axis scaling ====================
-    # Compute symmetric y-axis limits based on data extent from both panels
-    data_min_left = min_val.min()
-    data_max_left = max_val.max()
+    # ==================== Separate y-axis scaling for each panel ====================
+    # Left panel: -3% to +6%, ticks every 1%
+    left_tick_pcts = list(range(-3, 7, 1))
+    left_tick_positions = [log_transform(p) for p in left_tick_pcts]
+    left_tick_labels = [f'{p}%' for p in left_tick_pcts]
+    ax_left.set_ylim(log_transform(-3), log_transform(6))
+    ax_left.set_yticks(left_tick_positions)
+    ax_left.set_yticklabels(left_tick_labels)
 
-    # Get min/max from right panel
-    all_bootstrap = df_2022[df_2022['iteration'] >= 0]['h_T_delta_cum'].values
-    data_min_right = np.min(all_bootstrap) if len(all_bootstrap) > 0 else 0
-    data_max_right = np.max(all_bootstrap) if len(all_bootstrap) > 0 else 0
-
-    data_min = min(data_min_left, data_min_right)
-    data_max = max(data_max_left, data_max_right)
-    y_extent = max(abs(data_min), abs(data_max))
-
-    # Convert to percentage to find nice tick values
-    max_pct = 100 * (np.exp(y_extent) - 1)
-
-    # Choose tick values that fit within the range
-    possible_ticks = [10, 25, 50, 100, 200, 500, 1000]
-    for max_tick in possible_ticks:
-        if max_tick >= max_pct:
-            break
-
-    # Generate symmetric tick positions
-    # Note: -100% is undefined in log space (log(0) = -inf), so cap negative ticks at -75%
-    tick_pcts = []
-    for t in possible_ticks:
-        if t <= max_tick:
-            if t < 100:  # Only add negative version if less than 100
-                tick_pcts.append(-t)
-            else:
-                tick_pcts.append(-75)  # Use -75% instead of -100%
-            tick_pcts.append(t)
-    tick_pcts.append(0)
-    tick_pcts = sorted(set(tick_pcts))
-
-    tick_positions = [log_transform(p) for p in tick_pcts]
-    tick_labels = [f'{p}%' for p in tick_pcts]
-
-    # Set symmetric y-limits on both panels (use the positive limit for both sides)
-    y_limit = log_transform(max_tick)
-    for ax in axes:
-        ax.set_ylim(-y_limit, y_limit)
-        ax.set_yticks(tick_positions)
-        ax.set_yticklabels(tick_labels)
+    # Right panel: -15% to +25%, ticks every 5%
+    right_tick_pcts = list(range(-15, 26, 5))
+    right_tick_positions = [log_transform(p) for p in right_tick_pcts]
+    right_tick_labels = [f'{p}%' for p in right_tick_pcts]
+    ax_right.set_ylim(log_transform(-15), log_transform(25))
+    ax_right.set_yticks(right_tick_positions)
+    ax_right.set_yticklabels(right_tick_labels)
 
     plt.tight_layout()
 
