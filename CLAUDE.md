@@ -51,7 +51,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 - Reference outputs in `./data/output/reference/` should only be updated deliberately when establishing new baselines
 
 ### Naming Conventions
-- **Methods**: Use `method0`, `method1`, `method2`, `method3`, `method4` consistently throughout
+- **Approaches**: Use `approach0`, `approach1`, `approach2`, `approach3`, `approach4` consistently throughout
 - **Coefficients**: Use `h1`, `h2`, `T_optimal`, `h2_low`, `h2_high` consistently
 - **Bootstrap results**: Use `_samples` suffix for arrays of bootstrap values, `_point` for point estimates
 - Descriptive names preferred - long, clear names are better than short, ambiguous ones
@@ -63,12 +63,12 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
 
 ### Plotting Conventions
 - **Temperature axis range**: Always use 0°C to 30°C for temperature axes in climate-growth plots
-- **Method colors**: Use consistent color scheme defined in `METHOD_COLORS` in output.py:
-  - method0: black
-  - method1: red
-  - method2: orange
-  - method3: magenta
-  - method4: salmon
+- **Approach colors**: Use consistent color scheme defined in `APPROACH_COLORS` in output.py:
+  - approach0: black
+  - approach1: red
+  - approach2: orange
+  - approach3: magenta
+  - approach4: cyan
 - **Uncertainty bands**: Show 90% CI (lighter) and IQR (darker) for bootstrap results
 - **Year effects**: Plot k(t) with bootstrap uncertainty bands, shared y-axis across methods
 - **Diverging colormaps**: For difference plots or any plot using a diverging colormap (e.g., RdBu_r where white is in the middle), always use symmetric bounds with equal magnitude and opposite sign, so that white represents zero. Example: if data ranges from -0.03 to 0.05, use bounds of (-0.05, 0.05) not the raw data range.

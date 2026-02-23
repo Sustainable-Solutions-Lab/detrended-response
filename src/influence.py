@@ -27,8 +27,6 @@ APPROACH_COEFFICIENTS = {
     # Null models (h1=h2=0, no climate response)
     'method0h0': NULL_MODEL_COEFFICIENTS,
     'method1h0': NULL_MODEL_COEFFICIENTS,
-    # method4: h1,h2 (actual T), h4 (quadratic departure only), T_opt, T_dep_opt
-    'method4': ['h1', 'h2', 'h4', 'T_opt', 'T_dep_opt'],
     # method3: h2 (below T_opt), h4 (above T_opt), T_opt
     'method3': ['h2', 'h4', 'T_opt'],
 }

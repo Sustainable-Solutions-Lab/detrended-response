@@ -18,11 +18,6 @@ Approaches (publication-ready):
     approach1h0: Null model (h1=h2=0) for approach1
     approach2h0: Null model (h1=h2=0) for approach2
 
-Exploratory methods:
-    method4: T response with quadratic departure term (T-Ttrend)^2
-    method6: Interaction model h3*(T-Topt)*(T-Ttrend)
-    method7: Lagged deviation model
-
 Usage:
     python scripts/run_analysis.py [--year-min YEAR] [--year-max YEAR] [--output-dir DIR]
 """
@@ -201,31 +196,6 @@ def main():
                 print(f"  T_opt = {r.T_opt:.2f} C")
             else:
                 print(f"  T_opt = N/A")
-
-        # method4: h1,h2 (actual T), h4 (departure), T_opt, T_dep_opt (exploratory)
-        elif name == 'method4' and hasattr(r, 'h4'):
-            print(f"  h1 (T) = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
-            print(f"  h2 (T) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h4 (departure) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            if not np.isnan(r.T_opt):
-                print(f"  T_opt = {r.T_opt:.2f} C")
-            else:
-                print(f"  T_opt = N/A")
-            if hasattr(r, 'T_dep_opt') and not np.isnan(r.T_dep_opt):
-                print(f"  T_dep_opt (departure opt) = {r.T_dep_opt:.2f} C")
-            else:
-                print(f"  T_dep_opt (departure opt) = N/A")
-
-        # method6: h3 (interaction), T_opt (exploratory)
-        elif name == 'method6' and hasattr(r, 'h4'):
-            print(f"  h3 (interaction) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
-
-        # method7: h2 (quadratic), h4 (lagged change), T_opt (exploratory)
-        elif name == 'method7' and hasattr(r, 'h4'):
-            print(f"  h2 (quadratic) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
-            print(f"  h4 (lag change) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
-            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         else:
             # Standard approaches (approach0, approach1, approach2, null models)

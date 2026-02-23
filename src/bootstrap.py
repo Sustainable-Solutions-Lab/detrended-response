@@ -267,7 +267,7 @@ def run_bootstrap(
         loess_window: Window size in years for LOESS smoothing
             (default: DEFAULT_LOESS_WINDOW_YEARS)
         h_T_approaches: List of method names to compute h(T) for (default: None means skip)
-            Example: ['approach0', 'approach1', 'approach2', 'method4', 'approach3']
+            Example: ['approach0', 'approach1', 'approach2', 'approach3']
 
     Returns:
         Tuple of:
@@ -444,13 +444,6 @@ def run_bootstrap(
                 if name in ['approach0', 'approach1', 'approach2']:
                     # Standard quadratic: h(T) = h1*T + h2*T²
                     h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
-
-                elif name == 'method4':
-                    # Full model: h(T,Ttrend) = h1*T + h2*T² + h4*(T-Ttrend)²
-                    # Use original data's Ttrend to compute for original observations
-                    Ttrend = original_trends_loess.T_loess
-                    h_T_samples[name][b] = (r.h1 * data.temp + r.h2 * data.temp**2
-                                            + r.h4 * (data.temp - Ttrend)**2)
 
                 elif name == 'approach3':
                     # Piecewise: h2*(T-T_opt)² if T≤T_opt else h4*(T-T_opt)²
