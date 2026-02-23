@@ -875,11 +875,11 @@ def plot_cumulative_effects_approach4(
     ax_left.set_yticks(left_tick_positions)
     ax_left.set_yticklabels(left_tick_labels)
 
-    # Right panel: -15% to +25%, ticks every 5%
-    right_tick_pcts = list(range(-15, 26, 5))
+    # Right panel: -20% to +40%, ticks every 10%
+    right_tick_pcts = list(range(-20, 41, 10))
     right_tick_positions = [log_transform(p) for p in right_tick_pcts]
     right_tick_labels = [f'{p}%' for p in right_tick_pcts]
-    ax_right.set_ylim(log_transform(-15), log_transform(25))
+    ax_right.set_ylim(log_transform(-20), log_transform(40))
     ax_right.set_yticks(right_tick_positions)
     ax_right.set_yticklabels(right_tick_labels)
 

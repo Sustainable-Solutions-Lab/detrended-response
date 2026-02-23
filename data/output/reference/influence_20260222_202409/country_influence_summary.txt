@@ -1,0 +1,1627 @@
+Country Influence Analysis Summary
+==================================================
+
+APPROACH: approach0
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 9.42307):
+     1. MNE  -0.0321  Montenegro
+     2. IRN  -0.0268  Iran, Islamic Republic of
+     3. MNG  -0.0176  Mongolia
+     4. SYR  -0.0129  Syrian Arab Republic
+     5. MLT  -0.0103  Malta
+     6. AGO  -0.0096  Angola
+     7. CUB  -0.0093  Cuba
+     8. FIN  -0.0085  Finland
+     9. SLV  -0.0082  El Salvador
+    10. MLI  -0.0079  Mali
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 12.2138):
+     1. KWT  -0.0945  Kuwait
+     2. IRN  -0.0798  Iran, Islamic Republic of
+     3. MNE  -0.0707  Montenegro
+     4. SYR  -0.0595  Syrian Arab Republic
+     5. FIN  -0.0371  Finland
+     6. MNG  -0.0335  Mongolia
+     7. SWE  -0.0297  Sweden
+     8. ZWE  -0.0295  Zimbabwe
+     9. GNQ  -0.0276  Equatorial Guinea
+    10. MMR  -0.0259  Myanmar
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 16.9321):
+     1. LBY  +0.1839  Libya
+     2. LBN  +0.1109  Lebanon
+     3. MUS  +0.0589  Mauritius
+     4. IRQ  +0.0506  Iraq
+     5. ALB  +0.0436  Albania
+     6. COG  +0.0339  Congo
+     7. USA  +0.0324  United States
+     8. GHA  +0.0310  Ghana
+     9. ARE  +0.0303  United Arab Emirates
+    10. URY  +0.0274  Uruguay
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 26.1964):
+     1. LBY  +0.0914  Libya
+     2. MUS  +0.0264  Mauritius
+     3. QAT  +0.0162  Qatar
+     4. PRY  +0.0144  Paraguay
+     5. RWA  +0.0140  Rwanda
+     6. HRV  +0.0127  Croatia
+     7. FIN  +0.0125  Finland
+     8. GHA  +0.0123  Ghana
+     9. LBR  +0.0112  Liberia
+    10. BDI  +0.0111  Burundi
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0.0039643):
+     1. MNG  -0.0236  Mongolia
+     2. SYR  -0.0201  Syrian Arab Republic
+     3. IRN  -0.0171  Iran, Islamic Republic of
+     4. ARE  -0.0170  United Arab Emirates
+     5. THA  -0.0152  Thailand
+     6. IND  -0.0126  India
+     7. LBY  -0.0121  Libya
+     8. MUS  -0.0118  Mauritius
+     9. GBR  -0.0116  United Kingdom
+    10. CUB  -0.0106  Cuba
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0.00639721):
+     1. MNG  -0.0967  Mongolia
+     2. MNE  -0.0701  Montenegro
+     3. ARE  -0.0658  United Arab Emirates
+     4. SWE  -0.0597  Sweden
+     5. LBY  -0.0545  Libya
+     6. QAT  -0.0540  Qatar
+     7. IRN  -0.0486  Iran, Islamic Republic of
+     8. SYR  -0.0402  Syrian Arab Republic
+     9. TCD  -0.0366  Chad
+    10. THA  -0.0329  Thailand
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0.00995534):
+     1. LBN  +0.1900  Lebanon
+     2. KWT  +0.0917  Kuwait
+     3. ALB  +0.0558  Albania
+     4. MOZ  +0.0402  Mozambique
+     5. CHL  +0.0401  Chile
+     6. IRL  +0.0378  Ireland
+     7. GNB  +0.0357  Guinea-Bissau
+     8. POL  +0.0349  Poland
+     9. NER  +0.0344  Niger
+    10. BHR  +0.0329  Bahrain
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0.0130937):
+     1. LBN  +0.0659  Lebanon
+     2. KWT  +0.0367  Kuwait
+     3. ALB  +0.0195  Albania
+     4. FRA  +0.0195  France
+     5. AGO  +0.0172  Angola
+     6. RWA  +0.0157  Rwanda
+     7. NER  +0.0145  Niger
+     8. DZA  +0.0144  Algeria
+     9. TTO  +0.0140  Trinidad and Tobago
+    10. TCD  +0.0136  Chad
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000475375):
+     1. KWT  -0.0684  Kuwait
+     2. LBN  -0.0228  Lebanon
+     3. RWA  -0.0123  Rwanda
+     4. GBR  -0.0098  United Kingdom
+     5. MOZ  -0.0089  Mozambique
+     6. AUS  -0.0084  Australia
+     7. PER  -0.0082  Peru
+     8. BRB  -0.0080  Barbados
+     9. CUB  -0.0080  Cuba
+    10. ZWE  -0.0069  Zimbabwe
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000352044):
+     1. KWT  -0.1719  Kuwait
+     2. LBN  -0.0844  Lebanon
+     3. NER  -0.0569  Niger
+     4. ZWE  -0.0470  Zimbabwe
+     5. GNB  -0.0437  Guinea-Bissau
+     6. MOZ  -0.0386  Mozambique
+     7. OMN  -0.0316  Oman
+     8. SEN  -0.0294  Senegal
+     9. PER  -0.0249  Peru
+    10. ALB  -0.0226  Albania
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000212967):
+     1. LBY  +0.1757  Libya
+     2. ARE  +0.0751  United Arab Emirates
+     3. MUS  +0.0695  Mauritius
+     4. QAT  +0.0599  Qatar
+     5. MNG  +0.0593  Mongolia
+     6. SAU  +0.0454  Saudi Arabia
+     7. SWE  +0.0391  Sweden
+     8. IRQ  +0.0363  Iraq
+     9. CRI  +0.0302  Costa Rica
+    10. DMA  +0.0302  Dominica
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -0.000108421):
+     1. LBY  +0.0775  Libya
+     2. MUS  +0.0271  Mauritius
+     3. QAT  +0.0182  Qatar
+     4. MNG  +0.0179  Mongolia
+     5. SAU  +0.0167  Saudi Arabia
+     6. GHA  +0.0162  Ghana
+     7. GBR  +0.0156  United Kingdom
+     8. UGA  +0.0156  Uganda
+     9. ARE  +0.0153  United Arab Emirates
+    10. MDG  +0.0143  Madagascar
+
+
+
+APPROACH: approach0h0
+--------------------------------------------------
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+
+APPROACH: approach1
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 9.92684):
+     1. MNE  -0.0313  Montenegro
+     2. IRN  -0.0271  Iran, Islamic Republic of
+     3. MNG  -0.0174  Mongolia
+     4. SYR  -0.0136  Syrian Arab Republic
+     5. CUB  -0.0132  Cuba
+     6. MLT  -0.0124  Malta
+     7. AGO  -0.0113  Angola
+     8. FIN  -0.0088  Finland
+     9. SLV  -0.0083  El Salvador
+    10. GNQ  -0.0076  Equatorial Guinea
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 13.0282):
+     1. KWT  -0.0964  Kuwait
+     2. IRN  -0.0782  Iran, Islamic Republic of
+     3. MNE  -0.0764  Montenegro
+     4. SYR  -0.0601  Syrian Arab Republic
+     5. FIN  -0.0410  Finland
+     6. MMR  -0.0283  Myanmar
+     7. MNG  -0.0283  Mongolia
+     8. SWE  -0.0281  Sweden
+     9. GNQ  -0.0277  Equatorial Guinea
+    10. ZWE  -0.0270  Zimbabwe
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 17.8324):
+     1. LBY  +0.1890  Libya
+     2. LBN  +0.1092  Lebanon
+     3. MUS  +0.0577  Mauritius
+     4. IRQ  +0.0545  Iraq
+     5. COG  +0.0410  Congo
+     6. ALB  +0.0379  Albania
+     7. MRT  +0.0335  Mauritania
+     8. GHA  +0.0309  Ghana
+     9. CHL  +0.0280  Chile
+    10. QAT  +0.0271  Qatar
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 25.5517):
+     1. LBY  +0.0907  Libya
+     2. MUS  +0.0285  Mauritius
+     3. QAT  +0.0176  Qatar
+     4. PRY  +0.0167  Paraguay
+     5. RWA  +0.0141  Rwanda
+     6. GHA  +0.0135  Ghana
+     7. FIN  +0.0128  Finland
+     8. BDI  +0.0123  Burundi
+     9. SAU  +0.0116  Saudi Arabia
+    10. LBR  +0.0112  Liberia
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0.00316887):
+     1. ARE  -0.0249  United Arab Emirates
+     2. MNE  -0.0180  Montenegro
+     3. SYR  -0.0147  Syrian Arab Republic
+     4. IRN  -0.0146  Iran, Islamic Republic of
+     5. CUB  -0.0144  Cuba
+     6. MUS  -0.0123  Mauritius
+     7. MNG  -0.0119  Mongolia
+     8. SRB  -0.0105  Serbia
+     9. THA  -0.0102  Thailand
+    10. GBR  -0.0094  United Kingdom
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0.00513757):
+     1. MNG  -0.0970  Mongolia
+     2. MNE  -0.0735  Montenegro
+     3. SWE  -0.0624  Sweden
+     4. ARE  -0.0582  United Arab Emirates
+     5. QAT  -0.0489  Qatar
+     6. IRN  -0.0473  Iran, Islamic Republic of
+     7. SYR  -0.0321  Syrian Arab Republic
+     8. TCD  -0.0310  Chad
+     9. FIN  -0.0309  Finland
+    10. LBY  -0.0308  Libya
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0.00807314):
+     1. LBN  +0.2107  Lebanon
+     2. KWT  +0.0874  Kuwait
+     3. ALB  +0.0622  Albania
+     4. AFG  +0.0398  Afghanistan
+     5. CHL  +0.0395  Chile
+     6. NER  +0.0371  Niger
+     7. GNB  +0.0352  Guinea-Bissau
+     8. CUB  +0.0348  Cuba
+     9. IRL  +0.0336  Ireland
+    10. MOZ  +0.0305  Mozambique
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0.010575):
+     1. LBN  +0.0742  Lebanon
+     2. KWT  +0.0345  Kuwait
+     3. RWA  +0.0244  Rwanda
+     4. DZA  +0.0194  Algeria
+     5. AGO  +0.0184  Angola
+     6. AFG  +0.0175  Afghanistan
+     7. ALB  +0.0169  Albania
+     8. FRA  +0.0166  France
+     9. TCD  +0.0115  Chad
+    10. IND  +0.0111  India
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000352372):
+     1. KWT  -0.0617  Kuwait
+     2. LBN  -0.0280  Lebanon
+     3. RWA  -0.0181  Rwanda
+     4. MOZ  -0.0136  Mozambique
+     5. AUS  -0.0123  Australia
+     6. CUB  -0.0113  Cuba
+     7. ZWE  -0.0098  Zimbabwe
+     8. IRL  -0.0095  Ireland
+     9. PER  -0.0085  Peru
+    10. NZL  -0.0072  New Zealand
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000265775):
+     1. KWT  -0.1643  Kuwait
+     2. LBN  -0.0934  Lebanon
+     3. NER  -0.0543  Niger
+     4. ZWE  -0.0418  Zimbabwe
+     5. MOZ  -0.0394  Mozambique
+     6. GNB  -0.0350  Guinea-Bissau
+     7. SEN  -0.0347  Senegal
+     8. ALB  -0.0312  Albania
+     9. OMN  -0.0247  Oman
+    10. PER  -0.0223  Peru
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000166553):
+     1. LBY  +0.1708  Libya
+     2. ARE  +0.0748  United Arab Emirates
+     3. MUS  +0.0684  Mauritius
+     4. QAT  +0.0603  Qatar
+     5. MNG  +0.0594  Mongolia
+     6. SWE  +0.0475  Sweden
+     7. SAU  +0.0450  Saudi Arabia
+     8. IRQ  +0.0376  Iraq
+     9. DMA  +0.0357  Dominica
+    10. GBR  +0.0306  United Kingdom
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -9.34975e-05):
+     1. LBY  +0.0708  Libya
+     2. MUS  +0.0253  Mauritius
+     3. MNG  +0.0201  Mongolia
+     4. QAT  +0.0190  Qatar
+     5. ARE  +0.0188  United Arab Emirates
+     6. UGA  +0.0174  Uganda
+     7. SAU  +0.0172  Saudi Arabia
+     8. GBR  +0.0167  United Kingdom
+     9. GAB  +0.0162  Gabon
+    10. BEN  +0.0155  Benin
+
+
+
+APPROACH: approach1h0
+--------------------------------------------------
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+
+APPROACH: approach2
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 10.8093):
+     1. MNE  -0.0310  Montenegro
+     2. IRN  -0.0241  Iran, Islamic Republic of
+     3. FIN  -0.0216  Finland
+     4. KWT  -0.0167  Kuwait
+     5. MNG  -0.0150  Mongolia
+     6. CUB  -0.0137  Cuba
+     7. GNQ  -0.0133  Equatorial Guinea
+     8. SYR  -0.0133  Syrian Arab Republic
+     9. AGO  -0.0129  Angola
+    10. SWE  -0.0098  Sweden
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 13.2305):
+     1. KWT  -0.1165  Kuwait
+     2. IRN  -0.0848  Iran, Islamic Republic of
+     3. MNE  -0.0708  Montenegro
+     4. SYR  -0.0623  Syrian Arab Republic
+     5. FIN  -0.0504  Finland
+     6. MNG  -0.0456  Mongolia
+     7. SWE  -0.0324  Sweden
+     8. GNQ  -0.0313  Equatorial Guinea
+     9. JOR  -0.0292  Jordan
+    10. ZWE  -0.0274  Zimbabwe
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 17.5643):
+     1. LBY  +0.1719  Libya
+     2. LBN  +0.0875  Lebanon
+     3. IRQ  +0.0567  Iraq
+     4. MUS  +0.0563  Mauritius
+     5. ALB  +0.0524  Albania
+     6. COG  +0.0404  Congo
+     7. DMA  +0.0348  Dominica
+     8. DOM  +0.0317  Dominican Republic
+     9. BGR  +0.0297  Bulgaria
+    10. IRL  +0.0289  Ireland
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 23.6038):
+     1. LBY  +0.0809  Libya
+     2. MUS  +0.0221  Mauritius
+     3. IRQ  +0.0202  Iraq
+     4. RWA  +0.0172  Rwanda
+     5. FIN  +0.0168  Finland
+     6. GHA  +0.0155  Ghana
+     7. LKA  +0.0148  Sri Lanka
+     8. COG  +0.0136  Congo
+     9. COM  +0.0126  Comoros
+    10. QAT  +0.0118  Qatar
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0.00435361):
+     1. MNG  -0.0362  Mongolia
+     2. SYR  -0.0224  Syrian Arab Republic
+     3. ARE  -0.0203  United Arab Emirates
+     4. MNE  -0.0128  Montenegro
+     5. IRN  -0.0128  Iran, Islamic Republic of
+     6. BEN  -0.0099  Benin
+     7. LBY  -0.0085  Libya
+     8. THA  -0.0085  Thailand
+     9. SWE  -0.0083  Sweden
+    10. SWZ  -0.0080  Eswatini
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0.00645479):
+     1. MNG  -0.1142  Mongolia
+     2. SWE  -0.0784  Sweden
+     3. MNE  -0.0672  Montenegro
+     4. IRN  -0.0537  Iran, Islamic Republic of
+     5. ARE  -0.0501  United Arab Emirates
+     6. FIN  -0.0454  Finland
+     7. SYR  -0.0453  Syrian Arab Republic
+     8. QAT  -0.0408  Qatar
+     9. CHN  -0.0284  China
+    10. LSO  -0.0255  Lesotho
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0.00951061):
+     1. LBN  +0.1841  Lebanon
+     2. KWT  +0.0889  Kuwait
+     3. CHL  +0.0541  Chile
+     4. ALB  +0.0499  Albania
+     5. AFG  +0.0431  Afghanistan
+     6. PRT  +0.0334  Portugal
+     7. JPN  +0.0325  Japan
+     8. POL  +0.0310  Poland
+     9. AUT  +0.0308  Austria
+    10. OMN  +0.0300  Oman
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0.0123361):
+     1. LBN  +0.0631  Lebanon
+     2. KWT  +0.0375  Kuwait
+     3. AFG  +0.0215  Afghanistan
+     4. RWA  +0.0196  Rwanda
+     5. ALB  +0.0193  Albania
+     6. DZA  +0.0179  Algeria
+     7. FRA  +0.0177  France
+     8. AGO  +0.0174  Angola
+     9. TTO  +0.0161  Trinidad and Tobago
+    10. SEN  +0.0122  Senegal
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000411396):
+     1. KWT  -0.0641  Kuwait
+     2. LBN  -0.0284  Lebanon
+     3. AUS  -0.0123  Australia
+     4. AGO  -0.0108  Angola
+     5. ZWE  -0.0106  Zimbabwe
+     6. MOZ  -0.0105  Mozambique
+     7. RWA  -0.0098  Rwanda
+     8. GBR  -0.0078  United Kingdom
+     9. SGP  -0.0074  Singapore
+    10. CUB  -0.0069  Cuba
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000313914):
+     1. KWT  -0.1851  Kuwait
+     2. LBN  -0.0891  Lebanon
+     3. NER  -0.0549  Niger
+     4. MOZ  -0.0436  Mozambique
+     5. ZWE  -0.0378  Zimbabwe
+     6. BHR  -0.0340  Bahrain
+     7. GNB  -0.0293  Guinea-Bissau
+     8. OMN  -0.0237  Oman
+     9. ZMB  -0.0236  Zambia
+    10. PER  -0.0234  Peru
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000206305):
+     1. LBY  +0.1503  Libya
+     2. MNG  +0.0844  Mongolia
+     3. MUS  +0.0716  Mauritius
+     4. ARE  +0.0710  United Arab Emirates
+     5. SAU  +0.0571  Saudi Arabia
+     6. IRQ  +0.0549  Iraq
+     7. QAT  +0.0491  Qatar
+     8. SWE  +0.0481  Sweden
+     9. SWZ  +0.0356  Eswatini
+    10. DMA  +0.0321  Dominica
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -0.000127519):
+     1. LBY  +0.0677  Libya
+     2. MNG  +0.0249  Mongolia
+     3. MUS  +0.0249  Mauritius
+     4. ARE  +0.0191  United Arab Emirates
+     5. SAU  +0.0190  Saudi Arabia
+     6. GBR  +0.0187  United Kingdom
+     7. GAB  +0.0167  Gabon
+     8. SWZ  +0.0158  Eswatini
+     9. GHA  +0.0156  Ghana
+    10. THA  +0.0152  Thailand
+
+
+
+APPROACH: approach2h0
+--------------------------------------------------
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+
+APPROACH: approach3
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 12.6852):
+     1. IRN  -0.0427  Iran, Islamic Republic of
+     2. MNE  -0.0252  Montenegro
+     3. SDN  -0.0157  Sudan
+     4. MLT  -0.0154  Malta
+     5. CMR  -0.0112  Cameroon
+     6. SYR  -0.0110  Syrian Arab Republic
+     7. NPL  -0.0097  Nepal
+     8. JOR  -0.0091  Jordan
+     9. AGO  -0.0070  Angola
+    10. BGD  -0.0069  Bangladesh
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 15.0002):
+     1. IRN  -0.0949  Iran, Islamic Republic of
+     2. SYR  -0.0663  Syrian Arab Republic
+     3. JOR  -0.0494  Jordan
+     4. CYP  -0.0378  Cyprus
+     5. MNE  -0.0300  Montenegro
+     6. TCD  -0.0259  Chad
+     7. GBR  -0.0255  United Kingdom
+     8. TUN  -0.0242  Tunisia
+     9. QAT  -0.0210  Qatar
+    10. SRB  -0.0198  Serbia
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 22.8256):
+     1. LBY  +0.1567  Libya
+     2. LBN  +0.0860  Lebanon
+     3. IRQ  +0.0684  Iraq
+     4. MUS  +0.0567  Mauritius
+     5. COG  +0.0482  Congo
+     6. ALB  +0.0475  Albania
+     7. PAN  +0.0404  Panama
+     8. VEN  +0.0364  Venezuela, Bolivarian Republic of
+     9. MRT  +0.0343  Mauritania
+    10. GNB  +0.0319  Guinea-Bissau
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 25.1306):
+     1. LBY  +0.0482  Libya
+     2. NPL  +0.0309  Nepal
+     3. ALB  +0.0263  Albania
+     4. MUS  +0.0247  Mauritius
+     5. LBR  +0.0221  Liberia
+     6. BEN  +0.0190  Benin
+     7. USA  +0.0182  United States
+     8. JAM  +0.0175  Jamaica
+     9. BFA  +0.0160  Burkina Faso
+    10. BGR  +0.0156  Bulgaria
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000275155):
+     1. KWT  -0.0191  Kuwait
+     2. IRN  -0.0185  Iran, Islamic Republic of
+     3. POL  -0.0150  Poland
+     4. NGA  -0.0136  Nigeria
+     5. SYC  -0.0099  Seychelles
+     6. MAR  -0.0099  Morocco
+     7. URY  -0.0093  Uruguay
+     8. MOZ  -0.0081  Mozambique
+     9. HUN  -0.0077  Hungary
+    10. ZMB  -0.0073  Zambia
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000212279):
+     1. KWT  -0.0454  Kuwait
+     2. ISL  -0.0412  Iceland
+     3. ZWE  -0.0410  Zimbabwe
+     4. POL  -0.0326  Poland
+     5. ZMB  -0.0291  Zambia
+     6. CAN  -0.0284  Canada
+     7. MAR  -0.0279  Morocco
+     8. JOR  -0.0264  Jordan
+     9. MKD  -0.0259  North Macedonia
+    10. AFG  -0.0250  Afghanistan
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000137332):
+     1. MNG  +0.1546  Mongolia
+     2. MNE  +0.0919  Montenegro
+     3. SWE  +0.0647  Sweden
+     4. LBY  +0.0585  Libya
+     5. FIN  +0.0572  Finland
+     6. DJI  +0.0393  Djibouti
+     7. GAB  +0.0341  Gabon
+     8. SAU  +0.0330  Saudi Arabia
+     9. MUS  +0.0326  Mauritius
+    10. GNB  +0.0316  Guinea-Bissau
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -9.43871e-05):
+     1. MNG  +0.0559  Mongolia
+     2. MNE  +0.0398  Montenegro
+     3. MLI  +0.0236  Mali
+     4. SWE  +0.0198  Sweden
+     5. GNQ  +0.0193  Equatorial Guinea
+     6. KWT  +0.0185  Kuwait
+     7. ARG  +0.0181  Argentina
+     8. IND  +0.0174  India
+     9. LBY  +0.0162  Libya
+    10. MDG  +0.0159  Madagascar
+
+
+
+APPROACH: approach4
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 12.1109):
+     1. KWT  -0.0284  Kuwait
+     2. SWE  -0.0278  Sweden
+     3. MNE  -0.0199  Montenegro
+     4. AGO  -0.0188  Angola
+     5. CUB  -0.0133  Cuba
+     6. NZL  -0.0123  New Zealand
+     7. SLV  -0.0097  El Salvador
+     8. JOR  -0.0091  Jordan
+     9. ZMB  -0.0069  Zambia
+    10. MMR  -0.0068  Myanmar
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 15.5118):
+     1. KWT  -0.0808  Kuwait
+     2. MNE  -0.0557  Montenegro
+     3. ZWE  -0.0511  Zimbabwe
+     4. AFG  -0.0371  Afghanistan
+     5. SRB  -0.0371  Serbia
+     6. CUB  -0.0332  Cuba
+     7. GAB  -0.0295  Gabon
+     8. BDI  -0.0288  Burundi
+     9. NER  -0.0278  Niger
+    10. JOR  -0.0275  Jordan
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 20.838):
+     1. LBY  +0.2492  Libya
+     2. LBN  +0.1011  Lebanon
+     3. MUS  +0.0388  Mauritius
+     4. ARE  +0.0337  United Arab Emirates
+     5. JPN  +0.0325  Japan
+     6. MLT  +0.0297  Malta
+     7. TCD  +0.0289  Chad
+     8. CUB  +0.0279  Cuba
+     9. BGR  +0.0254  Bulgaria
+    10. PRY  +0.0236  Paraguay
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 29.0707):
+     1. LBY  +0.1043  Libya
+     2. MUS  +0.0159  Mauritius
+     3. ISR  +0.0153  Israel
+     4. CUB  +0.0142  Cuba
+     5. UGA  +0.0121  Uganda
+     6. VNM  +0.0110  Viet Nam
+     7. BEN  +0.0110  Benin
+     8. ROU  +0.0106  Romania
+     9. ISL  +0.0103  Iceland
+    10. POL  +0.0098  Poland
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0.00463527):
+     1. CUB  -0.0323  Cuba
+     2. SWE  -0.0209  Sweden
+     3. SYC  -0.0171  Seychelles
+     4. DJI  -0.0106  Djibouti
+     5. MNE  -0.0102  Montenegro
+     6. UGA  -0.0097  Uganda
+     7. BWA  -0.0087  Botswana
+     8. TUN  -0.0071  Tunisia
+     9. MAR  -0.0070  Morocco
+    10. MLI  -0.0069  Mali
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0.00661939):
+     1. MNE  -0.0777  Montenegro
+     2. SWE  -0.0610  Sweden
+     3. AFG  -0.0502  Afghanistan
+     4. NOR  -0.0500  Norway
+     5. CUB  -0.0493  Cuba
+     6. MNG  -0.0335  Mongolia
+     7. AGO  -0.0307  Angola
+     8. ARE  -0.0298  United Arab Emirates
+     9. BWA  -0.0292  Botswana
+    10. BEN  -0.0290  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0.00938251):
+     1. LBN  +0.2449  Lebanon
+     2. RUS  +0.0705  Russian Federation
+     3. ALB  +0.0454  Albania
+     4. IRL  +0.0361  Ireland
+     5. RWA  +0.0341  Rwanda
+     6. URY  +0.0313  Uruguay
+     7. KWT  +0.0293  Kuwait
+     8. BGD  +0.0256  Bangladesh
+     9. GNB  +0.0245  Guinea-Bissau
+    10. JOR  +0.0240  Jordan
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0.0116703):
+     1. LBN  +0.0855  Lebanon
+     2. CYP  +0.0212  Cyprus
+     3. ALB  +0.0168  Albania
+     4. BHR  +0.0168  Bahrain
+     5. CHN  +0.0157  China
+     6. AGO  +0.0149  Angola
+     7. MLT  +0.0138  Malta
+     8. ARG  +0.0134  Argentina
+     9. VEN  +0.0124  Venezuela, Bolivarian Republic of
+    10. GRC  +0.0122  Greece
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000318738):
+     1. KWT  -0.0381  Kuwait
+     2. LBN  -0.0355  Lebanon
+     3. AGO  -0.0112  Angola
+     4. MAR  -0.0100  Morocco
+     5. GNB  -0.0085  Guinea-Bissau
+     6. GNQ  -0.0083  Equatorial Guinea
+     7. GBR  -0.0055  United Kingdom
+     8. PHL  -0.0055  Philippines
+     9. SGP  -0.0054  Singapore
+    10. GAB  -0.0051  Gabon
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000260983):
+     1. KWT  -0.0939  Kuwait
+     2. LBN  -0.0930  Lebanon
+     3. GNQ  -0.0607  Equatorial Guinea
+     4. ZWE  -0.0562  Zimbabwe
+     5. NER  -0.0496  Niger
+     6. GAB  -0.0368  Gabon
+     7. LUX  -0.0330  Luxembourg
+     8. GNB  -0.0311  Guinea-Bissau
+     9. HKG  -0.0305  Hong Kong
+    10. RUS  -0.0296  Russian Federation
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000183089):
+     1. LBY  +0.1997  Libya
+     2. ARE  +0.0670  United Arab Emirates
+     3. MNG  +0.0589  Mongolia
+     4. NOR  +0.0580  Norway
+     5. SWE  +0.0443  Sweden
+     6. CUB  +0.0440  Cuba
+     7. MUS  +0.0399  Mauritius
+     8. DOM  +0.0350  Dominican Republic
+     9. LBR  +0.0322  Liberia
+    10. JAM  +0.0313  Jamaica
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -0.000112565):
+     1. LBY  +0.0967  Libya
+     2. CUB  +0.0219  Cuba
+     3. ARE  +0.0200  United Arab Emirates
+     4. UGA  +0.0140  Uganda
+     5. SWE  +0.0136  Sweden
+     6. DZA  +0.0117  Algeria
+     7. LUX  +0.0111  Luxembourg
+     8. SAU  +0.0109  Saudi Arabia
+     9. MUS  +0.0109  Mauritius
+    10. HKG  +0.0107  Hong Kong
+
+
+
+APPROACH: method4
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 12.6548):
+     1. IRN  -0.0274  Iran, Islamic Republic of
+     2. MNE  -0.0230  Montenegro
+     3. FIN  -0.0198  Finland
+     4. JOR  -0.0133  Jordan
+     5. KWT  -0.0098  Kuwait
+     6. GNQ  -0.0093  Equatorial Guinea
+     7. SDN  -0.0081  Sudan
+     8. NZL  -0.0074  New Zealand
+     9. SWE  -0.0071  Sweden
+    10. MRT  -0.0070  Mauritania
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 14.6944):
+     1. IRN  -0.0812  Iran, Islamic Republic of
+     2. KWT  -0.0691  Kuwait
+     3. FIN  -0.0529  Finland
+     4. SYR  -0.0443  Syrian Arab Republic
+     5. MNE  -0.0418  Montenegro
+     6. ZWE  -0.0386  Zimbabwe
+     7. GNQ  -0.0374  Equatorial Guinea
+     8. GNB  -0.0349  Guinea-Bissau
+     9. ISR  -0.0348  Israel
+    10. SWE  -0.0343  Sweden
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 18.5624):
+     1. LBY  +0.1876  Libya
+     2. LBN  +0.0748  Lebanon
+     3. IRQ  +0.0712  Iraq
+     4. MUS  +0.0645  Mauritius
+     5. ALB  +0.0468  Albania
+     6. DMA  +0.0388  Dominica
+     7. DOM  +0.0388  Dominican Republic
+     8. COG  +0.0366  Congo
+     9. LBR  +0.0328  Liberia
+    10. RWA  +0.0315  Rwanda
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 24.1978):
+     1. LBY  +0.0843  Libya
+     2. MUS  +0.0259  Mauritius
+     3. IRQ  +0.0195  Iraq
+     4. GHA  +0.0172  Ghana
+     5. RWA  +0.0169  Rwanda
+     6. FIN  +0.0160  Finland
+     7. SAU  +0.0158  Saudi Arabia
+     8. COM  +0.0133  Comoros
+     9. LKA  +0.0132  Sri Lanka
+    10. COG  +0.0127  Congo
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0.00589902):
+     1. MNG  -0.0364  Mongolia
+     2. ARE  -0.0282  United Arab Emirates
+     3. FIN  -0.0196  Finland
+     4. KOR  -0.0122  Korea, Republic of
+     5. THA  -0.0115  Thailand
+     6. SWE  -0.0108  Sweden
+     7. IRN  -0.0107  Iran, Islamic Republic of
+     8. SWZ  -0.0106  Eswatini
+     9. MUS  -0.0087  Mauritius
+    10. CHN  -0.0080  China
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0.00795896):
+     1. MNG  -0.1176  Mongolia
+     2. SWE  -0.0626  Sweden
+     3. ARE  -0.0545  United Arab Emirates
+     4. FIN  -0.0465  Finland
+     5. MNE  -0.0382  Montenegro
+     6. IRN  -0.0371  Iran, Islamic Republic of
+     7. QAT  -0.0335  Qatar
+     8. THA  -0.0329  Thailand
+     9. NOR  -0.0320  Norway
+    10. DEU  -0.0314  Germany
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0.0111604):
+     1. KWT  +0.1694  Kuwait
+     2. LBN  +0.1654  Lebanon
+     3. ALB  +0.0517  Albania
+     4. CHL  +0.0424  Chile
+     5. RWA  +0.0382  Rwanda
+     6. IRL  +0.0372  Ireland
+     7. VEN  +0.0359  Venezuela, Bolivarian Republic of
+     8. POL  +0.0318  Poland
+     9. HTI  +0.0314  Haiti
+    10. BHR  +0.0308  Bahrain
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0.0141168):
+     1. LBN  +0.0518  Lebanon
+     2. KWT  +0.0477  Kuwait
+     3. AFG  +0.0209  Afghanistan
+     4. RWA  +0.0163  Rwanda
+     5. IRL  +0.0157  Ireland
+     6. ALB  +0.0154  Albania
+     7. CUB  +0.0129  Cuba
+     8. SYC  +0.0127  Seychelles
+     9. DZA  +0.0125  Algeria
+    10. AGO  +0.0123  Angola
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000443368):
+     1. KWT  -0.0656  Kuwait
+     2. LBN  -0.0243  Lebanon
+     3. RWA  -0.0136  Rwanda
+     4. CUB  -0.0117  Cuba
+     5. ZWE  -0.0115  Zimbabwe
+     6. AUS  -0.0092  Australia
+     7. JPN  -0.0074  Japan
+     8. DZA  -0.0074  Algeria
+     9. COG  -0.0071  Congo
+    10. MOZ  -0.0071  Mozambique
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000344209):
+     1. KWT  -0.2163  Kuwait
+     2. LBN  -0.0757  Lebanon
+     3. MOZ  -0.0415  Mozambique
+     4. OMN  -0.0365  Oman
+     5. NER  -0.0325  Niger
+     6. ZWE  -0.0322  Zimbabwe
+     7. ALB  -0.0294  Albania
+     8. PER  -0.0274  Peru
+     9. ZMB  -0.0260  Zambia
+    10. BHR  -0.0221  Bahrain
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -0.000230994):
+     1. LBY  +0.1380  Libya
+     2. ARE  +0.0812  United Arab Emirates
+     3. MNG  +0.0769  Mongolia
+     4. MUS  +0.0589  Mauritius
+     5. QAT  +0.0495  Qatar
+     6. SWE  +0.0463  Sweden
+     7. SAU  +0.0463  Saudi Arabia
+     8. THA  +0.0449  Thailand
+     9. SWZ  +0.0428  Eswatini
+    10. DMA  +0.0344  Dominica
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: -0.000157191):
+     1. LBY  +0.0617  Libya
+     2. MUS  +0.0272  Mauritius
+     3. MNG  +0.0252  Mongolia
+     4. GBR  +0.0215  United Kingdom
+     5. ARE  +0.0211  United Arab Emirates
+     6. BEN  +0.0204  Benin
+     7. SWZ  +0.0196  Eswatini
+     8. SAU  +0.0174  Saudi Arabia
+     9. GHA  +0.0161  Ghana
+    10. SLV  +0.0157  El Salvador
+
+
+Coefficient: h4
+
+  Countries that DECREASE h4 (percentile > 5th, threshold: 0.00105602):
+     1. AFG  -0.0170  Afghanistan
+     2. KOR  -0.0155  Korea, Republic of
+     3. LKA  -0.0143  Sri Lanka
+     4. GHA  -0.0112  Ghana
+     5. LBN  -0.0102  Lebanon
+     6. MYS  -0.0101  Malaysia
+     7. MKD  -0.0094  North Macedonia
+     8. CAF  -0.0088  Central African Republic
+     9. HUN  -0.0083  Hungary
+    10. CHL  -0.0071  Chile
+
+  Countries that DECREASE h4 (percentile > 25th, threshold: 0.00280105):
+     1. LBN  -0.0609  Lebanon
+     2. AFG  -0.0518  Afghanistan
+     3. POL  -0.0411  Poland
+     4. RUS  -0.0407  Russian Federation
+     5. KOR  -0.0301  Korea, Republic of
+     6. JOR  -0.0269  Jordan
+     7. BFA  -0.0231  Burkina Faso
+     8. GNB  -0.0230  Guinea-Bissau
+     9. HUN  -0.0222  Hungary
+    10. ECU  -0.0216  Ecuador
+
+  Countries that INCREASE h4 (percentile > 75th, threshold: 0.00605618):
+     1. KWT  +0.2586  Kuwait
+     2. MNE  +0.0814  Montenegro
+     3. IRQ  +0.0806  Iraq
+     4. MNG  +0.0397  Mongolia
+     5. IRN  +0.0329  Iran, Islamic Republic of
+     6. QAT  +0.0327  Qatar
+     7. SLE  +0.0327  Sierra Leone
+     8. LBR  +0.0303  Liberia
+     9. BHR  +0.0295  Bahrain
+    10. CIV  +0.0254  Côte d'Ivoire
+
+  Countries that INCREASE h4 (percentile > 95th, threshold: 0.00884901):
+     1. KWT  +0.0959  Kuwait
+     2. MNE  +0.0278  Montenegro
+     3. GNQ  +0.0156  Equatorial Guinea
+     4. QAT  +0.0151  Qatar
+     5. IRQ  +0.0142  Iraq
+     6. HTI  +0.0135  Haiti
+     7. BHR  +0.0129  Bahrain
+     8. IND  +0.0127  India
+     9. PAK  +0.0119  Pakistan
+    10. SEN  +0.0118  Senegal
+
+
+
+APPROACH: method6
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 10.5141):
+     1. MNE  -0.0348  Montenegro
+     2. IRN  -0.0252  Iran, Islamic Republic of
+     3. KWT  -0.0223  Kuwait
+     4. FIN  -0.0169  Finland
+     5. MNG  -0.0146  Mongolia
+     6. GNQ  -0.0141  Equatorial Guinea
+     7. AGO  -0.0129  Angola
+     8. SYR  -0.0101  Syrian Arab Republic
+     9. SWE  -0.0098  Sweden
+    10. CUB  -0.0097  Cuba
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 13.1293):
+     1. KWT  -0.1254  Kuwait
+     2. IRN  -0.0846  Iran, Islamic Republic of
+     3. MNE  -0.0818  Montenegro
+     4. SYR  -0.0495  Syrian Arab Republic
+     5. FIN  -0.0489  Finland
+     6. MNG  -0.0345  Mongolia
+     7. ZWE  -0.0330  Zimbabwe
+     8. GNQ  -0.0283  Equatorial Guinea
+     9. MMR  -0.0261  Myanmar
+    10. CAF  -0.0249  Central African Republic
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 17.3871):
+     1. LBY  +0.1602  Libya
+     2. LBN  +0.1007  Lebanon
+     3. IRQ  +0.0616  Iraq
+     4. ALB  +0.0578  Albania
+     5. MUS  +0.0558  Mauritius
+     6. COG  +0.0354  Congo
+     7. CHL  +0.0338  Chile
+     8. DMA  +0.0322  Dominica
+     9. POL  +0.0292  Poland
+    10. MRT  +0.0290  Mauritania
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 23.6694):
+     1. LBY  +0.0836  Libya
+     2. MUS  +0.0242  Mauritius
+     3. IRQ  +0.0181  Iraq
+     4. LBR  +0.0176  Liberia
+     5. GHA  +0.0148  Ghana
+     6. PRY  +0.0140  Paraguay
+     7. RWA  +0.0134  Rwanda
+     8. MYS  +0.0127  Malaysia
+     9. ISR  +0.0122  Israel
+    10. ALB  +0.0118  Albania
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+
+APPROACH: method7
+--------------------------------------------------
+
+Coefficient: T_opt
+
+  Countries that DECREASE T_opt (percentile > 5th, threshold: 9.87672):
+     1. KWT  -0.0467  Kuwait
+     2. MNE  -0.0297  Montenegro
+     3. SWE  -0.0175  Sweden
+     4. MLI  -0.0155  Mali
+     5. CUB  -0.0142  Cuba
+     6. MLT  -0.0131  Malta
+     7. NZL  -0.0112  New Zealand
+     8. LBY  -0.0102  Libya
+     9. IRN  -0.0088  Iran, Islamic Republic of
+    10. CHN  -0.0082  China
+
+  Countries that DECREASE T_opt (percentile > 25th, threshold: 13.8172):
+     1. KWT  -0.1755  Kuwait
+     2. MNE  -0.0459  Montenegro
+     3. IRN  -0.0413  Iran, Islamic Republic of
+     4. JOR  -0.0353  Jordan
+     5. CUB  -0.0350  Cuba
+     6. ZWE  -0.0317  Zimbabwe
+     7. BDI  -0.0296  Burundi
+     8. SWE  -0.0270  Sweden
+     9. GNQ  -0.0261  Equatorial Guinea
+    10. MLI  -0.0246  Mali
+
+  Countries that INCREASE T_opt (percentile > 75th, threshold: 19.8923):
+     1. LBY  +0.2181  Libya
+     2. LBN  +0.0929  Lebanon
+     3. RUS  +0.0429  Russian Federation
+     4. MUS  +0.0421  Mauritius
+     5. IRQ  +0.0358  Iraq
+     6. FIN  +0.0355  Finland
+     7. ETH  +0.0322  Ethiopia
+     8. ARE  +0.0293  United Arab Emirates
+     9. RWA  +0.0254  Rwanda
+    10. DMA  +0.0253  Dominica
+
+  Countries that INCREASE T_opt (percentile > 95th, threshold: 30):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h1
+
+  Countries that DECREASE h1 (percentile > 5th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that DECREASE h1 (percentile > 25th, threshold: 0):
+     1. AFG  +0.0000  Afghanistan
+     2. AGO  +0.0000  Angola
+     3. ALB  +0.0000  Albania
+     4. ARE  +0.0000  United Arab Emirates
+     5. ARG  +0.0000  Argentina
+     6. AUS  +0.0000  Australia
+     7. AUT  +0.0000  Austria
+     8. BDI  +0.0000  Burundi
+     9. BEL  +0.0000  Belgium
+    10. BEN  +0.0000  Benin
+
+  Countries that INCREASE h1 (percentile > 75th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+  Countries that INCREASE h1 (percentile > 95th, threshold: 0):
+     1. ZWE  +0.0000  Zimbabwe
+     2. ZMB  +0.0000  Zambia
+     3. ZAF  +0.0000  South Africa
+     4. YEM  +0.0000  Yemen
+     5. VNM  +0.0000  Viet Nam
+     6. VEN  +0.0000  Venezuela, Bolivarian Republic of
+     7. USA  +0.0000  United States
+     8. URY  +0.0000  Uruguay
+     9. UGA  +0.0000  Uganda
+    10. TZA  +0.0000  Tanzania, United Republic of
+
+
+Coefficient: h2
+
+  Countries that DECREASE h2 (percentile > 5th, threshold: -0.000426272):
+     1. KWT  -0.0788  Kuwait
+     2. CUB  -0.0270  Cuba
+     3. GMB  -0.0131  Gambia
+     4. LBN  -0.0125  Lebanon
+     5. AUS  -0.0116  Australia
+     6. MOZ  -0.0096  Mozambique
+     7. AFG  -0.0092  Afghanistan
+     8. SEN  -0.0087  Senegal
+     9. ZWE  -0.0082  Zimbabwe
+    10. ISR  -0.0075  Israel
+
+  Countries that DECREASE h2 (percentile > 25th, threshold: -0.000263578):
+     1. KWT  -0.2129  Kuwait
+     2. CUB  -0.0600  Cuba
+     3. ZWE  -0.0489  Zimbabwe
+     4. NER  -0.0330  Niger
+     5. OMN  -0.0322  Oman
+     6. AFG  -0.0321  Afghanistan
+     7. SEN  -0.0315  Senegal
+     8. BHR  -0.0311  Bahrain
+     9. CIV  -0.0286  Côte d'Ivoire
+    10. GMB  -0.0277  Gambia
+
+  Countries that INCREASE h2 (percentile > 75th, threshold: -4.5044e-05):
+     1. LBY  +0.1491  Libya
+     2. MNG  +0.0932  Mongolia
+     3. FIN  +0.0914  Finland
+     4. RUS  +0.0583  Russian Federation
+     5. QAT  +0.0483  Qatar
+     6. GBR  +0.0483  United Kingdom
+     7. ARE  +0.0459  United Arab Emirates
+     8. RWA  +0.0410  Rwanda
+     9. TCD  +0.0371  Chad
+    10. THA  +0.0362  Thailand
+
+  Countries that INCREASE h2 (percentile > 95th, threshold: 5.87145e-05):
+     1. LBY  +0.0448  Libya
+     2. MNG  +0.0412  Mongolia
+     3. FIN  +0.0356  Finland
+     4. GBR  +0.0285  United Kingdom
+     5. IRN  +0.0214  Iran, Islamic Republic of
+     6. SYR  +0.0180  Syrian Arab Republic
+     7. THA  +0.0171  Thailand
+     8. MNE  +0.0169  Montenegro
+     9. LUX  +0.0156  Luxembourg
+    10. TCD  +0.0146  Chad
+
+
