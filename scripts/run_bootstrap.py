@@ -178,7 +178,7 @@ def main():
     # Run bootstrap
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
     # Specify methods for h(T) computation
-    h_T_approaches = ['approach0', 'approach1', 'approach2', 'method4', 'approach3', 'approach4']
+    h_T_approaches = ['approach0', 'approach1', 'approach2', 'method4', 'approach3', 'approach4', 'approach5', 'approach6', 'approach7', 'approach8']
     bootstrap_results, country_samples, h_T_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -261,8 +261,8 @@ def main():
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # approach3: h2 (below T_opt), h4 (above T_opt), T_opt
-        if name == 'approach3' and result.h4_point is not None:
+        # approach3/approach5/approach7: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise quadratic)
+        if name in ['approach3', 'approach5', 'approach7'] and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (above T_opt): {result.h4_point:.6f}")
@@ -270,8 +270,8 @@ def main():
             print(f"  T_opt: {result.T_opt_point:.2f} C")
             print(f"    90% CI: [{stats['T_opt']['p5']:.2f}, {stats['T_opt']['p95']:.2f}]")
 
-        # approach4: h1, h2, h4 (persistence decay), T_opt
-        elif name == 'approach4' and result.h4_point is not None:
+        # approach4/approach6/approach8: h1, h2, h4 (persistence decay), T_opt
+        elif name in ['approach4', 'approach6', 'approach8'] and result.h4_point is not None:
             print(f"  h1: {result.h1_point:.6f}")
             print(f"    90% CI: [{stats['h1']['p5']:.6f}, {stats['h1']['p95']:.6f}]")
             print(f"  h2: {result.h2_point:.6f}")
@@ -284,7 +284,7 @@ def main():
             else:
                 print(f"  T_opt: N/A")
 
-            # Add filtered statistics for approach4
+            # Add filtered statistics for approach4/approach6/approach8
             from src.bootstrap import compute_approach4_filtered_statistics
             filtered_stats = compute_approach4_filtered_statistics(result)
             n_filtered = int(filtered_stats['n_filtered'])

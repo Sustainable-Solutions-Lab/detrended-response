@@ -16,6 +16,8 @@ Exploratory methods (kept as methods):
     method7: Lagged deviation model
 """
 
+import time
+
 import numpy as np
 from scipy import linalg
 from scipy.optimize import minimize, minimize_scalar
@@ -438,6 +440,53 @@ def compute_pre_first_year_correction(
             correction_T2[idx] = decay_factor * T2_first
 
     return correction_T, correction_T2
+
+
+def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
+    """Compute linear temperature trend evaluated at each country's first year.
+
+    For each country, fits a linear OLS regression T = a + b*t to all observations,
+    then evaluates T_trend at the first year. This provides a smoothed baseline
+    temperature for the pre-history assumption in persistence decay models.
+
+    Returns an array where each observation has its country's T_linear(first_year).
+
+    Args:
+        data: AnalysisData object
+
+    Returns:
+        Array of shape (n_obs,) with T_linear(first_year) for each observation's country
+    """
+    T_linear_first = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        # Get observation indices for this country
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+
+        # Get time and temperature for this country
+        t_country = data.time[country_indices]
+        T_country = data.temp[country_indices]
+
+        # Fit linear OLS: T = a + b*t
+        # Using normal equations: [a, b] = (X'X)^-1 X'T
+        n_c = len(t_country)
+        X_lin = np.column_stack([np.ones(n_c), t_country])
+        coeffs, _, _, _ = linalg.lstsq(X_lin, T_country)
+        a, b = coeffs
+
+        # Find first year for this country
+        years_for_country = data.year[country_indices]
+        first_year_idx = np.argmin(years_for_country)
+        t_first = t_country[first_year_idx]
+
+        # Evaluate T_linear at first year
+        T_at_first = a + b * t_first
+
+        # Set all observations for this country to T_linear(first_year)
+        T_linear_first[country_mask] = T_at_first
+
+    return T_linear_first
 
 
 @dataclass
@@ -2153,6 +2202,435 @@ def fit_approach4_persistence_decay(
     )
 
 
+def fit_approach5_piecewise_conjoined(
+    data: AnalysisData,
+    T_opt_bounds: tuple = (0.0, 30.0),
+) -> FitResultApproach8:
+    """Approach 5: Piecewise quadratic with full OLS for j_i(t) and k(t).
+
+    Combines:
+    - Piecewise quadratic climate response (like approach3)
+    - Full OLS estimation of country trends and year effects (like approach0)
+
+    Model: Δy_i(t) = h2_low*(T-T_opt)² [T≤T_opt] + h2_high*(T-T_opt)² [T>T_opt]
+                     + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
+
+    Uses 1D optimization over T_opt with inner OLS solving for all other parameters.
+
+    Design matrix structure:
+    - Column 0: h2_low column - (T-T_opt)² where T <= T_opt, else 0
+    - Column 1: h2_high column - (T-T_opt)² where T > T_opt, else 0
+    - Columns 2 to 2+3*(n_countries-1)-1: Country quadratic trends (skip country 0)
+    - Remaining columns: Year dummies (all n_years)
+
+    Args:
+        data: AnalysisData object
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+
+    Returns:
+        FitResultApproach8 with T_opt, h2 (below), h4 (above), and standard errors
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+
+    # Get unique years and create year index mapping
+    unique_years = sorted(set(data.year))
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
+    n_years = len(unique_years)
+
+    # Number of parameters:
+    # - 2 for h2_low, h2_high
+    # - 3 * (n_countries - 1) for j terms (first country is reference)
+    # - n_years for k_t terms
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_years
+    n_total_params = 2 + n_j_params + n_k_params
+
+    # Pre-compute constant parts of design matrix (country trends and year effects)
+    X_base = np.zeros((n_obs, n_total_params))
+
+    # Country-specific time trends (skip country 0 as reference)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = 2 + 3 * (c - 1)
+            X_base[i, col_base] = 1.0        # j0[c]
+            X_base[i, col_base + 1] = t      # j1[c]
+            X_base[i, col_base + 2] = t * t  # j2[c]
+
+    # Year fixed effects (all years)
+    k_col_start = 2 + n_j_params
+    for i in range(n_obs):
+        yr_idx = year_to_idx[data.year[i]]
+        X_base[i, k_col_start + yr_idx] = 1.0
+
+    T = data.temp
+    y = data.growth_pcGDP
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving full OLS."""
+        # Piecewise quadratic columns
+        low_col = np.where(T <= T_opt_val, (T - T_opt_val) ** 2, 0.0)
+        high_col = np.where(T > T_opt_val, (T - T_opt_val) ** 2, 0.0)
+
+        # Build design matrix
+        X = X_base.copy()
+        X[:, 0] = low_col
+        X[:, 1] = high_col
+
+        # Solve OLS
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # 1D optimization: grid search then Brent's method
+    T_opt_grid = np.linspace(T_opt_bounds[0], T_opt_bounds[1], 31)
+    sse_grid = [compute_sse_for_T_opt(T_val) for T_val in T_opt_grid]
+    best_grid_idx = np.argmin(sse_grid)
+
+    search_lo = T_opt_grid[max(0, best_grid_idx - 1)]
+    search_hi = T_opt_grid[min(len(T_opt_grid) - 1, best_grid_idx + 1)]
+
+    result = minimize_scalar(
+        compute_sse_for_T_opt,
+        bounds=(search_lo, search_hi),
+        method='bounded',
+        options={'xatol': 1e-8}
+    )
+    T_opt_opt = result.x
+
+    # Re-fit at optimal T_opt to get coefficients and statistics
+    low_col = np.where(T <= T_opt_opt, (T - T_opt_opt) ** 2, 0.0)
+    high_col = np.where(T > T_opt_opt, (T - T_opt_opt) ** 2, 0.0)
+
+    X_opt = X_base.copy()
+    X_opt[:, 0] = low_col
+    X_opt[:, 1] = high_col
+
+    beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+
+    h2_low = beta[0]
+    h2_high = beta[1]
+    h2_low_se = np.sqrt(cov[0, 0])
+    h2_high_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for T_opt using numerical Hessian
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        n_obs,
+        n_params=3  # h2_low, h2_high, T_opt are the climate parameters
+    )
+
+    # Extract year fixed effects
+    k = {}
+    for yr_idx in range(n_years):
+        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+
+    # Fit statistics
+    n_params = 3  # Climate response: h2_low, h2_high, T_opt
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_total_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, y)
+
+    # Compute j_trend and k_values for diagnostics
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = 2 + 3 * (c - 1)
+            j0 = beta[col_base]
+            j1 = beta[col_base + 1]
+            j2 = beta[col_base + 2]
+            j_trend[i] = j0 + j1 * t + j2 * t * t
+        k_values[i] = k[yr]
+
+    # Climate response values h(T)
+    h_values = h2_low * low_col + h2_high * high_col
+
+    # RMS imbalance: for conjoined approaches, imbalance is not well-defined
+    # since there's no separate T_trend. Use T as T_trend (like approach0).
+    T_trend = T
+    low_trend = np.where(T_trend <= T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
+    high_trend = np.where(T_trend > T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
+    h_of_T_trend = h2_low * low_trend + h2_high * high_trend
+    imbalance = h_of_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+    rms_h = np.sqrt(np.mean(h_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    # For conjoined approach: Delta_u = 0, v = h(T)
+    Delta_u = np.zeros(n_obs)
+    v = h_values
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultApproach8(
+        approach="5: Piecewise Quadratic Conjoined",
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach6_persistence_conjoined(
+    data: AnalysisData,
+    h4_bounds: tuple = (0.0, 1.0),
+) -> FitResultApproach4:
+    """Approach 6: Persistence decay with full OLS for j_i(t) and k(t).
+
+    Combines:
+    - Persistence decay climate response (like approach4)
+    - Full OLS estimation of country trends and year effects (like approach0)
+
+    Model: Δy_i(t) = h1*X1 + h2*X2 + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
+
+    where:
+    - X1 = T - h4*A_T_lag - correction_T
+    - X2 = T² - h4*A_T2_lag - correction_T2
+    - A_T_lag, A_T2_lag are lagged persistence accumulators
+    - correction terms account for assumed constant pre-history
+
+    Pre-history assumption: Temperature before each country's first observation
+    was constant at T_linear(first_year), where T_linear is computed from a
+    linear OLS fit to each country's temperature time series. This provides
+    a smoothed baseline that avoids noise from year-to-year variability.
+
+    Uses 1D optimization over h4 with inner OLS solving for all other parameters.
+
+    Design matrix structure:
+    - Column 0: X1 (modified linear temperature)
+    - Column 1: X2 (modified quadratic temperature)
+    - Columns 2 to 2+3*(n_countries-1)-1: Country quadratic trends (skip country 0)
+    - Remaining columns: Year dummies (all n_years)
+
+    Args:
+        data: AnalysisData object
+        h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+
+    Returns:
+        FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+
+    # Get unique years and create year index mapping
+    unique_years = sorted(set(data.year))
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
+    n_years = len(unique_years)
+
+    # Number of parameters:
+    # - 2 for h1, h2
+    # - 3 * (n_countries - 1) for j terms
+    # - n_years for k_t terms
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_years
+    n_total_params = 2 + n_j_params + n_k_params
+
+    # Pre-compute constant parts of design matrix (country trends and year effects)
+    X_base = np.zeros((n_obs, n_total_params))
+
+    # Country-specific time trends (skip country 0 as reference)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = 2 + 3 * (c - 1)
+            X_base[i, col_base] = 1.0        # j0[c]
+            X_base[i, col_base + 1] = t      # j1[c]
+            X_base[i, col_base + 2] = t * t  # j2[c]
+
+    # Year fixed effects (all years)
+    k_col_start = 2 + n_j_params
+    for i in range(n_obs):
+        yr_idx = year_to_idx[data.year[i]]
+        X_base[i, k_col_start + yr_idx] = 1.0
+
+    T = data.temp
+    y = data.growth_pcGDP
+
+    # Compute T_linear at first year for each country (for pre-history correction)
+    # This provides a smoothed baseline instead of using noisy actual T(first_year)
+    T_linear_first = compute_T_linear_at_first_year(data)
+
+    def compute_sse_for_h4(h4_val):
+        """Compute SSE for given h4 by solving full OLS."""
+        # Compute accumulators and corrections
+        # Use T_linear_first for pre-history correction (smoothed baseline)
+        A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_val)
+        correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_val, T_linear_first)
+
+        # Modified temperature regressors
+        X1 = T - h4_val * A_T_lag - correction_T
+        X2 = T**2 - h4_val * A_T2_lag - correction_T2
+
+        # Build design matrix
+        X = X_base.copy()
+        X[:, 0] = X1
+        X[:, 1] = X2
+
+        # Solve OLS
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # 1D optimization: grid search then Brent's method
+    h4_grid = np.linspace(h4_bounds[0], h4_bounds[1], 21)
+    sse_grid = [compute_sse_for_h4(h4_val) for h4_val in h4_grid]
+    best_grid_idx = np.argmin(sse_grid)
+
+    search_lo = h4_grid[max(0, best_grid_idx - 1)]
+    search_hi = h4_grid[min(len(h4_grid) - 1, best_grid_idx + 1)]
+
+    result = minimize_scalar(
+        compute_sse_for_h4,
+        bounds=(search_lo, search_hi),
+        method='bounded',
+        options={'xatol': 1e-8}
+    )
+    h4_opt = result.x
+
+    # Re-fit at optimal h4 to get coefficients and statistics
+    # Use T_linear_first for pre-history correction (consistent with optimization)
+    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_opt)
+    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_opt, T_linear_first)
+
+    X1 = T - h4_opt * A_T_lag - correction_T
+    X2 = T**2 - h4_opt * A_T2_lag - correction_T2
+
+    X_opt = X_base.copy()
+    X_opt[:, 0] = X1
+    X_opt[:, 1] = X2
+
+    beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for h4 using numerical Hessian
+    h4_se = compute_1d_se_numerical(
+        compute_sse_for_h4,
+        h4_opt,
+        h4_bounds,
+        n_obs,
+        n_params=3
+    )
+
+    # Extract year fixed effects
+    k = {}
+    for yr_idx in range(n_years):
+        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+
+    # Fit statistics
+    n_params = 3  # Climate response: h1, h2, h4
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_total_params)
+
+    # Total R²
+    total_r_sq = compute_total_r_squared(residuals, y)
+
+    # Optimal temperature
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Compute j_trend and k_values for diagnostics
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = 2 + 3 * (c - 1)
+            j0 = beta[col_base]
+            j1 = beta[col_base + 1]
+            j2 = beta[col_base + 2]
+            j_trend[i] = j0 + j1 * t + j2 * t * t
+        k_values[i] = k[yr]
+
+    # Climate response values (modified h_conv)
+    h_conv_values = h1 * X1 + h2 * X2
+
+    # For imbalance, use h(T) directly (like approach0)
+    h_T_full = h1 * T + h2 * T ** 2
+    imbalance = h_T_full + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_conv_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    # For conjoined approach: Delta_u = 0, v = h_conv
+    Delta_u = np.zeros(n_obs)
+    v = h_conv_values
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultApproach4(
+        approach="6: Persistence Decay Conjoined",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        h4=h4_opt,
+        h4_se=h4_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_approach0_conjoined(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
@@ -2568,6 +3046,387 @@ def fit_approach2h0_precomputed_k_loess(
     )
 
 
+def fit_approach7_piecewise_linear_detrend(
+    data: AnalysisData,
+    trends: CountryTrends,
+    year_means: dict,
+    T_opt_bounds: tuple = (0.0, 30.0),
+) -> FitResultApproach8:
+    """Approach 7: Piecewise quadratic response with linear T + quadratic GDP detrending.
+
+    Combines:
+    - Piecewise quadratic climate response (like approach3)
+    - Linear temperature + quadratic GDP detrending with pre-computed k (like approach1)
+
+    Model: h(T) = h2 * (T - T_opt)²  if T ≤ T_opt
+           h(T) = h4 * (T - T_opt)²  if T > T_opt
+
+    Detrending:
+    - y = Δy - k[t] - j_i[t] where j_i[t] = y0 + y1*t + y2*t²
+    - T_trend = T0 + T1*t (linear)
+
+    Uses h(T) - h(T_trend) formulation with detrended piecewise regressors.
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+
+    Returns:
+        FitResultApproach8 with T_opt, h2 (below), h4 (above), and standard errors
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t]
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    # Use raw temperature (NOT detrended) so T_opt represents actual optimal temperature
+    T = data.temp
+
+    # Compute T_trend using linear polynomial fit (T0 + T1*t)
+    T_trend = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+
+    def piecewise_quad(T_vals, T_opt_val):
+        """Compute piecewise quadratic: different curvature above/below T_opt."""
+        low_col = np.where(T_vals <= T_opt_val, (T_vals - T_opt_val) ** 2, 0.0)
+        high_col = np.where(T_vals > T_opt_val, (T_vals - T_opt_val) ** 2, 0.0)
+        return low_col, high_col
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving inner 2-column OLS for h2_low, h2_high."""
+        # Compute columns for T
+        low_T, high_T = piecewise_quad(T, T_opt_val)
+        # Compute columns for T_trend
+        low_trend, high_trend = piecewise_quad(T_trend, T_opt_val)
+
+        # Design matrix: [h2_low, h2_high] columns using h(T) - h(T_trend) formulation
+        X1 = low_T - low_trend   # Column for h2_low
+        X2 = high_T - high_trend  # Column for h2_high
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS: min ||y - X @ [h2_low, h2_high]||^2
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # Initial guess: T_opt = 15°C
+    x0 = 15.0
+
+    # 1D optimization using L-BFGS-B
+    result = minimize(
+        lambda x: compute_sse_for_T_opt(x[0]),
+        x0=[x0],
+        bounds=[T_opt_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    T_opt_opt = result.x[0]
+
+    # Re-fit at optimal T_opt to get h2_low, h2_high, residuals, covariance
+    low_T, high_T = piecewise_quad(T, T_opt_opt)
+    low_trend, high_trend = piecewise_quad(T_trend, T_opt_opt)
+    X1 = low_T - low_trend
+    X2 = high_T - high_trend
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h2_low = beta_ols[0]
+    h2_high = beta_ols[1]
+    h2_low_se = np.sqrt(cov[0, 0])
+    h2_high_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for T_opt using numerical Hessian
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h2_low, h2_high, T_opt
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Compute RMS imbalance: h(T_trend) + j_trend + k
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+
+    # Climate response values using h(T) - h(T_trend) formulation
+    h_values = h2_low * X1 + h2_high * X2
+
+    # For imbalance, we use h(T_trend) term
+    h_of_T_trend = h2_low * low_trend + h2_high * high_trend
+    imbalance = h_of_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # Compute RMS of h(T) - h(T_trend) - climate response to temperature fluctuations
+    rms_h = np.sqrt(np.mean(h_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    Delta_u = h_values  # h(T) - h(T_trend)
+    v = h_of_T_trend    # h(T_trend)
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach8(
+        approach="7: Piecewise Linear Detrend",
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_approach8_persistence_linear_detrend(
+    data: AnalysisData,
+    trends: CountryTrends,
+    year_means: dict,
+    h4_bounds: tuple = (0.0, 1.0),
+) -> FitResultApproach4:
+    """Approach 8: Persistence decay with linear T + quadratic GDP detrending.
+
+    Combines:
+    - Persistence decay climate response (like approach4)
+    - Linear temperature + quadratic GDP detrending with pre-computed k (like approach1)
+
+    Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
+
+    where h(T) = h1*T + h2*T^2.
+
+    Detrending:
+    - y = Δy - k[t] - j_i[t] where j_i[t] = y0 + y1*t + y2*t²
+    - T_trend = T0 + T1*t (linear)
+
+    Uses h(T) - h(T_trend) formulation with persistence accumulators and corrections
+    computed using linear T_trend.
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+
+    Returns:
+        FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t]
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    T = data.temp
+
+    # Compute T_trend using linear polynomial fit (T0 + T1*t)
+    T_trend = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+
+    # Compute T_linear at first year for pre-history correction (same as approach6)
+    T_linear_first = compute_T_linear_at_first_year(data)
+
+    def compute_sse_for_h4(h4_val):
+        """Compute SSE for given h4 by solving inner 2-column OLS for h1, h2."""
+        # Compute accumulators for observed temperature
+        A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_val)
+        # Compute accumulators for trend temperature
+        A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
+            data, h4_val, T_trend
+        )
+        # Compute pre-first-year correction using T_linear at first year
+        correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_val, T_linear_first)
+        # Correction for trend temperature (using T_trend value at first year)
+        correction_T_trend, correction_T2_trend = compute_pre_first_year_correction(
+            data, h4_val, T_trend
+        )
+
+        # Modified regressors with detrending and pre-first-year correction
+        X1 = (T - h4_val * A_T_lag - correction_T) - (T_trend - h4_val * A_T_trend_lag - correction_T_trend)
+        X2 = (T**2 - h4_val * A_T2_lag - correction_T2) - (T_trend**2 - h4_val * A_T2_trend_lag - correction_T2_trend)
+
+        X = np.column_stack([X1, X2])
+
+        # Solve OLS: min ||y - X @ [h1, h2]||^2
+        beta_ols, _, _, _ = linalg.lstsq(X, y)
+        y_pred = X @ beta_ols
+        sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # 1D optimization using Brent's method (more robust for 1D bounded problems)
+    # First do a coarse grid search to find a good starting region
+    h4_grid = np.linspace(h4_bounds[0], h4_bounds[1], 21)
+    sse_grid = [compute_sse_for_h4(h4_val) for h4_val in h4_grid]
+    best_grid_idx = np.argmin(sse_grid)
+
+    # Refine with Brent's method in the region around the best grid point
+    search_lo = h4_grid[max(0, best_grid_idx - 1)]
+    search_hi = h4_grid[min(len(h4_grid) - 1, best_grid_idx + 1)]
+
+    result = minimize_scalar(
+        compute_sse_for_h4,
+        bounds=(search_lo, search_hi),
+        method='bounded',
+        options={'xatol': 1e-8}
+    )
+    h4_opt = result.x
+
+    # Re-fit at optimal h4 to get h1, h2, residuals, covariance
+    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_opt)
+    A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
+        data, h4_opt, T_trend
+    )
+    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_opt, T_linear_first)
+    correction_T_trend, correction_T2_trend = compute_pre_first_year_correction(
+        data, h4_opt, T_trend
+    )
+
+    X1 = (T - h4_opt * A_T_lag - correction_T) - (T_trend - h4_opt * A_T_trend_lag - correction_T_trend)
+    X2 = (T**2 - h4_opt * A_T2_lag - correction_T2) - (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
+    X_opt = np.column_stack([X1, X2])
+
+    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(cov[0, 0])
+    h2_se = np.sqrt(cov[1, 1])
+
+    # Compute SE for h4 using numerical Hessian
+    h4_se = compute_1d_se_numerical(
+        compute_sse_for_h4,
+        h4_opt,
+        h4_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics
+    n_params = 3  # h1, h2, h4
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Compute RMS imbalance
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+
+    # Climate response values using h_conv formulation
+    h_conv_values = h1 * X1 + h2 * X2
+
+    # For imbalance, we use h(T_trend) term (no persistence correction at trend)
+    h_of_T_trend = h1 * T_trend + h2 * T_trend ** 2
+    imbalance = h_of_T_trend + j_trend + k_values
+    rms_imb = np.sqrt(np.mean(imbalance ** 2))
+
+    # Compute RMS of h_conv
+    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
+    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_conv_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution (5-component with covariance allocation)
+    h_T_full = h1 * T + h2 * T ** 2
+    h_T_trend_full = h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = h_conv_values  # Effective climate response increment
+    v = h_T_trend_full       # Baseline at trend temperature
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach4(
+        approach="8: Persistence Linear Detrend",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        h4=h4_opt,
+        h4_se=h4_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        rms_imbalance=rms_imb,
+        rms_h=rms_h,
+        imbalance_ratio=imb_ratio,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
@@ -2582,6 +3441,8 @@ def fit_all_approaches(
         'approach2': Pre-computed k with LOESS trends (if trends_loess provided)
         'approach3': Piecewise quadratic response with LOESS (if trends_loess provided)
         'approach4': Persistence decay model with LOESS (if trends_loess provided)
+        'approach5': Piecewise quadratic with full OLS (like approach3 + approach0)
+        'approach6': Persistence decay with full OLS (like approach4 + approach0)
         'approach0h0': No climate response, joint OLS (country trends + year effects only)
         'approach1h0': No climate response, precomputed k (if trends_with_k and year_means provided)
         'approach2h0': No climate response, LOESS precomputed k (if trends_loess provided)
@@ -2598,44 +3459,59 @@ def fit_all_approaches(
         year_means: Pre-computed k[t] for approaches 1-4 and exploratory methods
         trends_loess: CountryTrendsLoess for approaches 2-4 and exploratory methods (LOESS detrending)
     """
-    results = {
-        'approach0': fit_approach0_conjoined(data),
-        'approach0h0': fit_approach0h0_joint(data),
-    }
+    results = {}
+    timings = {}
+
+    def timed_fit(name, fit_func, *args):
+        """Fit an approach and record timing."""
+        start = time.perf_counter()
+        result = fit_func(*args)
+        elapsed = time.perf_counter() - start
+        results[name] = result
+        timings[name] = elapsed
+        print(f"      {name}: {elapsed:.3f}s")
+
+    # Conjoined approaches
+    timed_fit('approach0', fit_approach0_conjoined, data)
+    timed_fit('approach0h0', fit_approach0h0_joint, data)
+    timed_fit('approach5', fit_approach5_piecewise_conjoined, data)
+    timed_fit('approach6', fit_approach6_persistence_conjoined, data)
 
     # Add approach1 and approach1h0 if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
-        results['approach1'] = fit_approach1_precomputed_k(
-            data, trends_with_k, year_means
-        )
-        results['approach1h0'] = fit_approach1h0_precomputed_k(
-            data, trends_with_k, year_means
-        )
+        timed_fit('approach1', fit_approach1_precomputed_k,
+                  data, trends_with_k, year_means)
+        timed_fit('approach1h0', fit_approach1h0_precomputed_k,
+                  data, trends_with_k, year_means)
 
     # Add approaches 2, 3, 4 and approach2h0 if trends_loess and year_means are provided
     # Also add exploratory methods 4, 6, 7
     if trends_loess is not None and year_means is not None:
-        results['approach2'] = fit_approach2_loess(
-            data, trends_loess, year_means
-        )
-        results['approach2h0'] = fit_approach2h0_precomputed_k_loess(
-            data, trends_loess, year_means
-        )
-        results['approach3'] = fit_approach3_piecewise(
-            data, trends_loess, year_means
-        )
-        results['approach4'] = fit_approach4_persistence_decay(
-            data, trends_loess, year_means
-        )
+        timed_fit('approach2', fit_approach2_loess,
+                  data, trends_loess, year_means)
+        timed_fit('approach2h0', fit_approach2h0_precomputed_k_loess,
+                  data, trends_loess, year_means)
+        timed_fit('approach3', fit_approach3_piecewise,
+                  data, trends_loess, year_means)
+        timed_fit('approach4', fit_approach4_persistence_decay,
+                  data, trends_loess, year_means)
         # Exploratory methods (kept as methods)
-        results['method4'] = fit_method4_quadratic_departure_loess(
-            data, trends_loess, year_means
-        )
-        results['method6'] = fit_method6_piecewise_departure_loess(
-            data, trends_loess, year_means
-        )
-        results['method7'] = fit_method7_lagged_deviation_loess(
-            data, trends_loess, year_means
-        )
+        timed_fit('method4', fit_method4_quadratic_departure_loess,
+                  data, trends_loess, year_means)
+        timed_fit('method6', fit_method6_piecewise_departure_loess,
+                  data, trends_loess, year_means)
+        timed_fit('method7', fit_method7_lagged_deviation_loess,
+                  data, trends_loess, year_means)
+
+    # Add approach7 and approach8 if trends_with_k and year_means are provided
+    # These use linear T / quadratic GDP detrending with alternative climate response functions
+    if trends_with_k is not None and year_means is not None:
+        timed_fit('approach7', fit_approach7_piecewise_linear_detrend,
+                  data, trends_with_k, year_means)
+        timed_fit('approach8', fit_approach8_persistence_linear_detrend,
+                  data, trends_with_k, year_means)
+
+    total_time = sum(timings.values())
+    print(f"      Total fitting time: {total_time:.3f}s")
 
     return results

@@ -10,6 +10,10 @@ Approaches (publication-ready):
     approach2: Pre-computed k with LOESS trends
     approach3: Piecewise quadratic response with LOESS
     approach4: Persistence decay model with LOESS
+    approach5: Piecewise quadratic with full OLS (like approach3 + approach0)
+    approach6: Persistence decay with full OLS (like approach4 + approach0)
+    approach7: Piecewise quadratic with linear T + quadratic GDP detrending (like approach3 + approach1)
+    approach8: Persistence decay with linear T + quadratic GDP detrending (like approach4 + approach1)
     approach0h0: Null model (h1=h2=0) for approach0
     approach1h0: Null model (h1=h2=0) for approach1
     approach2h0: Null model (h1=h2=0) for approach2
@@ -25,6 +29,7 @@ Usage:
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 # Add src to path
@@ -115,6 +120,7 @@ def main():
 
     # Load data
     input_file = None  # Track which input file was used
+    t_start = time.perf_counter()
     if args.use_csv and args.use_csv.strip():
         # Load from pre-processed CSV file
         csv_path = Path(args.use_csv).expanduser()
@@ -136,33 +142,40 @@ def main():
             args.maddison, args.cru,
             year_min=year_min, year_max=year_max
         )
+    t_load = time.perf_counter() - t_start
 
     print(f"      Observations: {data.n_obs}")
     print(f"      Countries: {data.n_countries}")
     print(f"      Years: {data.n_years}")
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
+    print(f"      Time: {t_load:.3f}s")
 
     # Compute country-level trends
     print("\n[2/5] Computing country-level trends...")
+    t_start = time.perf_counter()
     trends = compute_country_trends(data)
     year_means = compute_year_means(data)
     trends_with_k = compute_country_trends_with_k(data, year_means)
-    print("      Done.")
+    t_trends = time.perf_counter() - t_start
+    print(f"      Time: {t_trends:.3f}s")
 
     # Compute LOESS trends
     print(f"\n[3/5] Computing LOESS trends (window={loess_window:.1f} years)...")
+    t_start = time.perf_counter()
     trends_loess = compute_country_trends_loess(data, year_means, loess_window)
-    print("      Done.")
+    t_loess = time.perf_counter() - t_start
+    print(f"      Time: {t_loess:.3f}s")
 
     # Fit all methods
     print("\n[4/5] Fitting all methods...")
+    t_start = time.perf_counter()
     results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
         year_means=year_means,
         trends_loess=trends_loess
     )
-    print("      Done.")
+    t_fit = time.perf_counter() - t_start
 
     # Print summary
     print("\n" + "=" * 70)
@@ -173,14 +186,14 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # approach3: h2 (below T_opt), h4 (above T_opt), T_opt
-        if name == 'approach3' and hasattr(r, 'h4'):
+        # approach3/approach5/approach7: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise)
+        if name in ['approach3', 'approach5', 'approach7'] and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # approach4: h1, h2, h4 (persistence decay), T_opt
-        elif name == 'approach4' and hasattr(r, 'h4'):
+        # approach4/approach6/approach8: h1, h2, h4 (persistence decay), T_opt
+        elif name in ['approach4', 'approach6', 'approach8'] and hasattr(r, 'h4'):
             print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
@@ -235,6 +248,7 @@ def main():
 
     # Save outputs
     print("\n[5/5] Saving outputs...")
+    t_start = time.perf_counter()
     if args.output_dir:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -242,6 +256,7 @@ def main():
         output_dir = create_output_dir(prefix="analysis_", suffix=mw_suffix)
 
     save_all_outputs(data, trends, results, output_dir, input_file=input_file)
+    t_output = time.perf_counter() - t_start
 
     # Save run metadata for post-processing scripts
     import json
@@ -260,6 +275,19 @@ def main():
     print(f"      Saved: {metadata_path}")
 
     print(f"\nOutput saved to: {output_dir}")
+    print(f"      Time: {t_output:.3f}s")
+
+    # Print timing summary
+    total_time = t_load + t_trends + t_loess + t_fit + t_output
+    print("\n" + "-" * 70)
+    print("Timing Summary")
+    print("-" * 70)
+    print(f"  Data loading:     {t_load:7.3f}s")
+    print(f"  Country trends:   {t_trends:7.3f}s")
+    print(f"  LOESS trends:     {t_loess:7.3f}s")
+    print(f"  Model fitting:    {t_fit:7.3f}s")
+    print(f"  Output/plots:     {t_output:7.3f}s")
+    print(f"  Total:            {total_time:7.3f}s")
     print("=" * 70)
 
 

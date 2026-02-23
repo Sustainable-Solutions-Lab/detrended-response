@@ -48,6 +48,7 @@ from .fitting import (
     compute_persistence_accumulators,
     compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
+    compute_T_linear_at_first_year,
 )
 
 
@@ -348,6 +349,10 @@ def run_bootstrap(
         # This ensures the pre-history is based on LOESS-smoothed temperature, not actual
         T_loess_at_base_year = _get_T_loess_at_base_year(data, original_trends_loess, base_year=1961)
 
+        # Precompute T_linear at first year for approach6's pre-history assumption
+        # Uses linear OLS fit to temperature for each country
+        T_linear_at_first_year = compute_T_linear_at_first_year(data)
+
     n_successful = 0
     n_attempts = 0
     max_attempts = n_bootstrap * 10  # Safety limit to prevent infinite loops
@@ -465,6 +470,46 @@ def run_bootstrap(
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
                     correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_loess_at_base_year)
+                    X1 = data.temp - h4 * A_T_lag - correction_T
+                    X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
+                    h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
+
+                elif name == 'approach5':
+                    # Piecewise conjoined: same formula as approach3
+                    T_opt = r.T_opt
+                    below = data.temp <= T_opt
+                    h_T_samples[name][b] = np.where(
+                        below,
+                        r.h2 * (data.temp - T_opt)**2,
+                        r.h4 * (data.temp - T_opt)**2
+                    )
+
+                elif name == 'approach6':
+                    # Persistence decay conjoined: same formula as approach4
+                    # Use T_linear_at_first_year for pre-history correction (linear OLS fit baseline)
+                    h4 = r.h4
+                    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_linear_at_first_year)
+                    X1 = data.temp - h4 * A_T_lag - correction_T
+                    X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
+                    h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
+
+                elif name == 'approach7':
+                    # Piecewise with linear detrend: same formula as approach3/approach5
+                    T_opt = r.T_opt
+                    below = data.temp <= T_opt
+                    h_T_samples[name][b] = np.where(
+                        below,
+                        r.h2 * (data.temp - T_opt)**2,
+                        r.h4 * (data.temp - T_opt)**2
+                    )
+
+                elif name == 'approach8':
+                    # Persistence with linear detrend: same formula as approach4/approach6
+                    # Use T_linear_at_first_year for pre-history correction
+                    h4 = r.h4
+                    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_linear_at_first_year)
                     X1 = data.temp - h4 * A_T_lag - correction_T
                     X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2

@@ -48,6 +48,10 @@ APPROACH_COLORS = {
     'approach2': 'orange',
     'approach3': 'magenta',
     'approach4': 'cyan',
+    'approach5': 'darkgreen',
+    'approach6': 'darkblue',
+    'approach7': 'olive',
+    'approach8': 'teal',
     'approach0h0': 'gray',
     'approach1h0': 'gray',
     'approach2h0': 'gray',
@@ -69,6 +73,10 @@ APPROACH_LINESTYLES = {
     'approach2': (0, (5, 1)),   # densely dashed
     'approach3': (0, (5, 1)),   # densely dashed
     'approach4': (0, (5, 1)),   # densely dashed
+    'approach5': '-',           # solid (conjoined)
+    'approach6': '-',           # solid (conjoined)
+    'approach7': '-.',          # dash-dot (like approach1)
+    'approach8': '-.',          # dash-dot (like approach1)
     'approach0h0': '--',
     'approach1h0': ':',
     'approach2h0': ':',
@@ -116,19 +124,19 @@ def get_valid_bootstrap_samples(
 
 
 def is_piecewise_result(result) -> bool:
-    """Check if result is from piecewise quadratic model (approach3/method3).
+    """Check if result is from piecewise quadratic model (approach3/approach5/approach7).
 
     Piecewise results have T_opt, h2, and h4 as primary parameters and h1=0.
-    For approach3, h2 is curvature below T_opt, h4 is curvature above T_opt.
+    For approach3/approach5/approach7, h2 is curvature below T_opt, h4 is curvature above T_opt.
 
     Checks approach name first (most reliable), then falls back to h1==0 check.
     """
     # Check approach name first (works for both FitResult and BootstrapResult)
     approach = getattr(result, 'approach', '')
-    if 'piecewise' in approach.lower() or approach in ('approach3', 'approach3'):
+    if 'piecewise' in approach.lower() or approach in ('approach3', 'approach5', 'approach7'):
         return True
-    # Also check for approach3 in approach name string (e.g., "3: Piecewise LOESS")
-    if approach.startswith('3:'):
+    # Also check for approach3/approach5/approach7 in approach name string (e.g., "3: Piecewise LOESS", "5: Piecewise Conjoined", "7: Piecewise Linear Detrend")
+    if approach.startswith('3:') or approach.startswith('5:') or approach.startswith('7:'):
         return True
     # Fallback to h1==0 check for backward compatibility
     return hasattr(result, 'T_opt') and hasattr(result, 'h4') and getattr(result, 'h1', None) == 0.0
@@ -2208,7 +2216,7 @@ def save_bootstrap_h_baselines(
             country_T_loess_base[iso3] = T_loess[earliest_idx]
 
     # Approaches to process (matching h_T_samples keys)
-    approaches_to_save = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4']
+    approaches_to_save = ['approach0', 'approach1', 'approach2', 'approach3', 'approach4', 'approach5', 'approach6', 'approach7', 'approach8']
     available_approaches = [a for a in approaches_to_save if a in bootstrap_results]
 
     rows = []
@@ -2232,14 +2240,14 @@ def save_bootstrap_h_baselines(
         # Process each country
         for iso3, T_base in country_T_loess_base.items():
             # Point estimate (iteration = -1)
-            if approach_key == 'approach3':
+            if approach_key in ['approach3', 'approach5', 'approach7']:
                 # Piecewise: h2*(T-T_opt)² below, h4*(T-T_opt)² above
                 if T_base <= T_opt_point:
                     h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
                 else:
                     h_T_baseline = h4_point * (T_base - T_opt_point) ** 2
-            elif approach_key == 'approach4' and h4_point > 0:
-                # Approach4 with persistence: baseline = 0
+            elif approach_key in ['approach4', 'approach6', 'approach8'] and h4_point > 0:
+                # Approach4/6/8 with persistence: baseline = 0
                 # (constant temperature gives X1=X2=0 due to persistence decay)
                 h_T_baseline = 0.0
             else:
@@ -2259,17 +2267,17 @@ def save_bootstrap_h_baselines(
                 h1_b = h1_samples[b]
                 h2_b = h2_samples[b]
 
-                if approach_key == 'approach3':
+                if approach_key in ['approach3', 'approach5', 'approach7']:
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     T_opt_b = T_opt_samples[b]
                     if T_base <= T_opt_b:
                         h_T_baseline_b = h2_b * (T_base - T_opt_b) ** 2
                     else:
                         h_T_baseline_b = h4_b * (T_base - T_opt_b) ** 2
-                elif approach_key == 'approach4':
+                elif approach_key in ['approach4', 'approach6', 'approach8']:
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     if h4_b > 0:
-                        # Approach4 with persistence: baseline = 0
+                        # Approach4/6/8 with persistence: baseline = 0
                         h_T_baseline_b = 0.0
                     else:
                         h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
@@ -3469,20 +3477,20 @@ def compute_h_response_uncertainty_bands(
     Returns percentile bands across all bootstrap samples.
 
     For quadratic models: h(T) = h1*T + h2*T²
-    For piecewise (method3): h(T) - h(T_opt) = h2*(T-T_opt)² or h4*(T-T_opt)²
+    For piecewise (approach3/approach5): h(T) - h(T_opt) = h2*(T-T_opt)² or h4*(T-T_opt)²
     For method2b/8a variants: uses appropriate coefficients (h3,h4 for trend)
 
     Args:
         result: BootstrapResult containing h1_samples and h2_samples
         T_range: Array of temperature values
         percentiles: Percentiles to compute (default: 5th, 50th, 95th)
-        approach_key: Approach identifier (e.g., 'approach3' for piecewise,
+        approach_key: Approach identifier (e.g., 'approach3'/'approach5' for piecewise,
                       'method2b', 'method3a_high', 'method3a_low')
 
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('approach3', 'approach3'))
+    is_piecewise = (approach_key in ('approach3', 'approach5'))
 
     # Handle approach 6b (trend only)
     if approach_key == 'method2b':
@@ -3948,8 +3956,8 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
         h_point = h2 * (T - T_opt) ** 2
         return h_point, T_opt
 
-    # Handle method3/approach3 (asymmetric piecewise): h2 for T <= T_opt, h4 for T > T_opt
-    if approach_key in ('approach3', 'approach3') and result.h4_point is not None:
+    # Handle method3/approach3/approach5 (asymmetric piecewise): h2 for T <= T_opt, h4 for T > T_opt
+    if approach_key in ('approach3', 'approach5') and result.h4_point is not None:
         T_opt = result.T_opt_point
         h2_low = result.h2_point
         h2_high = result.h4_point
@@ -4228,7 +4236,7 @@ def compute_derivative_uncertainty_bands(
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('approach3', 'approach3'))
+    is_piecewise = (approach_key in ('approach3', 'approach5'))
 
     # Handle approach 6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'method2b':
@@ -5276,10 +5284,44 @@ def save_all_bootstrap_plots(
     )
     print("      Saved bootstrap_temperature_response_loess.pdf")
 
+    # Temperature response PDF 4: Conjoined approaches (approach5, approach6)
+    # These combine piecewise/persistence climate response with full OLS for j_i(t) and k(t)
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach5', 'approach6'],
+        filename='bootstrap_temperature_response_conjoined.pdf',
+        T_range=T_range,
+        data=data,
+        input_file=input_file
+    )
+    print("      Saved bootstrap_temperature_response_conjoined.pdf")
+
+    # Temperature response PDF 5: Comparison of piecewise approaches (approach3 vs approach5)
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach3', 'approach5'],
+        filename='bootstrap_temperature_response_piecewise_comparison.pdf',
+        T_range=T_range,
+        data=data,
+        input_file=input_file
+    )
+    print("      Saved bootstrap_temperature_response_piecewise_comparison.pdf")
+
+    # Temperature response PDF 6: Comparison of persistence approaches (approach4 vs approach6)
+    plot_bootstrap_temperature_response(
+        results, output_dir,
+        approaches=['approach4', 'approach6'],
+        filename='bootstrap_temperature_response_persistence_comparison.pdf',
+        T_range=T_range,
+        data=data,
+        input_file=input_file
+    )
+    print("      Saved bootstrap_temperature_response_persistence_comparison.pdf")
+
     # Temperature derivative plot - all methods in one PDF
     plot_bootstrap_temperature_derivative(
         results, output_dir,
-        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'method4', 'approach4'],
+        approaches=['approach0', 'approach1', 'approach2', 'approach3', 'method4', 'approach4', 'approach5', 'approach6'],
         filename='bootstrap_temperature_derivative.pdf',
         T_range=T_range,
         input_file=input_file
