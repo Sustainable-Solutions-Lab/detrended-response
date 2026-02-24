@@ -4,6 +4,7 @@ This module provides functions to generate publication-quality tables and figure
 from pre-computed analysis and bootstrap results.
 """
 
+import math
 from pathlib import Path
 from typing import Dict
 
@@ -13,18 +14,13 @@ import pandas as pd
 from src.bootstrap import BootstrapResult
 from src.data_loader import AnalysisData
 from src.output import (
-    plot_bootstrap_temperature_response,
-    plot_bootstrap_temperature_derivative,
-    plot_T_optimal_histograms,
-    plot_h2_histograms,
-    plot_year_effects_bootstrap,
-    plot_combined_temp_response_and_year_effects,
-    plot_temperature_response_2panel,
-    plot_temperature_response_4panel,
-    plot_temperature_derivative_4panel,
     plot_year_effects_2panel,
-    plot_temperature_response_4panel_variants,
-    plot_temperature_derivative_4panel_variants,
+    # 3x3 and 4x3 grid plotting functions
+    plot_temperature_response_3x3,
+    plot_temperature_derivative_3x3,
+    plot_T_optimal_histogram_3x3,
+    plot_h2_histogram_4x3,
+    plot_h4_histogram_1x3,
 )
 
 
@@ -601,10 +597,10 @@ def generate_bootstrap_comparison_table(
     # Parameters to include
     # Standard parameters for all approaches
     standard_params = ['h1', 'h2', 'T_opt', 'total_r_squared']
-    # Additional parameters for approach 6b/6c/6e (departure/trend coefficients: h3, h4)
-    trend_params = ['h3', 'h4', 'T_dep_opt', 'f1', 'f2']
-    # Note: For piecewise Approach2L, h2 = curvature below T_opt, h4 = curvature above T_opt
-    # For approach 8a, h2 = actual T curvature, h4 = trend T curvature
+    # Additional parameters: h4 for piecewise (Approach2*) and persistence (Approach3*)
+    # For piecewise: h2 = curvature below T_opt, h4 = curvature above T_opt
+    # For persistence: h4 = decay rate
+    trend_params = ['h4']
 
     # Percentiles to include
     percentiles = ['p5', 'p25', 'p50', 'p75', 'p95']
@@ -680,6 +676,338 @@ def generate_bootstrap_comparison_table(
     print(f"      [Tables] Saved bootstrap_comparison_table.csv")
 
 
+def format_small_number(value: float) -> str:
+    """Format number with adaptive precision for small values.
+
+    Default: 3 decimal places (e.g., 0.123)
+    If |value| < 0.0005 (would round to 0.000):
+      - If |value| > 1e-6: Show enough digits to display first non-zero digit
+      - If |value| <= 1e-6: Show "0.000"
+    """
+    if abs(value) < 0.0005:  # Would round to 0.000
+        if abs(value) > 1e-6:
+            # Find first significant digit position
+            if value == 0:
+                return "0.000"
+            digits = -int(math.floor(math.log10(abs(value))))
+            return f"{value:.{digits}f}"
+        else:
+            return "0.000"
+    return f"{value:.3f}"
+
+
+def generate_variance_decomposition_by_response(
+    bootstrap_results: dict,
+    output_dir: Path,
+) -> None:
+    """Generate variance decomposition tables organized by response function type.
+
+    Creates:
+    - variance_decomposition_by_response.xlsx (4 sheets)
+    - variance_decomposition_null.tex
+    - variance_decomposition_quadratic.tex
+    - variance_decomposition_piecewise.tex
+    - variance_decomposition_persistence.tex
+
+    Parameters
+    ----------
+    bootstrap_results : dict
+        Dictionary from load_bootstrap_results() containing:
+        - 'bootstrap_var_attrib': DataFrame with variance attribution samples
+        - 'bootstrap_summary': DataFrame with point estimates
+        - 'bootstrap_coefficients': DataFrame with bootstrap samples
+    output_dir : Path
+        Directory to save generated tables
+    """
+    var_attrib_df = bootstrap_results.get('bootstrap_var_attrib')
+    summary_df = bootstrap_results.get('bootstrap_summary')
+    coefficients_df = bootstrap_results.get('bootstrap_coefficients')
+
+    if var_attrib_df is None:
+        print("      [Tables] WARNING: bootstrap_var_attrib not loaded, skipping variance decomposition by response tables")
+        return
+    if summary_df is None:
+        print("      [Tables] WARNING: bootstrap_summary not loaded, skipping variance decomposition by response tables")
+        return
+
+    # Define response type groups
+    response_types = {
+        'Null': {
+            'approaches': ['Approach0J', 'Approach0P', 'Approach0L'],
+            'description': '—',  # Em-dash for null model (no response)
+            'latex_description': '---',  # LaTeX em-dash
+        },
+        'Quadratic': {
+            'approaches': ['Approach1J', 'Approach1P', 'Approach1L'],
+            'description': 'Quadratic',
+            'latex_description': r'$h_1 T + h_2 T^2$',
+        },
+        'Piecewise': {
+            'approaches': ['Approach2J', 'Approach2P', 'Approach2L'],
+            'description': 'Piecewise quadratic',
+            'latex_description': r'Piecewise quadratic',
+        },
+        'Persistence': {
+            'approaches': ['Approach3J', 'Approach3P', 'Approach3L'],
+            'description': 'Quadratic with decay',
+            'latex_description': r'Quadratic with decay',
+        },
+    }
+
+    # Trend method column headers
+    trend_methods = ['Joint', 'Polynomial', 'LOESS']
+    approach_suffix_to_method = {'J': 'Joint', 'P': 'Polynomial', 'L': 'LOESS'}
+
+    # Metrics to extract (variance components)
+    variance_metrics = [
+        ('Sigma_h_h', r'$\mathrm{Var}\!\big(h(T)\big)/\mathrm{Var}(\Delta y)$', 'Var(h(T))/Var(Δy)'),
+        ('Sigma_j_j', r'$\mathrm{Var}(j)/\mathrm{Var}(\Delta y)$', 'Var(j)/Var(Δy)'),
+        ('Sigma_k_k', r'$\mathrm{Var}(k)/\mathrm{Var}(\Delta y)$', 'Var(k)/Var(Δy)'),
+        ('Sigma_epsilon_epsilon', r'$\mathrm{Var}(\varepsilon)/\mathrm{Var}(\Delta y)$', 'Var(ε)/Var(Δy)'),
+    ]
+    covariance_metrics = [
+        ('Sigma_h_j', r'$2\,\mathrm{Cov}\!\big(h(T),j\big)/\mathrm{Var}(\Delta y)$', '2Cov(h(T),j)/Var(Δy)'),
+        ('Sigma_h_k', r'$2\,\mathrm{Cov}\!\big(h(T),k\big)/\mathrm{Var}(\Delta y)$', '2Cov(h(T),k)/Var(Δy)'),
+        ('Sigma_j_k', r'$2\,\mathrm{Cov}(j,k)/\mathrm{Var}(\Delta y)$', '2Cov(j,k)/Var(Δy)'),
+        ('Sigma_h_epsilon', r'$2\,\mathrm{Cov}\!\big(h(T),\varepsilon\big)/\mathrm{Var}(\Delta y)$', '2Cov(h(T),ε)/Var(Δy)'),
+        ('Sigma_j_epsilon', r'$2\,\mathrm{Cov}(j,\varepsilon)/\mathrm{Var}(\Delta y)$', '2Cov(j,ε)/Var(Δy)'),
+        ('Sigma_k_epsilon', r'$2\,\mathrm{Cov}(k,\varepsilon)/\mathrm{Var}(\Delta y)$', '2Cov(k,ε)/Var(Δy)'),
+    ]
+
+    # Metrics involving h(T) that should be em-dash for null models
+    h_metrics = {'Sigma_h_h', 'Sigma_h_j', 'Sigma_h_k', 'Sigma_h_epsilon'}
+
+    def get_metric_samples(approach_data: pd.DataFrame, key: str) -> np.ndarray:
+        """Get metric samples, computing combined h(T) terms from separated terms if needed."""
+        if key in approach_data.columns:
+            return approach_data[key].values
+
+        # Compute combined h(T) terms from separated Delta_u and v terms
+        if key == 'Sigma_h_h':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_Delta_u', 'Sigma_v_v', 'Sigma_Delta_u_v']):
+                return (approach_data['Sigma_Delta_u_Delta_u'].values +
+                        approach_data['Sigma_v_v'].values +
+                        2 * approach_data['Sigma_Delta_u_v'].values)
+        elif key == 'Sigma_h_j':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_j', 'Sigma_v_j']):
+                return approach_data['Sigma_Delta_u_j'].values + approach_data['Sigma_v_j'].values
+        elif key == 'Sigma_h_k':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_k', 'Sigma_v_k']):
+                return approach_data['Sigma_Delta_u_k'].values + approach_data['Sigma_v_k'].values
+        elif key == 'Sigma_h_epsilon':
+            if all(k in approach_data.columns for k in ['Sigma_Delta_u_epsilon', 'Sigma_v_epsilon']):
+                return approach_data['Sigma_Delta_u_epsilon'].values + approach_data['Sigma_v_epsilon'].values
+
+        return None
+
+    def get_point_estimate(approach: str, key: str, is_covariance: bool = False) -> float:
+        """Get point estimate for a metric from the variance attribution data."""
+        mask = var_attrib_df['approach'] == approach
+        approach_data = var_attrib_df[mask]
+
+        if 'iteration' not in approach_data.columns:
+            return np.nan
+
+        point_mask = approach_data['iteration'] == -1
+        if not point_mask.any():
+            return np.nan
+
+        point_data = approach_data[point_mask]
+        if 'var_dy' not in point_data.columns:
+            return np.nan
+
+        samples = get_metric_samples(point_data, key)
+        if samples is None or len(samples) == 0:
+            return np.nan
+
+        var_dy = point_data['var_dy'].values[0]
+        multiplier = 2 if is_covariance else 1
+        with np.errstate(divide='ignore', invalid='ignore'):
+            value = (samples[0] * multiplier) / var_dy
+        return value if np.isfinite(value) else np.nan
+
+    def get_total_r_squared(approach: str) -> float:
+        """Get total R² point estimate."""
+        if coefficients_df is None:
+            return np.nan
+        mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
+        if not mask.any():
+            return np.nan
+        return coefficients_df[mask].iloc[0]['total_r_squared']
+
+    def compute_sum(approach: str) -> float:
+        """Compute sum of all variance components."""
+        total = 0.0
+        for key, _, _ in variance_metrics:
+            val = get_point_estimate(approach, key, is_covariance=False)
+            if np.isfinite(val):
+                total += val
+        for key, _, _ in covariance_metrics:
+            val = get_point_estimate(approach, key, is_covariance=True)
+            if np.isfinite(val):
+                total += val
+        return total
+
+    # Em-dash for missing values
+    EM_DASH = '—'
+
+    # Build tables for each response type
+    excel_sheets = {}
+
+    for response_type, config in response_types.items():
+        approaches = config['approaches']
+        is_null = response_type == 'Null'
+
+        # Build DataFrame for this response type
+        rows = []
+
+        # Row 1: Response function description
+        rows.append({
+            'Metric': 'Response function',
+            'Joint': config['description'],
+            'Polynomial': config['description'],
+            'LOESS': config['description'],
+        })
+
+        # Row 2: Trend method
+        rows.append({
+            'Metric': 'Trend method',
+            'Joint': 'Joint',
+            'Polynomial': 'Polynomial',
+            'LOESS': 'LOESS',
+        })
+
+        # Row 3: Response fn ΔR²
+        delta_r2_row = {'Metric': 'Response fn ΔR²'}
+        for approach in approaches:
+            suffix = approach[-1]  # J, P, or L
+            method = approach_suffix_to_method[suffix]
+            if is_null:
+                delta_r2_row[method] = EM_DASH
+            else:
+                # Get null model R² for this trend method
+                null_approach = f'Approach0{suffix}'
+                r2_null = get_total_r_squared(null_approach)
+                r2_this = get_total_r_squared(approach)
+                delta_r2 = r2_this - r2_null if np.isfinite(r2_this) and np.isfinite(r2_null) else np.nan
+                delta_r2_row[method] = format_small_number(delta_r2) if np.isfinite(delta_r2) else EM_DASH
+        rows.append(delta_r2_row)
+
+        # Row 4: Total R²
+        r2_row = {'Metric': 'Total R²'}
+        for approach in approaches:
+            suffix = approach[-1]
+            method = approach_suffix_to_method[suffix]
+            r2 = get_total_r_squared(approach)
+            r2_row[method] = format_small_number(r2) if np.isfinite(r2) else EM_DASH
+        rows.append(r2_row)
+
+        # Variance metrics
+        for key, latex_label, excel_label in variance_metrics:
+            row = {'Metric': excel_label}
+            for approach in approaches:
+                suffix = approach[-1]
+                method = approach_suffix_to_method[suffix]
+                if is_null and key in h_metrics:
+                    row[method] = EM_DASH
+                else:
+                    val = get_point_estimate(approach, key, is_covariance=False)
+                    row[method] = format_small_number(val) if np.isfinite(val) else EM_DASH
+            rows.append(row)
+
+        # Covariance metrics
+        for key, latex_label, excel_label in covariance_metrics:
+            row = {'Metric': excel_label}
+            for approach in approaches:
+                suffix = approach[-1]
+                method = approach_suffix_to_method[suffix]
+                if is_null and key in h_metrics:
+                    row[method] = EM_DASH
+                else:
+                    val = get_point_estimate(approach, key, is_covariance=True)
+                    row[method] = format_small_number(val) if np.isfinite(val) else EM_DASH
+            rows.append(row)
+
+        # Sum row
+        sum_row = {'Metric': 'Sum'}
+        for approach in approaches:
+            suffix = approach[-1]
+            method = approach_suffix_to_method[suffix]
+            total = compute_sum(approach)
+            sum_row[method] = format_small_number(total) if np.isfinite(total) else EM_DASH
+        rows.append(sum_row)
+
+        # Create DataFrame
+        df = pd.DataFrame(rows)
+        excel_sheets[response_type] = df
+
+    # Save Excel file with multiple sheets
+    xlsx_path = output_dir / 'variance_decomposition_by_response.xlsx'
+    with pd.ExcelWriter(xlsx_path, engine='openpyxl') as writer:
+        for sheet_name, df in excel_sheets.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    print(f"      [Tables] Saved variance_decomposition_by_response.xlsx (4 sheets)")
+
+    # Generate LaTeX files
+    for response_type, config in response_types.items():
+        df = excel_sheets[response_type]
+        is_null = response_type == 'Null'
+
+        # Build LaTeX content
+        latex_lines = [
+            r'\begin{table}[htbp]',
+            r'\centering',
+            f'\\caption{{Variance decomposition: {response_type.lower()} climate response}}',
+            f'\\label{{tab:variance_decomp_{response_type.lower()}}}',
+            r'',
+            r'\small',
+            r'\begin{tabular}{@{}lccc@{}}',
+            r'\toprule',
+            r'Metric & Joint & Polynomial & LOESS \\',
+            r'\midrule',
+        ]
+
+        # Trend method row
+        latex_lines.append(r'Trend method & Joint & Polynomial & LOESS \\')
+        latex_lines.append(r'\midrule')
+
+        # Response fn ΔR² and Total R²
+        delta_r2_row = df[df['Metric'] == 'Response fn ΔR²'].iloc[0]
+        latex_lines.append(f"Response fn $\\Delta R^2$ & {delta_r2_row['Joint']} & {delta_r2_row['Polynomial']} & {delta_r2_row['LOESS']} \\\\")
+
+        r2_row = df[df['Metric'] == 'Total R²'].iloc[0]
+        latex_lines.append(f"Total $R^2$ & {r2_row['Joint']} & {r2_row['Polynomial']} & {r2_row['LOESS']} \\\\")
+        latex_lines.append(r'\midrule')
+
+        # Variance metrics
+        for key, latex_label, excel_label in variance_metrics:
+            row = df[df['Metric'] == excel_label].iloc[0]
+            latex_lines.append(f"{latex_label} & {row['Joint']} & {row['Polynomial']} & {row['LOESS']} \\\\")
+        latex_lines.append(r'\midrule')
+
+        # Covariance metrics
+        for key, latex_label, excel_label in covariance_metrics:
+            row = df[df['Metric'] == excel_label].iloc[0]
+            latex_lines.append(f"{latex_label} & {row['Joint']} & {row['Polynomial']} & {row['LOESS']} \\\\")
+        latex_lines.append(r'\midrule')
+
+        # Sum row
+        sum_row = df[df['Metric'] == 'Sum'].iloc[0]
+        latex_lines.append(f"Sum & {sum_row['Joint']} & {sum_row['Polynomial']} & {sum_row['LOESS']} \\\\")
+
+        latex_lines.extend([
+            r'\bottomrule',
+            r'\end{tabular}',
+            r'\end{table}',
+        ])
+
+        # Write LaTeX file
+        tex_path = output_dir / f'variance_decomposition_{response_type.lower()}.tex'
+        with open(tex_path, 'w') as f:
+            f.write('\n'.join(latex_lines))
+        print(f"      [Tables] Saved variance_decomposition_{response_type.lower()}.tex")
+
+
 def generate_tables(
     analysis_results: dict,
     bootstrap_results: dict,
@@ -703,8 +1031,10 @@ def generate_tables(
     """
     # Approaches to include in tables
     table_approaches = [
-        'Approach1J', 'Approach0J', 'Approach1P', 'Approach0P',
-        'Approach1L', 'Approach2L', 'Approach3L'
+        'Approach0J', 'Approach0P', 'Approach0L',
+        'Approach1J', 'Approach1P', 'Approach1L',
+        'Approach2J', 'Approach2P', 'Approach2L',
+        'Approach3J', 'Approach3P', 'Approach3L',
     ]
 
     # Generate variance decomposition table
@@ -712,6 +1042,9 @@ def generate_tables(
 
     # Generate bootstrap comparison table
     generate_bootstrap_comparison_table(bootstrap_results, output_dir, approaches=table_approaches)
+
+    # Generate variance decomposition tables by response function type
+    generate_variance_decomposition_by_response(bootstrap_results, output_dir)
 
 
 def generate_figures(
@@ -754,44 +1087,8 @@ def generate_figures(
     )
     print(f"      [Figures] Reconstructed {len(results)} approaches")
 
-    # Define approach patterns for publication figures
-    # Only includes approaches, not exploratory methods
-    # 4-panel layout: [[row0: Approach1J, Approach1P], [row1: Approach1L, Approach2L]]
-    approaches_4panel = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L']
-    # 2-panel layout: [col0: Approach1L, col1: Approach2L]
-    approaches_2panel = ['Approach1L', 'Approach2L']
-    # 5-panel layout: includes Approach3L (persistence decay)
-    approaches_5panel = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
-
-    # Figure 1a: Temperature response (4 panels)
-    # Top row: Approach1J, Approach1P; Bottom row: Approach1L, Approach2L
+    # Year effects figure (2 panels)
     if data is not None:
-        print("      [Figures] Generating temperature response figure (4 panels)...")
-        plot_temperature_response_4panel(
-            results,
-            data,
-            output_dir,
-            approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
-            filename='fig_temperature_response_main.pdf',
-            T_range=(0, 30),
-            input_file=None,
-        )
-        print("      [Figures] Saved fig_temperature_response_main.pdf")
-
-        # Figure 1b: Temperature derivative (4 panels)
-        # Top row: Approach1J, Approach1P; Bottom row: Approach1L, Approach2L
-        print("      [Figures] Generating temperature derivative figure (4 panels)...")
-        plot_temperature_derivative_4panel(
-            results,
-            output_dir,
-            approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
-            filename='fig_temperature_derivative_main.pdf',
-            T_range=(0, 30),
-            input_file=None,
-        )
-        print("      [Figures] Saved fig_temperature_derivative_main.pdf")
-
-        # Figure 1c: Year effects (2 panels)
         print("      [Figures] Generating year effects figure...")
         plot_year_effects_2panel(
             results,
@@ -802,142 +1099,65 @@ def generate_figures(
             input_file=None,
         )
         print("      [Figures] Saved fig_year_effects_main.pdf")
-    else:
-        print("      [Figures] Skipping main figures (data not loaded)")
 
-    # Figure 2: Temperature derivative (dh/dT) - 4 panels (variants: 6, 8, 6e components)
-    print("      [Figures] Generating temperature derivative figure (4 panels - variants)...")
-    plot_temperature_derivative_4panel_variants(
+    # =========================================================================
+    # 3x3 and 4x3 Grid Figures (all 9 main approaches)
+    # =========================================================================
+
+    # Temperature response 3x3 grid
+    if data is not None:
+        print("      [Figures] Generating temperature response figure (3x3 grid)...")
+        plot_temperature_response_3x3(
+            results,
+            data,
+            output_dir,
+            filename='fig_temperature_response_3x3.pdf',
+            T_range=(0, 30),
+            input_file=None,
+        )
+        print("      [Figures] Saved fig_temperature_response_3x3.pdf")
+
+    # Figure 12: Temperature derivative 3x3 grid
+    print("      [Figures] Generating temperature derivative figure (3x3 grid)...")
+    plot_temperature_derivative_3x3(
         results,
         output_dir,
-        filename='fig_temperature_derivative_4panel_variants.pdf',
+        filename='fig_temperature_derivative_3x3.pdf',
         T_range=(0, 30),
-        T_dep_range=(-1.5, 1.5),
         input_file=None,
     )
-    print("      [Figures] Saved fig_temperature_derivative_4panel_variants.pdf")
+    print("      [Figures] Saved fig_temperature_derivative_3x3.pdf")
 
-    # Figure 4: Temperature derivative (dh/dT) - 2 panels
-    print("      [Figures] Generating temperature derivative figure (2 panels)...")
-    plot_bootstrap_temperature_derivative(
+    # Figure 13: T_optimal histogram 3x3 grid
+    print("      [Figures] Generating T_optimal histogram figure (3x3 grid)...")
+    plot_T_optimal_histogram_3x3(
         results,
         output_dir,
-        approaches=approaches_2panel,
-        filename='fig_temperature_derivative_2panel.pdf',
-        T_range=(0, 30),
+        filename='fig_T_optimal_histogram_3x3.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_temperature_derivative_2panel.pdf")
+    print("      [Figures] Saved fig_T_optimal_histogram_3x3.pdf")
 
-    # Figure 5: T_optimal histograms - 4 panels
-    print("      [Figures] Generating T_optimal histogram figure (4 panels)...")
-    plot_T_optimal_histograms(
+    # Figure 14: h2 histogram 4x3 grid (separate rows for piecewise h2 and h4)
+    print("      [Figures] Generating h2 histogram figure (4x3 grid)...")
+    plot_h2_histogram_4x3(
         results,
         output_dir,
-        approaches=approaches_4panel,
-        filename='fig_T_optimal_histogram_4panel.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_T_optimal_histogram_4panel.pdf")
-
-    # Figure 6: T_optimal histograms - 2 panels
-    print("      [Figures] Generating T_optimal histogram figure (2 panels)...")
-    plot_T_optimal_histograms(
-        results,
-        output_dir,
-        approaches=approaches_2panel,
-        filename='fig_T_optimal_histogram_2panel.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_T_optimal_histogram_2panel.pdf")
-
-    # Figure 6b: T_optimal histograms - 5 panels (all main approaches including Approach3L)
-    print("      [Figures] Generating T_optimal histogram figure (5 panels)...")
-    plot_T_optimal_histograms(
-        results,
-        output_dir,
-        approaches=approaches_5panel,
-        filename='fig_T_optimal_histogram_5panel.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_T_optimal_histogram_5panel.pdf")
-
-    # Figure 7: h2 coefficient histograms - 4 panels [[Approach1J, Approach1P], [Approach1L, Approach2L]]
-    print("      [Figures] Generating h2 coefficient histogram figure (4 panels)...")
-    plot_h2_histograms(
-        results,
-        output_dir,
-        approaches=['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L'],
+        filename='fig_h2_histogram_4x3.pdf',
         x_range=(-0.001, 0.0001),
         bin_width=0.00002,
-        filename='fig_h2_histogram_4panel.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_h2_histogram_4panel.pdf")
+    print("      [Figures] Saved fig_h2_histogram_4x3.pdf")
 
-    # Figure 7b: h2 coefficient histograms - 5 panels (all main approaches including Approach3L)
-    print("      [Figures] Generating h2 coefficient histogram figure (5 panels)...")
-    plot_h2_histograms(
+    # Figure 15: h4 histogram 1x3 row (persistence approaches only)
+    print("      [Figures] Generating h4 histogram figure (1x3 row)...")
+    plot_h4_histogram_1x3(
         results,
         output_dir,
-        approaches=approaches_5panel,
-        x_range=(-0.001, 0.0001),
-        bin_width=0.00002,
-        filename='fig_h2_histogram_5panel.pdf',
+        filename='fig_h4_histogram_1x3.pdf',
         input_file=None,
     )
-    print("      [Figures] Saved fig_h2_histogram_5panel.pdf")
-
-    # Figure 8: h2 coefficient histograms - 3 panels (Approach1L h2, Approach2L h2_low, Approach2L h2_high)
-    print("      [Figures] Generating h2 coefficient histogram figure (3 panels)...")
-    plot_h2_histograms(
-        results,
-        output_dir,
-        approaches=['Approach1L', 'Approach2L'],
-        x_range=(-0.001, 0.0001),
-        bin_width=0.00002,
-        x_range_h2_high=(-0.01, 0.001),
-        bin_width_h2_high=0.0002,
-        filename='fig_h2_histogram_3panel.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_h2_histogram_3panel.pdf")
-
-    # Figure 9: Temperature response - 4 panels for variant approaches (6, 8, 6e components)
-    print("      [Figures] Generating temperature response figure (4 panels - variants)...")
-    plot_temperature_response_4panel_variants(
-        results,
-        data,
-        output_dir,
-        filename='fig_temperature_response_4panel_variants.pdf',
-        T_range=(0, 30),
-        T_dep_range=(-1.5, 1.5),
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_temperature_response_4panel_variants.pdf")
-
-    # Figure 10: Approach4 persistence decay (h(T) response + h4 distribution)
-    print("      [Figures] Generating Approach3L persistence decay figure...")
-    from .output import plot_persistence_decay, plot_persistence_decay_derivative
-    plot_persistence_decay(
-        results,
-        output_dir,
-        data=data,
-        T_range=(0, 30),
-        filename='fig_Approach3L_persistence_decay.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_Approach3L_persistence_decay.pdf")
-
-    # Figure 10b: Approach4 persistence decay derivative (dh/dT)
-    print("      [Figures] Generating Approach3L persistence decay derivative figure...")
-    plot_persistence_decay_derivative(
-        results,
-        output_dir,
-        T_range=(0, 30),
-        filename='fig_Approach3L_persistence_decay_derivative.pdf',
-        input_file=None,
-    )
-    print("      [Figures] Saved fig_Approach3L_persistence_decay_derivative.pdf")
+    print("      [Figures] Saved fig_h4_histogram_1x3.pdf")
 
     # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)

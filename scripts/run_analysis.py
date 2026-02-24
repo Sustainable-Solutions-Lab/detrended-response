@@ -225,7 +225,14 @@ def main():
     else:
         output_dir = create_output_dir(prefix="analysis_", suffix=mw_suffix)
 
-    save_all_outputs(data, trends, results, output_dir, input_file=input_file)
+    # Define approach order for output tables
+    approach_order = [
+        'Approach0J', 'Approach0P', 'Approach0L',
+        'Approach1J', 'Approach1P', 'Approach1L',
+        'Approach2J', 'Approach2P', 'Approach2L',
+        'Approach3J', 'Approach3P', 'Approach3L',
+    ]
+    save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)
     t_output = time.perf_counter() - t_start
 
     # Save run metadata for post-processing scripts

@@ -137,6 +137,17 @@ is_skewnorm_result = is_piecewise_result
 is_gaussian_result = is_piecewise_result
 
 
+def is_persistence_result(result) -> bool:
+    """Check if result is from persistence model (Approach3L/Approach3J/Approach3P).
+
+    Persistence results have h4 as the decay rate parameter.
+    """
+    approach = getattr(result, 'approach', '')
+    if 'persistence' in approach.lower() or approach in ('Approach3L', 'Approach3J', 'Approach3P'):
+        return True
+    return False
+
+
 def piecewise_quad_shape(T: np.ndarray, T_opt: float) -> tuple:
     """Compute piecewise quadratic shape.
 
@@ -253,30 +264,43 @@ def add_input_file_annotation(fig, input_file: str = None) -> None:
 
 
 def save_summary_table(
-    results: Dict[str, FitResult], output_dir: Path, input_file: str = None
+    results: Dict[str, FitResult], output_dir: Path, input_file: str = None,
+    approaches: list = None
 ) -> None:
-    """Save comparison table of all approaches."""
+    """Save comparison table of all approaches.
+
+    Parameters
+    ----------
+    results : dict
+        Dictionary mapping approach keys to FitResult objects
+    output_dir : Path
+        Directory to save output files
+    input_file : str, optional
+        Path to input data file for annotation
+    approaches : list, optional
+        List of approach keys to include, in desired order.
+        If None, uses all approaches in results dict order.
+    """
+    # Determine approach order
+    if approaches is None:
+        approach_order = list(results.keys())
+    else:
+        # Filter to approaches that exist in results
+        approach_order = [a for a in approaches if a in results]
+
     rows = []
-    for name, result in results.items():
+    for name in approach_order:
+        result = results[name]
         row = {
             'Approach': result.approach,
             'h1': result.h1,
             'h1_SE': result.h1_se,
             'h2': result.h2,
             'h2_SE': result.h2_se,
-            'T_opt': getattr(result, 'T_opt', None),  # Not all approaches have T_opt (e.g., 6c)
-            'T_opt_SE': getattr(result, 'T_opt_se', None),  # SE for T_opt (approaches 8, 8a, 8b, 8c, 8d)
-            # Extended coefficients - define in order to ensure consistent column placement
-            'h3': None,  # For 6a/6b/6c
-            'h3_SE': None,
-            'h4': None,  # For 6a/6b/6c/8/8a
+            'T_opt': getattr(result, 'T_opt', None),
+            'T_opt_SE': getattr(result, 'T_opt_se', None),
+            'h4': None,  # For piecewise (Approach2*) and persistence (Approach3*)
             'h4_SE': None,
-            'f1': None,  # For 5d/8b/8c (not for 6a/6b/6c - use T_dep_opt)
-            'f1_SE': None,
-            'T_dep_opt': None,  # For 6a/6b/6c - optimal departure temperature
-            'f2': None,  # For 6c/8b/8d
-            'f2_SE': None,
-            'Y_ref': None,  # For 5d
             'R_squared': result.r_squared,
             'Total_R_squared': result.total_r_squared,
             'Adj_R_squared': result.adj_r_squared,
@@ -287,49 +311,10 @@ def save_summary_table(
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
-        # Add f1 for GDP-dependent approaches (5d) - GDP scaling exponent
-        if hasattr(result, 'f1') and result.f1 is not None and hasattr(result, 'Y_ref'):
-            row['f1'] = result.f1
-            row['f1_SE'] = result.f1_se
-        # Add Y_ref for GDP-dependent approaches (5d)
-        if hasattr(result, 'Y_ref'):
-            row['Y_ref'] = result.Y_ref
-        # Add h3, h4, T_dep_opt for Approach 6a/6b (separate total/departure response)
-        # h1,h2 = actual T response; h3,h4 = departure response; T_opt = optimal actual T; T_dep_opt = optimal departure
-        if hasattr(result, 'h3') and hasattr(result, 'T_dep_opt') and not hasattr(result, 'f2'):
-            row['h3'] = result.h3
-            row['h3_SE'] = result.h3_se
+        # Add h4 for piecewise (Approach2*) and persistence (Approach3*) approaches
+        if is_piecewise_result(result) or is_persistence_result(result):
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
-            row['T_dep_opt'] = result.T_dep_opt  # Optimal departure
-        # Add h3, h4, T_dep_opt, f2 for Approach 6c (departure/trend decomposition)
-        # h1,h2 = departure response; h3,h4 = trend response; T_dep_opt = optimal departure; f2 = optimal trend T
-        elif hasattr(result, 'h3') and hasattr(result, 'f2'):
-            row['h3'] = result.h3
-            row['h3_SE'] = result.h3_se
-            row['h4'] = result.h4
-            row['h4_SE'] = result.h4_se
-            row['T_dep_opt'] = result.T_dep_opt  # Optimal departure
-            row['f2'] = result.f2  # Optimal trend T
-        # Add h4 for Approach 8a (shared T_opt, total/trend)
-        # h2 = curvature for actual T; h4 = curvature for trend T
-        elif hasattr(result, 'h4') and hasattr(result, 'T_opt_se') and result.h1 == 0.0:
-            row['h4'] = result.h4
-            row['h4_SE'] = result.h4_se
-        # Add h4 for Approach 8 (piecewise quadratic)
-        # h2 = curvature below T_opt; h4 = curvature above T_opt
-        elif is_piecewise_result(result):
-            row['h4'] = result.h4
-            row['h4_SE'] = result.h4_se
-        # Add f1, f2 for Approach 8b/8c/8d (modulated response) - modulation coefficients
-        # 8b has both f1 and f2, 8c has only f1, 8d has only f2
-        is_modulated_approach = not hasattr(result, 'Y_ref') and not hasattr(result, 'h3')
-        if is_modulated_approach and hasattr(result, 'f1') and result.f1 is not None:
-            row['f1'] = result.f1
-            row['f1_SE'] = result.f1_se
-        if is_modulated_approach and hasattr(result, 'f2') and result.f2 is not None:
-            row['f2'] = result.f2
-            row['f2_SE'] = result.f2_se
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -345,7 +330,8 @@ def save_summary_table(
     # Decomposition: dy = h(T) + j + k + err
     # All terms divided by Var(dy) so they sum to 1.0
     vd_rows = []
-    for name, result in results.items():
+    for name in approach_order:
+        result = results[name]
         va = result.var_attrib
         if va is None:
             continue
@@ -1059,6 +1045,7 @@ def save_all_outputs(
     results: Dict[str, FitResult],
     output_dir: Path = None,
     input_file: str = None,
+    approaches: list = None,
 ) -> Path:
     """Save all outputs to the specified directory.
 
@@ -1068,6 +1055,7 @@ def save_all_outputs(
         results: Dictionary of FitResult objects
         output_dir: Output directory (created if None)
         input_file: Path to input data file (for annotation)
+        approaches: List of approach keys to include, in desired order
 
     Returns:
         Path to output directory
@@ -1078,7 +1066,7 @@ def save_all_outputs(
     print(f"Saving outputs to: {output_dir}")
 
     # Save tables
-    save_summary_table(results, output_dir, input_file=input_file)
+    save_summary_table(results, output_dir, input_file=input_file, approaches=approaches)
     save_country_trends(data, trends, output_dir, input_file=input_file)
 
     # Generate plots
@@ -2083,10 +2071,11 @@ def save_bootstrap_h_values(
                 # Compute h(T) for each observation based on approach type
                 if name in ['Approach1J', 'Approach1P', 'Approach1L']:
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
-                elif name == 'Approach2L':
+                elif name in ['Approach2J', 'Approach2P', 'Approach2L']:
+                    # Piecewise quadratic: h2 below T_opt, h4 above T_opt
                     below = temp_arr <= r.T_opt
                     h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
-                elif name == 'Approach3L':
+                elif name in ['Approach3J', 'Approach3P', 'Approach3L']:
                     # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
                     # The correction term accounts for assumed constant temperature before first year
                     # We assume pre-history temperature was T_loess_1961 (not actual T at first year)
@@ -3423,7 +3412,7 @@ def compute_h_response_uncertainty_bands(
     Returns:
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('Approach2L', 'Approach2J'))
+    is_piecewise = (approach_key in ('Approach2L', 'Approach2J', 'Approach2P'))
 
     # Handle approach 6b (trend only)
     if approach_key == 'method2b':
@@ -3873,7 +3862,7 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
         return h_point, T_opt
 
     # Handle piecewise approaches Approach2L/Approach2J/Approach2P (asymmetric): h2 for T <= T_opt, h4 for T > T_opt
-    if approach_key in ('Approach2L', 'Approach2J') and result.h4_point is not None:
+    if approach_key in ('Approach2L', 'Approach2J', 'Approach2P') and result.h4_point is not None:
         T_opt = result.T_opt_point
         h2_low = result.h2_point
         h2_high = result.h4_point
@@ -4152,7 +4141,7 @@ def compute_derivative_uncertainty_bands(
     Returns:
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
-    is_piecewise = (approach_key in ('Approach2L', 'Approach2J'))
+    is_piecewise = (approach_key in ('Approach2L', 'Approach2J', 'Approach2P'))
 
     # Handle approach 6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'method2b':
@@ -4311,7 +4300,7 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
         return 2 * h2 * (T - T_opt)
 
     # Handle piecewise approaches Approach2L/Approach2J/Approach2P (asymmetric: h2 for T <= T_opt, h4 for T > T_opt)
-    if approach_key in ('Approach2L', 'Approach2L') and result.h4_point is not None:
+    if approach_key in ('Approach2L', 'Approach2J', 'Approach2P') and result.h4_point is not None:
         T_opt = result.T_opt_point
         h2_low = result.h2_point
         h2_high = result.h4_point
@@ -5564,6 +5553,571 @@ def plot_temperature_derivative_4panel_variants(
     else:
         ax.text(0.5, 0.5, 'No h4 samples available', ha='center', va='center', transform=ax.transAxes)
         ax.set_title('Approach 4: Persistence parameter', fontsize=11)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+# ==============================================================================
+# 3x3 Grid Plotting Functions
+# ==============================================================================
+
+# Systematic 3x3 grid layout:
+# - Rows = Climate response functions (1=quadratic, 2=piecewise, 3=persistence)
+# - Columns = Solution methods (J=Joint, P=Polynomial, L=LOESS)
+#
+# Grid arrangement:
+#   Approach1J  Approach1P  Approach1L    (Row 0: Quadratic)
+#   Approach2J  Approach2P  Approach2L    (Row 1: Piecewise)
+#   Approach3J  Approach3P  Approach3L    (Row 2: Persistence)
+
+APPROACH_ORDER_3X3 = [
+    ['Approach1J', 'Approach1P', 'Approach1L'],
+    ['Approach2J', 'Approach2P', 'Approach2L'],
+    ['Approach3J', 'Approach3P', 'Approach3L'],
+]
+
+
+def plot_temperature_response_3x3(
+    results: Dict[str, "BootstrapResult"],
+    data: AnalysisData,
+    output_dir: Path,
+    filename: str = 'fig_temperature_response_3x3.pdf',
+    T_range: tuple = (0, 30),
+    input_file: str = None,
+) -> None:
+    """Plot 3x3 temperature response figure (h(T) - h(T_opt)).
+
+    Creates a 3x3 figure with temperature response curves and uncertainty bands.
+    Layout:
+        Row 0: Approach1J, Approach1P, Approach1L (Quadratic)
+        Row 1: Approach2J, Approach2P, Approach2L (Piecewise)
+        Row 2: Approach3J, Approach3P, Approach3L (Persistence)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        data: AnalysisData for temperature histogram
+        output_dir: Directory to save the plot
+        filename: Output filename
+        T_range: Temperature range for x-axis (default: (0, 30))
+        input_file: Optional input file path for annotation
+    """
+    # Create 3x3 figure
+    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+
+    # Temperature array for response plots
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Get temperature data from most recent year for histogram
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
+
+    # Fixed y-axis range for publication consistency
+    y_min, y_max = -0.15, 0.00
+    y_ticks = np.arange(-0.15, 0.01, 0.03)
+
+    # Plot each panel
+    for row in range(3):
+        for col in range(3):
+            name = APPROACH_ORDER_3X3[row][col]
+            ax = axes[row, col]
+
+            if name not in results:
+                ax.text(0.5, 0.5, f'{name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.set_xlim(T_range)
+                ax.set_ylim(y_min, y_max)
+                ax.set_xlabel('Temperature (°C)', fontsize=10)
+                ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+                ax.grid(True, alpha=0.3)
+                continue
+
+            result = results[name]
+            color = get_color(name, 'steelblue')
+
+            # Compute uncertainty bands
+            h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            )
+            h_point, T_opt = _compute_point_estimate_response(result, T, name, None)
+
+            # Add temperature histogram on secondary y-axis
+            if temp_recent is not None:
+                ax2 = ax.twinx()
+                bins = np.linspace(T_range[0], T_range[1], 30)
+                ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+                ax2.set_ylabel('Data density', fontsize=8, color='gray')
+                ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+                ax2.set_ylim(bottom=0)
+                ax2.set_zorder(ax.get_zorder() - 1)
+                ax.set_zorder(ax2.get_zorder() + 1)
+                ax.patch.set_visible(False)
+
+            # Plot 90% CI band
+            ax.fill_between(T, h_p5, h_p95, alpha=0.2, color=color, label='90% CI')
+            # Plot IQR band
+            ax.fill_between(T, h_p25, h_p75, alpha=0.3, color=color, label='IQR')
+            # Plot point estimate
+            ax.plot(T, h_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+            # Mark optimal temperature
+            if T_opt is not None and not np.isnan(T_opt):
+                ax.axvline(T_opt, color=color, linestyle=':', alpha=0.7, label=f'T_opt = {T_opt:.1f}°C')
+
+            ax.axhline(0, color='gray', linewidth=0.5)
+            ax.set_xlabel('Temperature (°C)', fontsize=10)
+            ax.set_ylabel('h(T) - h(T_opt)', fontsize=10)
+            ax.set_title(result.approach, fontsize=11)
+            ax.set_xlim(T_range)
+            ax.set_ylim(y_min, y_max)
+            ax.set_yticks(y_ticks)
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=7, loc='lower right')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_temperature_derivative_3x3(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = 'fig_temperature_derivative_3x3.pdf',
+    T_range: tuple = (0, 30),
+    input_file: str = None,
+) -> None:
+    """Plot 3x3 temperature derivative figure (dh/dT).
+
+    Creates a 3x3 figure with temperature derivative curves and uncertainty bands.
+    Layout:
+        Row 0: Approach1J, Approach1P, Approach1L (Quadratic)
+        Row 1: Approach2J, Approach2P, Approach2L (Piecewise)
+        Row 2: Approach3J, Approach3P, Approach3L (Persistence)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename
+        T_range: Temperature range for x-axis (default: (0, 30))
+        input_file: Optional input file path for annotation
+    """
+    # Create 3x3 figure
+    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+
+    # Temperature array for derivative plots
+    T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Plot each panel
+    for row in range(3):
+        for col in range(3):
+            name = APPROACH_ORDER_3X3[row][col]
+            ax = axes[row, col]
+
+            if name not in results:
+                ax.text(0.5, 0.5, f'{name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.set_xlim(T_range)
+                ax.set_ylim(-0.025, 0.015)
+                ax.set_xlabel('Temperature (°C)', fontsize=10)
+                ax.set_ylabel('dh/dT', fontsize=10)
+                ax.grid(True, alpha=0.3)
+                continue
+
+            result = results[name]
+            color = get_color(name, 'steelblue')
+
+            # Compute uncertainty bands
+            dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
+                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            )
+            dh_point = _compute_derivative_point_estimate(result, T, name, None)
+
+            # Plot 90% CI band
+            ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color, label='90% CI')
+            # Plot IQR band
+            ax.fill_between(T, dh_p25, dh_p75, alpha=0.3, color=color, label='IQR')
+            # Plot point estimate
+            ax.plot(T, dh_point, color=color, linestyle='-', linewidth=2, label='Point estimate')
+
+            # Mark zero line
+            ax.axhline(0, color='gray', linewidth=0.5)
+
+            ax.set_xlabel('Temperature (°C)', fontsize=10)
+            ax.set_ylabel('dh/dT', fontsize=10)
+            ax.set_title(result.approach, fontsize=11)
+            ax.set_xlim(T_range)
+            ax.set_ylim(-0.025, 0.015)
+            ax.grid(True, alpha=0.3)
+            ax.legend(fontsize=7, loc='upper right')
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_T_optimal_histogram_3x3(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = 'fig_T_optimal_histogram_3x3.pdf',
+    input_file: str = None,
+) -> None:
+    """Plot 3x3 T_optimal bootstrap histogram figure.
+
+    Creates a 3x3 figure with T_optimal histograms and uncertainty bands.
+    Layout:
+        Row 0: Approach1J, Approach1P, Approach1L (Quadratic)
+        Row 1: Approach2J, Approach2P, Approach2L (Piecewise)
+        Row 2: Approach3J, Approach3P, Approach3L (Persistence)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename
+        input_file: Optional input file path for annotation
+    """
+    # Create 3x3 figure
+    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+
+    # Fixed x-axis range (same as temperature response/derivative plots)
+    x_min, x_max = 0, 30
+    # Bins with 0.5°C width
+    bins = np.arange(x_min, x_max + 0.5, 0.5)
+
+    # Plot each panel
+    for row in range(3):
+        for col in range(3):
+            name = APPROACH_ORDER_3X3[row][col]
+            ax = axes[row, col]
+
+            if name not in results:
+                ax.text(0.5, 0.5, f'{name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.set_xlim(x_min, x_max)
+                ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
+                ax.set_ylabel('Density', fontsize=10)
+                ax.grid(True, alpha=0.3)
+                continue
+
+            result = results[name]
+            color = get_color(name, 'steelblue')
+
+            # Get valid samples
+            valid_samples = result.T_opt_samples[~np.isnan(result.T_opt_samples)]
+
+            if len(valid_samples) == 0:
+                ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center',
+                        transform=ax.transAxes, fontsize=12)
+                continue
+
+            # Compute statistics
+            point_est = result.T_opt_point
+            p5 = np.percentile(valid_samples, 5)
+            p25 = np.percentile(valid_samples, 25)
+            p75 = np.percentile(valid_samples, 75)
+            p95 = np.percentile(valid_samples, 95)
+
+            # Plot bands and lines first (bottom layer)
+            # 90% CI vertical band
+            ax.axvspan(p5, p95, alpha=0.2, color=color,
+                       label=f'90% CI: [{p5:.1f}, {p95:.1f}]°C')
+
+            # IQR vertical band
+            ax.axvspan(p25, p75, alpha=0.3, color=color,
+                       label=f'IQR: [{p25:.1f}, {p75:.1f}]°C')
+
+            # Point estimate (solid line, behind histogram)
+            ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
+                       label=f'Point: {point_est:.1f}°C')
+
+            # Plot histogram on top (fully saturated)
+            n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
+                              edgecolor=color, linewidth=0.5)
+
+            # Extend y-axis upper bound with ~10% padding
+            y_max = np.max(n) * 1.1
+            ax.set_ylim(0, y_max)
+
+            ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.set_title(result.approach, fontsize=11)
+            ax.set_xlim(x_min, x_max)
+            ax.legend(fontsize=7, loc='upper left')
+            ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_h2_histogram_4x3(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = 'fig_h2_histogram_4x3.pdf',
+    x_range: tuple = (-0.001, 0.0001),
+    bin_width: float = 0.00002,
+    input_file: str = None,
+) -> None:
+    """Plot 4x3 h2 coefficient histogram figure.
+
+    Creates a 4x3 figure with h2 histograms. Piecewise approaches get separate
+    rows for h2 (T ≤ T_opt) and h4 (T > T_opt).
+
+    Layout:
+        Row 0: Approach1J, Approach1P, Approach1L (Quadratic h2)
+        Row 1: Approach2J, Approach2P, Approach2L (h2 for T ≤ T_opt)
+        Row 2: Approach2J, Approach2P, Approach2L (h4 for T > T_opt)
+        Row 3: Approach3J, Approach3P, Approach3L (Persistence h2)
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename
+        x_range: Fixed x-axis range as (x_min, x_max)
+        bin_width: Width of histogram bins
+        input_file: Optional input file path for annotation
+    """
+    # Create 4x3 figure
+    fig, axes = plt.subplots(4, 3, figsize=(15, 16))
+
+    x_min, x_max = x_range
+    bins = np.arange(x_min, x_max + bin_width, bin_width)
+
+    # Define the layout: (row, col) -> (approach_name, coefficient_type, title_suffix)
+    # coefficient_type: 'h2' for standard, 'h2_low' for piecewise below T_opt, 'h4' for piecewise above T_opt
+    approach_cols = ['Approach1J', 'Approach1P', 'Approach1L']
+    piecewise_cols = ['Approach2J', 'Approach2P', 'Approach2L']
+    persistence_cols = ['Approach3J', 'Approach3P', 'Approach3L']
+
+    def plot_histogram_panel(ax, samples, point_est, color, title, x_label='h₂ Coefficient'):
+        """Helper to plot a single histogram panel."""
+        if samples is None:
+            ax.text(0.5, 0.5, 'No samples', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel(x_label, fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.set_title(title, fontsize=11)
+            ax.grid(True, alpha=0.3)
+            return
+
+        valid_samples = samples[~np.isnan(samples)]
+        if len(valid_samples) == 0:
+            ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel(x_label, fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.set_title(title, fontsize=11)
+            ax.grid(True, alpha=0.3)
+            return
+
+        # Compute statistics
+        p5 = np.percentile(valid_samples, 5)
+        p25 = np.percentile(valid_samples, 25)
+        p75 = np.percentile(valid_samples, 75)
+        p95 = np.percentile(valid_samples, 95)
+
+        # Plot bands and lines first (bottom layer)
+        ax.axvspan(p5, p95, alpha=0.2, color=color,
+                   label=f'90% CI: [{p5:.5f}, {p95:.5f}]')
+        ax.axvspan(p25, p75, alpha=0.3, color=color,
+                   label=f'IQR: [{p25:.5f}, {p75:.5f}]')
+        if point_est is not None:
+            ax.axvline(x=point_est, color='black', linestyle='-', linewidth=2,
+                       label=f'Point: {point_est:.5f}')
+
+        # Plot histogram on top
+        n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
+                          edgecolor=color, linewidth=0.5)
+
+        # Extend y-axis upper bound with ~10% padding
+        y_max = np.max(n) * 1.1
+        ax.set_ylim(0, y_max)
+
+        ax.set_xlabel(x_label, fontsize=10)
+        ax.set_ylabel('Density', fontsize=10)
+        ax.set_title(title, fontsize=11)
+        ax.set_xlim(x_min, x_max)
+        ax.legend(fontsize=7, loc='upper left')
+        ax.grid(True, alpha=0.3)
+
+    # Row 0: Approach1 (Quadratic h2)
+    for col, name in enumerate(approach_cols):
+        ax = axes[0, col]
+        if name not in results:
+            ax.text(0.5, 0.5, f'{name}\n(not available)',
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=10, color='gray')
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel('h₂ Coefficient', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.grid(True, alpha=0.3)
+            continue
+
+        result = results[name]
+        color = get_color(name, 'steelblue')
+        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, result.approach)
+
+    # Row 1: Approach2 h2 (T ≤ T_opt)
+    for col, name in enumerate(piecewise_cols):
+        ax = axes[1, col]
+        if name not in results:
+            ax.text(0.5, 0.5, f'{name}\n(not available)',
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=10, color='gray')
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel('h₂ Coefficient', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.grid(True, alpha=0.3)
+            continue
+
+        result = results[name]
+        color = get_color(name, 'steelblue')
+        title = f'{result.approach}: h₂ (T ≤ T_opt)'
+        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, title)
+
+    # Row 2: Approach2 h4 (T > T_opt)
+    for col, name in enumerate(piecewise_cols):
+        ax = axes[2, col]
+        if name not in results:
+            ax.text(0.5, 0.5, f'{name}\n(not available)',
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=10, color='gray')
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel('h₄ Coefficient', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.grid(True, alpha=0.3)
+            continue
+
+        result = results[name]
+        color = get_color(name, 'steelblue')
+        h4_samples = getattr(result, 'h4_samples', None)
+        h4_point = getattr(result, 'h4_point', None)
+        title = f'{result.approach}: h₄ (T > T_opt)'
+        plot_histogram_panel(ax, h4_samples, h4_point, color, title, x_label='h₄ Coefficient')
+
+    # Row 3: Approach3 (Persistence h2)
+    for col, name in enumerate(persistence_cols):
+        ax = axes[3, col]
+        if name not in results:
+            ax.text(0.5, 0.5, f'{name}\n(not available)',
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=10, color='gray')
+            ax.set_xlim(x_min, x_max)
+            ax.set_xlabel('h₂ Coefficient', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.grid(True, alpha=0.3)
+            continue
+
+        result = results[name]
+        color = get_color(name, 'steelblue')
+        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, result.approach)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+def plot_h4_histogram_1x3(
+    results: Dict[str, "BootstrapResult"],
+    output_dir: Path,
+    filename: str = 'fig_h4_histogram_1x3.pdf',
+    input_file: str = None,
+) -> None:
+    """Plot 1x3 h4 (persistence parameter) histogram figure.
+
+    Creates a 1x3 figure with h4 histograms for persistence approaches.
+    Layout: Approach3J, Approach3P, Approach3L
+
+    Args:
+        results: Dict of BootstrapResult for each approach
+        output_dir: Directory to save the plot
+        filename: Output filename
+        input_file: Optional input file path for annotation
+    """
+    approaches = ['Approach3J', 'Approach3P', 'Approach3L']
+
+    # Create 1x3 figure
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    # Plot each panel
+    for col, name in enumerate(approaches):
+        ax = axes[col]
+
+        if name not in results:
+            ax.text(0.5, 0.5, f'{name}\n(not available)',
+                    ha='center', va='center', transform=ax.transAxes,
+                    fontsize=10, color='gray')
+            ax.set_xlabel('h₄ (persistence parameter)', fontsize=10)
+            ax.set_ylabel('Density', fontsize=10)
+            ax.grid(True, alpha=0.3)
+            continue
+
+        result = results[name]
+        color = get_color(name, 'steelblue')
+
+        # Get h4 samples
+        h4_samples = getattr(result, 'h4_samples', None)
+        h4_point = getattr(result, 'h4_point', None)
+
+        if h4_samples is None:
+            ax.text(0.5, 0.5, 'No h4 samples', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+            ax.set_title(result.approach if hasattr(result, 'approach') else name, fontsize=11)
+            continue
+
+        valid_samples = h4_samples[~np.isnan(h4_samples)]
+        if len(valid_samples) == 0:
+            ax.text(0.5, 0.5, 'No valid samples', ha='center', va='center',
+                    transform=ax.transAxes, fontsize=12)
+            continue
+
+        # Compute statistics
+        p5 = np.percentile(valid_samples, 5)
+        p25 = np.percentile(valid_samples, 25)
+        p50 = np.percentile(valid_samples, 50)
+        p75 = np.percentile(valid_samples, 75)
+        p95 = np.percentile(valid_samples, 95)
+
+        # Plot bands and lines first (bottom layer)
+        ax.axvspan(p5, p95, alpha=0.2, color=color,
+                   label=f'90% CI: [{p5:.3f}, {p95:.3f}]')
+        ax.axvspan(p25, p75, alpha=0.3, color=color,
+                   label=f'IQR: [{p25:.3f}, {p75:.3f}]')
+        if h4_point is not None:
+            ax.axvline(x=h4_point, color='black', linestyle='-', linewidth=2,
+                       label=f'Point: {h4_point:.3f}')
+
+        # Plot histogram on top
+        n, _, _ = ax.hist(valid_samples, bins=30, density=True, alpha=1.0, color=color,
+                          edgecolor=color, linewidth=0.5)
+
+        # Extend y-axis upper bound with ~10% padding
+        y_max = np.max(n) * 1.1
+        ax.set_ylim(0, y_max)
+
+        ax.set_xlabel('h₄ (persistence parameter)', fontsize=10)
+        ax.set_ylabel('Density', fontsize=10)
+        ax.set_title(result.approach, fontsize=11)
+        ax.legend(fontsize=7, loc='upper left')
+        ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)

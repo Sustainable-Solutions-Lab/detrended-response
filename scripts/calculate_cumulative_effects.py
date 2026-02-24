@@ -73,7 +73,12 @@ def load_run_metadata(directory: Path) -> dict:
 
 # Central approaches for analysis (in display order)
 CENTRAL_APPROACHES_POINT = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
-CENTRAL_APPROACHES_BOXPLOT = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
+# All 9 approaches grouped by method (J, P, L) for boxplot figures
+CENTRAL_APPROACHES_BOXPLOT = [
+    'Approach1J', 'Approach2J', 'Approach3J',
+    'Approach1P', 'Approach2P', 'Approach3P',
+    'Approach1L', 'Approach2L', 'Approach3L',
+]
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -173,13 +178,13 @@ def get_country_label(key, representatives: dict) -> str:
     """
     iso3 = representatives[key]['iso3']
     if key == 'min':
-        return f"{iso3}\n(most hurt)"
+        return f"{iso3}\n(min)"
     elif key == 'max':
-        return f"{iso3}\n(most helped)"
+        return f"{iso3}\n(max)"
     elif key == 5:
-        return f"{iso3}\n(P5, hurt)"
+        return f"{iso3}\n(P5)"
     elif key == 95:
-        return f"{iso3}\n(P95, helped)"
+        return f"{iso3}\n(P95)"
     else:
         return f"{iso3}\n(P{key})"
 
@@ -203,7 +208,7 @@ def plot_cumulative_effects_boxplot(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(18, 6))
 
     # Use central approaches in consistent order
     approaches = CENTRAL_APPROACHES_BOXPLOT
@@ -335,7 +340,7 @@ def plot_cumulative_effects_by_approach_grouped(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(18, 6))
 
     # Use central approaches in consistent order
     approaches = CENTRAL_APPROACHES_BOXPLOT
@@ -348,13 +353,23 @@ def plot_cumulative_effects_by_approach_grouped(
     # Spacing parameters
     cluster_width = 0.85
     box_width = cluster_width / (n_countries + 1)  # Extra space between clusters
+    group_gap = 0.6  # Extra space between method groups (J, P, L)
 
     # Filter to year 2022 for final values
     df_2022 = df[df['year'] == 2022].copy()
 
+    # Compute x-positions with gaps between groups
+    # Groups: [0,1,2] = J methods, [3,4,5] = P methods, [6,7,8] = L methods
+    x_positions = []
+    for i in range(n_approaches):
+        group_idx = i // 3  # Which group (0=J, 1=P, 2=L)
+        pos_in_group = i % 3  # Position within group
+        x_pos = group_idx * (3 + group_gap) + pos_in_group
+        x_positions.append(x_pos)
+
     # Create box plots - grouped by approach
     for i, approach in enumerate(approaches):
-        cluster_center = i
+        cluster_center = x_positions[i]
 
         for j, country_key in enumerate(country_keys):
             iso3 = representatives[country_key]['iso3']
@@ -396,8 +411,24 @@ def plot_cumulative_effects_by_approach_grouped(
                         markeredgecolor='black', markeredgewidth=1, zorder=10)
 
     # X-axis labels (approaches)
-    ax.set_xticks(range(n_approaches))
+    ax.set_xticks(x_positions)
     ax.set_xticklabels(approaches)
+
+    # Add vertical separator lines between method groups
+    # Lines go between positions 2 and 3, and between 5 and 6
+    y_min, y_max = ax.get_ylim()
+    sep1_x = (x_positions[2] + x_positions[3]) / 2
+    sep2_x = (x_positions[5] + x_positions[6]) / 2
+    ax.axvline(x=sep1_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
+    ax.axvline(x=sep2_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
+
+    # Add group labels at top
+    group_centers = [
+        (x_positions[0] + x_positions[2]) / 2,  # J group center
+        (x_positions[3] + x_positions[5]) / 2,  # P group center
+        (x_positions[6] + x_positions[8]) / 2,  # L group center
+    ]
+    group_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
     # Y-axis: set ticks at nice percentage values, but plot at log-transformed positions
     tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
@@ -408,9 +439,13 @@ def plot_cumulative_effects_by_approach_grouped(
 
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
-    ax.set_xlabel('Approach')
     ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022) by Approach')
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+
+    # Add group labels above the plot
+    for center, label in zip(group_centers, group_labels):
+        ax.text(center, ax.get_ylim()[1] * 1.02, label, ha='center', va='bottom',
+                fontsize=10, fontweight='bold')
 
     # Legend for countries
     # Labels clarify that percentiles are of the cumulative effect distribution:
@@ -423,13 +458,13 @@ def plot_cumulative_effects_by_approach_grouped(
         legend_handles.append(plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.7))
         iso3 = representatives[country_key]['iso3']
         if country_key == 'min':
-            legend_labels.append(f'{iso3} (most hurt)')
+            legend_labels.append(f'{iso3} (min)')
         elif country_key == 'max':
-            legend_labels.append(f'{iso3} (most helped)')
+            legend_labels.append(f'{iso3} (max)')
         elif country_key == 5:
-            legend_labels.append(f'{iso3} (P5, hurt)')
+            legend_labels.append(f'{iso3} (P5)')
         elif country_key == 95:
-            legend_labels.append(f'{iso3} (P95, helped)')
+            legend_labels.append(f'{iso3} (P95)')
         else:
             legend_labels.append(f'{iso3} (P{country_key})')
     ax.legend(legend_handles, legend_labels, loc='best', fontsize=8)
@@ -590,7 +625,15 @@ def plot_cumulative_effects_by_approach(
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create multi-panel plot showing cumulative effect distribution across countries.
+    """Create 3x3 multi-panel plot showing cumulative effect distribution across countries.
+
+    Layout:
+        Rows = response functions (1=quadratic, 2=piecewise, 3=persistence)
+        Columns = methods (J=Joint, P=Polynomial, L=LOESS)
+
+        Row 0: Approach1J, Approach1P, Approach1L
+        Row 1: Approach2J, Approach2P, Approach2L
+        Row 2: Approach3J, Approach3P, Approach3L
 
     Each panel shows one approach with:
     - 90% range (5th-95th percentile) as light shading
@@ -604,9 +647,17 @@ def plot_cumulative_effects_by_approach(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    # Check for missing approaches (use point estimate approaches for this plot)
+    # 3x3 grid: rows = response functions (1,2,3), columns = methods (J,P,L)
+    approach_order = [
+        ['Approach1J', 'Approach1P', 'Approach1L'],
+        ['Approach2J', 'Approach2P', 'Approach2L'],
+        ['Approach3J', 'Approach3P', 'Approach3L'],
+    ]
+
+    # Check for missing approaches
     available_approaches = set(df['approach'].unique())
-    missing_approaches = [a for a in CENTRAL_APPROACHES_POINT if a not in available_approaches]
+    all_approaches = [a for row in approach_order for a in row]
+    missing_approaches = [a for a in all_approaches if a not in available_approaches]
     if missing_approaches:
         raise ValueError(
             f"Missing approaches in data: {missing_approaches}. "
@@ -614,84 +665,102 @@ def plot_cumulative_effects_by_approach(
             f"You may need to re-run run_bootstrap.py to generate data for all approaches."
         )
 
-    n_approaches = len(CENTRAL_APPROACHES_POINT)
-    fig, axes = plt.subplots(1, n_approaches, figsize=(3 * n_approaches, 4), sharey=True)
+    fig, axes = plt.subplots(3, 3, figsize=(12, 10), sharey=True, sharex=True)
 
-    for ax, approach in zip(axes, CENTRAL_APPROACHES_POINT):
-        # Filter to this approach
-        df_approach = df[df['approach'] == approach]
+    # Row and column labels
+    row_labels = ['Quadratic', 'Piecewise', 'Persistence']
+    col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
-        # Get unique years
-        years = sorted(df_approach['year'].unique())
+    for row_idx, row_approaches in enumerate(approach_order):
+        for col_idx, approach in enumerate(row_approaches):
+            ax = axes[row_idx, col_idx]
 
-        # Calculate percentiles across countries for each year
-        # h_T_delta_cum is already in log space (sum of log changes), use directly
-        percentiles_by_year = []
-        for year in years:
-            values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
-            percentiles_by_year.append({
-                'year': year,
-                'p5': np.percentile(values, 5),
-                'p25': np.percentile(values, 25),
-                'p50': np.percentile(values, 50),
-                'p75': np.percentile(values, 75),
-                'p95': np.percentile(values, 95),
-                'min': np.min(values),
-                'max': np.max(values),
-            })
+            # Filter to this approach
+            df_approach = df[df['approach'] == approach]
 
-        df_pct = pd.DataFrame(percentiles_by_year)
+            # Get unique years
+            years = sorted(df_approach['year'].unique())
 
-        color = APPROACH_COLORS.get(approach, 'gray')
+            # Calculate percentiles across countries for each year
+            # h_T_delta_cum is already in log space (sum of log changes), use directly
+            percentiles_by_year = []
+            for year in years:
+                values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
+                percentiles_by_year.append({
+                    'year': year,
+                    'p5': np.percentile(values, 5),
+                    'p25': np.percentile(values, 25),
+                    'p50': np.percentile(values, 50),
+                    'p75': np.percentile(values, 75),
+                    'p95': np.percentile(values, 95),
+                    'min': np.min(values),
+                    'max': np.max(values),
+                })
 
-        # Values are already in log space, use directly
-        p5 = df_pct['p5']
-        p25 = df_pct['p25']
-        p50 = df_pct['p50']
-        p75 = df_pct['p75']
-        p95 = df_pct['p95']
-        min_val = df_pct['min']
-        max_val = df_pct['max']
+            df_pct = pd.DataFrame(percentiles_by_year)
 
-        # Min/max lines (thin)
-        ax.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
-        ax.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
+            color = APPROACH_COLORS.get(approach, 'gray')
 
-        # 90% range (lighter)
-        ax.fill_between(
-            df_pct['year'], p5, p95,
-            alpha=0.2, color=color, label='90% range'
-        )
+            # Values are already in log space, use directly
+            p5 = df_pct['p5']
+            p25 = df_pct['p25']
+            p50 = df_pct['p50']
+            p75 = df_pct['p75']
+            p95 = df_pct['p95']
+            min_val = df_pct['min']
+            max_val = df_pct['max']
 
-        # 50% range (darker)
-        ax.fill_between(
-            df_pct['year'], p25, p75,
-            alpha=0.4, color=color, label='50% range'
-        )
+            # Min/max lines (thin)
+            ax.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
+            ax.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
 
-        # Median line
-        ax.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
+            # 90% range (lighter)
+            ax.fill_between(
+                df_pct['year'], p5, p95,
+                alpha=0.2, color=color, label='90% range'
+            )
 
-        # Formatting
-        ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
-        ax.set_xlabel('Year')
-        ax.set_title(approach)
+            # 50% range (darker)
+            ax.fill_between(
+                df_pct['year'], p25, p75,
+                alpha=0.4, color=color, label='50% range'
+            )
 
-        if ax == axes[0]:
-            ax.set_ylabel('Cumulative Climate Effect')
-            ax.legend(loc='lower left', fontsize=7)
+            # Median line
+            ax.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
+
+            # Formatting
+            ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+            ax.set_title(approach, fontsize=10)
+
+            # Column headers (top row only)
+            if row_idx == 0:
+                ax.text(0.5, 1.15, col_labels[col_idx], transform=ax.transAxes,
+                        ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+            # Row labels (left column only)
+            if col_idx == 0:
+                ax.set_ylabel(f'{row_labels[row_idx]}\nCumulative Effect', fontsize=9)
+
+            # X-axis label (bottom row only)
+            if row_idx == 2:
+                ax.set_xlabel('Year')
+
+            # Legend (top-left panel only)
+            if row_idx == 0 and col_idx == 0:
+                ax.legend(loc='lower left', fontsize=7)
 
     # Set y-axis limits to -66.67% to 150% (symmetric in log space)
     y_min = log_transform(-200/3)  # -66.67%
     y_max = log_transform(150)
-    for ax in axes:
+    for ax in axes.flat:
         ax.set_ylim(y_min, y_max)
 
     # Set y-axis ticks at nice percentage values (in log-transformed positions)
     tick_pcts = [-50, -25, 0, 25, 50, 100]
     tick_positions = [log_transform(p) for p in tick_pcts]
     tick_labels = [f'{p}%' for p in tick_pcts]
-    for ax in axes:
+    for ax in axes.flat:
         ax.set_yticks(tick_positions)
         ax.set_yticklabels(tick_labels)
 
@@ -714,12 +783,12 @@ def plot_cumulative_effects_Approach3L(
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create 2-panel plot for Approach3L with symmetric y-axis auto-scaled to data.
+    """Create 2x3 panel plot for persistence approaches (Approach3J, Approach3P, Approach3L).
 
-    Left panel: Cumulative effects by year (all countries)
-    Right panel: Box-and-whisker plot for representative countries (2022)
-
-    Y-axis is symmetric around 0% and just large enough to show all data.
+    Layout:
+        Top row: Cumulative effects by year (all countries) for each approach
+        Bottom row: Box-and-whisker plot for representative countries (2022) for each approach
+        Columns: J, P, L methods
 
     Args:
         df_all_countries: DataFrame with cumulative effects for all countries (point estimate)
@@ -728,160 +797,166 @@ def plot_cumulative_effects_Approach3L(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    approach = 'Approach3L'
+    approaches = ['Approach3J', 'Approach3P', 'Approach3L']
+    col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
-    # Filter to Approach3L
-    df_approach = df_all_countries[df_all_countries['approach'] == approach]
-
-    if len(df_approach) == 0:
-        print(f"      Warning: No data for {approach}, skipping Approach3L plot")
+    # Check for missing approaches
+    available = set(df_all_countries['approach'].unique())
+    missing = [a for a in approaches if a not in available]
+    if missing:
+        print(f"      Warning: Missing approaches {missing}, skipping persistence plot")
         return
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    ax_left, ax_right = axes
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
 
-    # ==================== LEFT PANEL: Cumulative effects by year ====================
-    # Get unique years
-    years = sorted(df_approach['year'].unique())
-
-    # Calculate percentiles across countries for each year
-    percentiles_by_year = []
-    for year in years:
-        values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
-        percentiles_by_year.append({
-            'year': year,
-            'p5': np.percentile(values, 5),
-            'p25': np.percentile(values, 25),
-            'p50': np.percentile(values, 50),
-            'p75': np.percentile(values, 75),
-            'p95': np.percentile(values, 95),
-            'min': np.min(values),
-            'max': np.max(values),
-        })
-
-    df_pct = pd.DataFrame(percentiles_by_year)
-
-    color = APPROACH_COLORS.get(approach, 'cyan')
-
-    # Values are already in log space
-    p5 = df_pct['p5']
-    p25 = df_pct['p25']
-    p50 = df_pct['p50']
-    p75 = df_pct['p75']
-    p95 = df_pct['p95']
-    min_val = df_pct['min']
-    max_val = df_pct['max']
-
-    # Min/max lines (thin)
-    ax_left.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
-    ax_left.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
-
-    # 90% range (lighter)
-    ax_left.fill_between(
-        df_pct['year'], p5, p95,
-        alpha=0.2, color=color, label='90% range'
-    )
-
-    # 50% range (darker)
-    ax_left.fill_between(
-        df_pct['year'], p25, p75,
-        alpha=0.4, color=color, label='50% range'
-    )
-
-    # Median line
-    ax_left.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
-
-    # Formatting
-    ax_left.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
-    ax_left.set_xlabel('Year')
-    ax_left.set_ylabel('Cumulative Climate Effect')
-    ax_left.set_title('Approach 4: Cumulative Effects by Year')
-    ax_left.legend(loc='lower left', fontsize=7)
-
-    # ==================== RIGHT PANEL: Box-and-whisker for representative countries ====================
-    # Get ordered country keys
+    # Get ordered country keys for bottom row
     country_keys = get_country_ordering(representatives)
     n_countries = len(country_keys)
 
-    # Filter to year 2022 and Approach3L
-    df_2022 = df_representative[(df_representative['year'] == 2022) & (df_representative['approach'] == approach)].copy()
+    for col_idx, approach in enumerate(approaches):
+        ax_top = axes[0, col_idx]
+        ax_bottom = axes[1, col_idx]
 
-    box_width = 0.7
+        # Filter to this approach
+        df_approach = df_all_countries[df_all_countries['approach'] == approach]
+        color = APPROACH_COLORS.get(approach, 'gray')
 
-    for j, country_key in enumerate(country_keys):
-        iso3 = representatives[country_key]['iso3']
+        # ==================== TOP ROW: Cumulative effects by year ====================
+        years = sorted(df_approach['year'].unique())
 
-        # Get bootstrap samples (iterations 0-999) for this country
-        mask = (df_2022['iso3'] == iso3) & (df_2022['iteration'] >= 0)
-        bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
+        # Calculate percentiles across countries for each year
+        percentiles_by_year = []
+        for year in years:
+            values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
+            percentiles_by_year.append({
+                'year': year,
+                'p5': np.percentile(values, 5),
+                'p25': np.percentile(values, 25),
+                'p50': np.percentile(values, 50),
+                'p75': np.percentile(values, 75),
+                'p95': np.percentile(values, 95),
+                'min': np.min(values),
+                'max': np.max(values),
+            })
 
-        # Get point estimate (iteration -1)
-        mask_point = (df_2022['iso3'] == iso3) & (df_2022['iteration'] == -1)
-        point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
-        point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
+        df_pct = pd.DataFrame(percentiles_by_year)
 
-        # Draw box - color by country
-        box_color = COUNTRY_COLORS.get(country_key, 'gray')
-        if len(bootstrap_values) > 0:
-            box = ax_right.boxplot(
-                [bootstrap_values],
-                positions=[j],
-                widths=box_width * 0.8,
-                patch_artist=True,
-                showfliers=False,
-                whis=[5, 95],
-                medianprops=dict(color='black', linewidth=1),
-            )
+        # Values are already in log space
+        p5 = df_pct['p5']
+        p25 = df_pct['p25']
+        p50 = df_pct['p50']
+        p75 = df_pct['p75']
+        p95 = df_pct['p95']
+        min_val = df_pct['min']
+        max_val = df_pct['max']
 
-            for patch in box['boxes']:
-                patch.set_facecolor(box_color)
-                patch.set_alpha(0.7)
+        # Min/max lines (thin)
+        ax_top.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
+        ax_top.plot(df_pct['year'], max_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5)
 
-        # Add point estimate as diamond marker
-        if not np.isnan(point_estimate):
-            ax_right.plot(j, point_estimate, 'd', color='white', markersize=6,
-                          markeredgecolor='black', markeredgewidth=1, zorder=10)
+        # 90% range (lighter)
+        ax_top.fill_between(
+            df_pct['year'], p5, p95,
+            alpha=0.2, color=color, label='90% range'
+        )
 
-    # X-axis labels (countries)
-    # Labels clarify that percentiles are of the cumulative effect distribution:
-    # - Low percentiles (P5) = most negative effect = most hurt by climate
-    # - High percentiles (P95) = most positive effect = most helped by climate
-    x_labels = []
-    for country_key in country_keys:
-        iso3 = representatives[country_key]['iso3']
-        if country_key == 'min':
-            x_labels.append(f'{iso3}\n(most hurt)')
-        elif country_key == 'max':
-            x_labels.append(f'{iso3}\n(most helped)')
-        elif country_key == 5:
-            x_labels.append(f'{iso3}\n(P5, hurt)')
-        elif country_key == 95:
-            x_labels.append(f'{iso3}\n(P95, helped)')
-        else:
-            x_labels.append(f'{iso3}\n(P{country_key})')
+        # 50% range (darker)
+        ax_top.fill_between(
+            df_pct['year'], p25, p75,
+            alpha=0.4, color=color, label='50% range'
+        )
 
-    ax_right.set_xticks(range(n_countries))
-    ax_right.set_xticklabels(x_labels, fontsize=8)
-    ax_right.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
-    ax_right.set_ylabel('Cumulative Climate Effect (2022)')
-    ax_right.set_title('Approach 4: Representative Countries')
+        # Median line
+        ax_top.plot(df_pct['year'], p50, color=color, linewidth=2, label='Median')
 
-    # ==================== Separate y-axis scaling for each panel ====================
-    # Left panel: -3% to +6%, ticks every 1%
-    left_tick_pcts = list(range(-3, 7, 1))
-    left_tick_positions = [log_transform(p) for p in left_tick_pcts]
-    left_tick_labels = [f'{p}%' for p in left_tick_pcts]
-    ax_left.set_ylim(log_transform(-3), log_transform(6))
-    ax_left.set_yticks(left_tick_positions)
-    ax_left.set_yticklabels(left_tick_labels)
+        # Formatting
+        ax_top.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+        ax_top.set_title(f'{approach}\n{col_labels[col_idx]}', fontsize=10)
 
-    # Right panel: -20% to +40%, ticks every 10%
-    right_tick_pcts = list(range(-20, 41, 10))
-    right_tick_positions = [log_transform(p) for p in right_tick_pcts]
-    right_tick_labels = [f'{p}%' for p in right_tick_pcts]
-    ax_right.set_ylim(log_transform(-20), log_transform(40))
-    ax_right.set_yticks(right_tick_positions)
-    ax_right.set_yticklabels(right_tick_labels)
+        if col_idx == 0:
+            ax_top.set_ylabel('Cumulative Effect')
+            ax_top.legend(loc='upper left', fontsize=7)
+
+        # ==================== BOTTOM ROW: Box-and-whisker for representative countries ====================
+        # Filter to year 2022 and this approach
+        df_2022 = df_representative[(df_representative['year'] == 2022) & (df_representative['approach'] == approach)].copy()
+
+        box_width = 0.7
+
+        for j, country_key in enumerate(country_keys):
+            iso3 = representatives[country_key]['iso3']
+
+            # Get bootstrap samples (iterations 0-999) for this country
+            mask = (df_2022['iso3'] == iso3) & (df_2022['iteration'] >= 0)
+            bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
+
+            # Get point estimate (iteration -1)
+            mask_point = (df_2022['iso3'] == iso3) & (df_2022['iteration'] == -1)
+            point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
+
+            # Draw box - color by country
+            box_color = COUNTRY_COLORS.get(country_key, 'gray')
+            if len(bootstrap_values) > 0:
+                box = ax_bottom.boxplot(
+                    [bootstrap_values],
+                    positions=[j],
+                    widths=box_width * 0.8,
+                    patch_artist=True,
+                    showfliers=False,
+                    whis=[5, 95],
+                    medianprops=dict(color='black', linewidth=1),
+                )
+
+                for patch in box['boxes']:
+                    patch.set_facecolor(box_color)
+                    patch.set_alpha(0.7)
+
+            # Add point estimate as diamond marker
+            if not np.isnan(point_estimate):
+                ax_bottom.plot(j, point_estimate, 'd', color='white', markersize=6,
+                              markeredgecolor='black', markeredgewidth=1, zorder=10)
+
+        # X-axis labels (countries)
+        x_labels = []
+        for country_key in country_keys:
+            iso3 = representatives[country_key]['iso3']
+            if country_key == 'min':
+                x_labels.append(f'{iso3}\n(min)')
+            elif country_key == 'max':
+                x_labels.append(f'{iso3}\n(max)')
+            elif country_key == 5:
+                x_labels.append(f'{iso3}\n(P5)')
+            elif country_key == 95:
+                x_labels.append(f'{iso3}\n(P95)')
+            else:
+                x_labels.append(f'{iso3}\n(P{country_key})')
+
+        ax_bottom.set_xticks(range(n_countries))
+        ax_bottom.set_xticklabels(x_labels, fontsize=7)
+        ax_bottom.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+
+        if col_idx == 0:
+            ax_bottom.set_ylabel('Cumulative Effect (2022)')
+
+    # ==================== Y-axis scaling ====================
+    # Top row: -3% to +6%, ticks every 1%
+    top_tick_pcts = list(range(-3, 7, 1))
+    top_tick_positions = [log_transform(p) for p in top_tick_pcts]
+    top_tick_labels = [f'{p}%' for p in top_tick_pcts]
+    for ax in axes[0, :]:
+        ax.set_ylim(log_transform(-3), log_transform(6))
+        ax.set_yticks(top_tick_positions)
+        ax.set_yticklabels(top_tick_labels)
+
+    # Bottom row: -6% to +12%, ticks every 2%
+    bottom_tick_pcts = list(range(-6, 13, 2))
+    bottom_tick_positions = [log_transform(p) for p in bottom_tick_pcts]
+    bottom_tick_labels = [f'{p}%' for p in bottom_tick_pcts]
+    for ax in axes[1, :]:
+        ax.set_ylim(log_transform(-6), log_transform(12))
+        ax.set_yticks(bottom_tick_positions)
+        ax.set_yticklabels(bottom_tick_labels)
 
     plt.tight_layout()
 
@@ -889,7 +964,7 @@ def plot_cumulative_effects_Approach3L(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_Approach3L.pdf'
+    output_path = output_dir / 'cumulative_effects_Approach3_2x3.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
@@ -1199,9 +1274,9 @@ def main():
     for key in country_order:
         info = representatives[key]
         if key == 'min':
-            label = "Min (most hurt)"
+            label = "Min"
         elif key == 'max':
-            label = "Max (most helped)"
+            label = "Max"
         else:
             label = f"P{key:2d}"
         pct = inv_log_transform(info['value'])
