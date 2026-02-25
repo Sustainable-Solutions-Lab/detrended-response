@@ -17,6 +17,8 @@ import pycountry
 
 # Default coefficients to analyze for each method type
 STANDARD_COEFFICIENTS = ['h1', 'h2', 'T_opt']
+# Persistence models add h4 (decay parameter)
+PERSISTENCE_COEFFICIENTS = ['h1', 'h2', 'h4', 'T_opt']
 # Null models have h1=h2=0 by construction, only r_squared varies
 NULL_MODEL_COEFFICIENTS = ['r_squared']
 APPROACH_COEFFICIENTS = {
@@ -27,8 +29,15 @@ APPROACH_COEFFICIENTS = {
     # Null models (h1=h2=0, no climate response)
     'Approach0J': NULL_MODEL_COEFFICIENTS,
     'Approach0P': NULL_MODEL_COEFFICIENTS,
-    # Approach2L: h2 (below T_opt), h4 (above T_opt), T_opt
+    'Approach0L': NULL_MODEL_COEFFICIENTS,
+    # Piecewise methods: h2 (below T_opt), h4 (above T_opt), T_opt
+    'Approach2J': ['h2', 'h4', 'T_opt'],
+    'Approach2P': ['h2', 'h4', 'T_opt'],
     'Approach2L': ['h2', 'h4', 'T_opt'],
+    # Persistence methods: h1, h2, h4 (decay parameter), T_opt
+    'Approach3J': PERSISTENCE_COEFFICIENTS,
+    'Approach3P': PERSISTENCE_COEFFICIENTS,
+    'Approach3L': PERSISTENCE_COEFFICIENTS,
 }
 
 
