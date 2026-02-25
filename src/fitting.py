@@ -488,6 +488,44 @@ def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
     return T_linear_first
 
 
+def compute_T_linear_trend(data: AnalysisData) -> np.ndarray:
+    """Compute linear temperature trend evaluated at each observation's time point.
+
+    For each country, fits a linear OLS regression T = a + b*t to all observations,
+    then evaluates T_trend = a + b*t at each time point. This provides a smoothed
+    temperature trend for variance attribution in joint persistence models.
+
+    Returns an array where each observation has its country's T_linear(t).
+
+    Args:
+        data: AnalysisData object
+
+    Returns:
+        Array of shape (n_obs,) with T_linear(t) for each observation
+    """
+    T_linear_trend = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        # Get observation indices for this country
+        country_mask = data.country_idx == c
+        country_indices = np.where(country_mask)[0]
+
+        # Get time and temperature for this country
+        t_country = data.time[country_indices]
+        T_country = data.temp[country_indices]
+
+        # Fit linear OLS: T = a + b*t
+        n_c = len(t_country)
+        X_lin = np.column_stack([np.ones(n_c), t_country])
+        coeffs, _, _, _ = linalg.lstsq(X_lin, T_country)
+        a, b = coeffs
+
+        # Evaluate T_linear at each time point
+        T_linear_trend[country_mask] = a + b * t_country
+
+    return T_linear_trend
+
+
 @dataclass
 class FitResult:
     """Container for regression results."""
@@ -1689,11 +1727,13 @@ def fit_Approach3L_persistence_decay(
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    # h(T) at full temperature (without persistence correction for baseline)
-    h_T_full = h1 * T + h2 * T ** 2
-    h_T_trend_full = h1 * T_trend + h2 * T_trend ** 2
-    Delta_u = h_conv_values  # Effective climate response increment
-    v = h_T_trend_full       # Baseline at trend temperature
+    # Delta_u = h_conv(T) - h_conv(T_trend), v = h_conv(T_trend)
+    # So Delta_u + v = h_conv(T) = total persistence-weighted climate response
+    Delta_u = h_conv_values  # h_conv(T) - h_conv(T_trend)
+    # Compute h_conv at trend temperature (persistence-weighted baseline)
+    h_conv_T_trend = h1 * (T_trend - h4_opt * A_T_trend_lag - correction_T_trend) \
+                   + h2 * (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
+    v = h_conv_T_trend
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
@@ -2120,9 +2160,10 @@ def fit_Approach3J_persistence_conjoined(
     var_decomp = compute_variance_decomposition(components, y, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    # For conjoined approach: Delta_u = 0, v = h_conv
-    Delta_u = np.zeros(n_obs)
-    v = h_conv_values
+    # For joint approaches: Delta_u = full climate response, v = 0
+    # This ensures epsilon = OLS residual and Cov(h, epsilon) ≈ 0
+    Delta_u = h_conv_values  # Persistence-modified climate response
+    v = np.zeros(n_obs)  # No separate baseline for joint approach
     epsilon = y - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
 
@@ -2915,10 +2956,13 @@ def fit_Approach3P_persistence_linear_detrend(
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
 
     # Compute variance attribution (5-component with covariance allocation)
-    h_T_full = h1 * T + h2 * T ** 2
-    h_T_trend_full = h1 * T_trend + h2 * T_trend ** 2
-    Delta_u = h_conv_values  # Effective climate response increment
-    v = h_T_trend_full       # Baseline at trend temperature
+    # Delta_u = h_conv(T) - h_conv(T_trend), v = h_conv(T_trend)
+    # So Delta_u + v = h_conv(T) = total persistence-weighted climate response
+    Delta_u = h_conv_values  # h_conv(T) - h_conv(T_trend)
+    # Compute h_conv at trend temperature (persistence-weighted baseline)
+    h_conv_T_trend = h1 * (T_trend - h4_opt * A_T_trend_lag - correction_T_trend) \
+                   + h2 * (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
+    v = h_conv_T_trend
     epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 

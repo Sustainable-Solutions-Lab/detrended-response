@@ -680,19 +680,20 @@ def format_small_number(value: float) -> str:
     """Format number with adaptive precision for small values.
 
     Default: 3 decimal places (e.g., 0.123)
-    If |value| < 0.0005 (would round to 0.000):
+    If |value| < 0.001 (would round to 0.000):
       - If |value| > 1e-6: Show enough digits to display first non-zero digit
-      - If |value| <= 1e-6: Show "0.000"
+      - If |value| <= 1e-6: Show in scientific notation with 1 significant digit (e.g., 6e-9)
     """
-    if abs(value) < 0.0005:  # Would round to 0.000
+    if value == 0:
+        return "0.000"
+    if abs(value) < 0.001:  # Would round to 0.000
         if abs(value) > 1e-6:
             # Find first significant digit position
-            if value == 0:
-                return "0.000"
             digits = -int(math.floor(math.log10(abs(value))))
             return f"{value:.{digits}f}"
         else:
-            return "0.000"
+            # Scientific notation with 1 significant digit
+            return f"{value:.0e}"
     return f"{value:.3f}"
 
 
