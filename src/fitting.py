@@ -907,9 +907,12 @@ def fit_Approach1P_precomputed_k(
     h_T_trend = h1 * T_trend + h2 * T_trend ** 2
     Delta_u = h_T - h_T_trend
     v = h_T_trend
-    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    # Compute ε as remainder: ε = Δy - (Δu + v + j_adjusted + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
         approach="Approach1P: Quadratic (Polynomial Detrending)",
@@ -1249,9 +1252,12 @@ def fit_Approach1L_loess(
     h_T_trend = h1 * T_trend + h2 * T_trend ** 2
     Delta_u = h_T - h_T_trend
     v = h_T_trend
-    # Compute ε as remainder: ε = Δy - (Δu + v + j + k) for exact decomposition
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    # Compute ε as remainder: ε = Δy - (Δu + v + j_adjusted + k) for exact decomposition
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
         approach="Approach1L: Quadratic (LOESS Detrending)",
@@ -1547,8 +1553,11 @@ def fit_Approach2L_piecewise(
     # Compute variance attribution (5-component with covariance allocation)
     Delta_u = h_values  # h(T) - h(T_trend)
     v = h_of_T_trend    # h(T_trend)
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8(
         approach="Approach2L: Piecewise (LOESS Detrending)",
@@ -1734,8 +1743,11 @@ def fit_Approach3L_persistence_decay(
     h_conv_T_trend = h1 * (T_trend - h4_opt * A_T_trend_lag - correction_T_trend) \
                    + h2 * (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
     v = h_conv_T_trend
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach4(
         approach="Approach3L: Persistence (LOESS Detrending)",
@@ -2758,8 +2770,11 @@ def fit_Approach2P_piecewise_linear_detrend(
     # Compute variance attribution (5-component with covariance allocation)
     Delta_u = h_values  # h(T) - h(T_trend)
     v = h_of_T_trend    # h(T_trend)
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8(
         approach="Approach2P: Piecewise (Polynomial Detrending)",
@@ -2963,8 +2978,11 @@ def fit_Approach3P_persistence_linear_detrend(
     h_conv_T_trend = h1 * (T_trend - h4_opt * A_T_trend_lag - correction_T_trend) \
                    + h2 * (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
     v = h_conv_T_trend
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
+    # Adjust j_trend by subtracting climate response to temperature trend
+    # This makes j_trend_adjusted comparable to Approach J's j (both net of climate trend response)
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach4(
         approach="Approach3P: Persistence (Polynomial Detrending)",
