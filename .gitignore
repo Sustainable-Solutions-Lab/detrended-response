@@ -43,4 +43,6 @@ data/output/*
 !data/output/reference/
 # some reference files are large and can be regenerated, so we ignore it even in the reference directory
 data/output/reference/bootstrap*/bootstrap_h_values.csv
+data/output/reference/bootstrap*/bootstrap_k_samples.csv
+data/output/reference/bootstrap*/bootstrap_h_baselines.csv
 data/output/reference/cumulative*/cumulative_h_values_summary.csv
