@@ -210,7 +210,7 @@ def generate_variance_decomposition_table(
     # Default approaches to include (publication set)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['Approach1J', 'Approach0J', 'Approach1P', 'Approach0P', 'Approach1L', 'Approach2L', 'Approach3L']
+        approaches = ['Approach QJ', 'Approach NJ', 'Approach QP', 'Approach NP', 'Approach QL', 'Approach PL', 'Approach DL']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in var_attrib_df['approach'].values]
@@ -586,7 +586,7 @@ def generate_bootstrap_comparison_table(
     # Default approaches to include (publication set, same as variance decomposition table)
     # Only includes approaches, not exploratory methods
     if approaches is None:
-        approaches = ['Approach1J', 'Approach0J', 'Approach1P', 'Approach0P', 'Approach1L', 'Approach2L', 'Approach3L']
+        approaches = ['Approach QJ', 'Approach NJ', 'Approach QP', 'Approach NP', 'Approach QL', 'Approach PL', 'Approach DL']
 
     # Filter to approaches that exist in the data
     available_approaches = [a for a in approaches if a in summary_df['approach'].values]
@@ -734,22 +734,22 @@ def generate_variance_decomposition_by_response(
     # Define response type groups
     response_types = {
         'Null': {
-            'approaches': ['Approach0J', 'Approach0P', 'Approach0L'],
+            'approaches': ['Approach NJ', 'Approach NP', 'Approach NL'],
             'description': '—',  # Em-dash for null model (no response)
             'latex_description': '---',  # LaTeX em-dash
         },
         'Quadratic': {
-            'approaches': ['Approach1J', 'Approach1P', 'Approach1L'],
+            'approaches': ['Approach QJ', 'Approach QP', 'Approach QL'],
             'description': 'Quadratic',
             'latex_description': r'$h_1 T + h_2 T^2$',
         },
         'Piecewise': {
-            'approaches': ['Approach2J', 'Approach2P', 'Approach2L'],
+            'approaches': ['Approach PJ', 'Approach PP', 'Approach PL'],
             'description': 'Piecewise quadratic',
             'latex_description': r'Piecewise quadratic',
         },
         'Persistence': {
-            'approaches': ['Approach3J', 'Approach3P', 'Approach3L'],
+            'approaches': ['Approach DJ', 'Approach DP', 'Approach DL'],
             'description': 'Quadratic with decay',
             'latex_description': r'Quadratic with decay',
         },
@@ -1009,6 +1009,473 @@ def generate_variance_decomposition_by_response(
         print(f"      [Tables] Saved variance_decomposition_{response_type.lower()}.tex")
 
 
+def generate_covariance_tables(
+    bootstrap_results: dict,
+    output_dir: Path,
+) -> None:
+    """Generate separate covariance tables for J vs P/L approaches.
+
+    J approaches (joint estimation) have 4 components: h(T), j, k, ε
+    P/L approaches (sequential detrending) have 5 components: k_mean, GDP_trend, h(T), h(T_trend), ε
+
+    The identity for P/L is: Δy = k_mean + GDP_trend + h(T) - h(T_trend) + ε
+    Note: h(T_trend) enters with a negative sign, affecting covariance contributions.
+
+    Creates:
+    - covariance_table_J.xlsx / .csv: 4×4 covariance matrix for J approaches
+    - covariance_table_PL.xlsx / .csv: 5×5 covariance matrix for P/L approaches
+
+    Parameters
+    ----------
+    bootstrap_results : dict
+        Dictionary from load_bootstrap_results() containing:
+        - 'bootstrap_var_attrib': DataFrame with variance attribution samples
+    output_dir : Path
+        Directory to save generated tables
+    """
+    var_attrib_df = bootstrap_results.get('bootstrap_var_attrib')
+
+    if var_attrib_df is None:
+        print("      [Tables] WARNING: bootstrap_var_attrib not loaded, skipping covariance tables")
+        return
+
+    # Define approach groups
+    j_approaches = ['Approach NJ', 'Approach QJ', 'Approach PJ', 'Approach DJ']
+    pl_approaches = ['Approach NP', 'Approach NL', 'Approach QP', 'Approach QL',
+                     'Approach PP', 'Approach PL', 'Approach DP', 'Approach DL']
+
+    # Filter to approaches that exist in the data
+    available_j = [a for a in j_approaches if a in var_attrib_df['approach'].values]
+    available_pl = [a for a in pl_approaches if a in var_attrib_df['approach'].values]
+
+    percentiles = [5, 25, 50, 75, 95]
+
+    def compute_stats(samples: np.ndarray, point_estimate: float = None) -> dict:
+        """Compute percentiles from samples."""
+        valid_samples = samples[~np.isnan(samples)]
+        if len(valid_samples) == 0:
+            return {'point': np.nan, 'p5': np.nan, 'p25': np.nan, 'p50': np.nan, 'p75': np.nan, 'p95': np.nan}
+        return {
+            'point': point_estimate if point_estimate is not None else np.median(valid_samples),
+            'p5': np.percentile(valid_samples, 5),
+            'p25': np.percentile(valid_samples, 25),
+            'p50': np.percentile(valid_samples, 50),
+            'p75': np.percentile(valid_samples, 75),
+            'p95': np.percentile(valid_samples, 95),
+        }
+
+    def get_raw_samples(approach_data: pd.DataFrame, key: str) -> np.ndarray:
+        """Get raw Sigma samples from data."""
+        if key in approach_data.columns:
+            return approach_data[key].values
+        return None
+
+    # =========================================================================
+    # J-Approach Table: 4 components (h(T), j, k, ε)
+    # Components: h(T) = Delta_u + v (since for J, Delta_u should be 0 anyway)
+    # =========================================================================
+    if available_j:
+        # Define J metrics - 4 variances + 6 covariances = 10 entries
+        j_variance_metrics = [
+            ('Sigma_h_h', 'Var(h(T))/Var(Δy)', 1),  # Already combined
+            ('Sigma_j_j', 'Var(j)/Var(Δy)', 1),
+            ('Sigma_k_k', 'Var(k)/Var(Δy)', 1),
+            ('Sigma_epsilon_epsilon', 'Var(ε)/Var(Δy)', 1),
+        ]
+        j_covariance_metrics = [
+            ('Sigma_h_j', '2Cov(h(T),j)/Var(Δy)', 2),  # Already combined
+            ('Sigma_h_k', '2Cov(h(T),k)/Var(Δy)', 2),  # Already combined
+            ('Sigma_h_epsilon', '2Cov(h(T),ε)/Var(Δy)', 2),  # Already combined
+            ('Sigma_j_k', '2Cov(j,k)/Var(Δy)', 2),
+            ('Sigma_j_epsilon', '2Cov(j,ε)/Var(Δy)', 2),
+            ('Sigma_k_epsilon', '2Cov(k,ε)/Var(Δy)', 2),
+        ]
+
+        def get_j_metric_samples(approach_data: pd.DataFrame, key: str) -> np.ndarray:
+            """Get J-approach metric samples, computing combined h(T) terms if needed."""
+            if key in approach_data.columns:
+                return approach_data[key].values
+            # Compute combined h(T) = Delta_u + v
+            if key == 'Sigma_h_h':
+                if all(k in approach_data.columns for k in ['Sigma_Delta_u_Delta_u', 'Sigma_v_v', 'Sigma_Delta_u_v']):
+                    return (approach_data['Sigma_Delta_u_Delta_u'].values +
+                            approach_data['Sigma_v_v'].values +
+                            2 * approach_data['Sigma_Delta_u_v'].values)
+            elif key == 'Sigma_h_j':
+                if all(k in approach_data.columns for k in ['Sigma_Delta_u_j', 'Sigma_v_j']):
+                    return approach_data['Sigma_Delta_u_j'].values + approach_data['Sigma_v_j'].values
+            elif key == 'Sigma_h_k':
+                if all(k in approach_data.columns for k in ['Sigma_Delta_u_k', 'Sigma_v_k']):
+                    return approach_data['Sigma_Delta_u_k'].values + approach_data['Sigma_v_k'].values
+            elif key == 'Sigma_h_epsilon':
+                if all(k in approach_data.columns for k in ['Sigma_Delta_u_epsilon', 'Sigma_v_epsilon']):
+                    return approach_data['Sigma_Delta_u_epsilon'].values + approach_data['Sigma_v_epsilon'].values
+            return None
+
+        rows_j = []
+        all_j_metrics = j_variance_metrics + j_covariance_metrics
+
+        for key, label, multiplier in all_j_metrics:
+            row = {'Metric': label}
+            for approach in available_j:
+                mask = var_attrib_df['approach'] == approach
+                approach_data = var_attrib_df[mask]
+
+                if 'var_dy' not in approach_data.columns:
+                    for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                        row[f'{approach}{suffix}'] = np.nan
+                    continue
+
+                # Get point estimate (iteration -1)
+                point_estimate = None
+                if 'iteration' in approach_data.columns:
+                    point_mask = approach_data['iteration'] == -1
+                    if point_mask.any():
+                        point_data = approach_data[point_mask]
+                        samples = get_j_metric_samples(point_data, key)
+                        if samples is not None and len(samples) > 0:
+                            var_dy = point_data['var_dy'].values[0]
+                            with np.errstate(divide='ignore', invalid='ignore'):
+                                point_estimate = (samples[0] * multiplier) / var_dy
+                            if not np.isfinite(point_estimate):
+                                point_estimate = None
+
+                # Get bootstrap samples (iteration >= 0)
+                bootstrap_mask = approach_data['iteration'] >= 0
+                bootstrap_data = approach_data[bootstrap_mask]
+
+                metric_samples = get_j_metric_samples(bootstrap_data, key)
+                if metric_samples is None:
+                    for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                        row[f'{approach}{suffix}'] = np.nan
+                    continue
+
+                var_dy_samples = bootstrap_data['var_dy'].values
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    normalized = (metric_samples * multiplier) / var_dy_samples
+                normalized = np.where(np.isfinite(normalized), normalized, np.nan)
+
+                stats = compute_stats(normalized, point_estimate=point_estimate)
+                row[f'{approach}_point'] = stats['point']
+                row[f'{approach}_p5'] = stats['p5']
+                row[f'{approach}_p25'] = stats['p25']
+                row[f'{approach}_p50'] = stats['p50']
+                row[f'{approach}_p75'] = stats['p75']
+                row[f'{approach}_p95'] = stats['p95']
+
+            rows_j.append(row)
+
+        # Add Sum row for J approaches
+        sum_row_j = {'Metric': 'Sum'}
+        for approach in available_j:
+            mask = var_attrib_df['approach'] == approach
+            approach_data = var_attrib_df[mask]
+
+            if 'var_dy' not in approach_data.columns:
+                for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                    sum_row_j[f'{approach}{suffix}'] = np.nan
+                continue
+
+            # Point estimate sum
+            point_sum = None
+            if 'iteration' in approach_data.columns:
+                point_mask = approach_data['iteration'] == -1
+                if point_mask.any():
+                    point_data = approach_data[point_mask]
+                    var_dy = point_data['var_dy'].values[0]
+                    total = 0.0
+                    for key, _, mult in all_j_metrics:
+                        samples = get_j_metric_samples(point_data, key)
+                        if samples is not None and len(samples) > 0:
+                            total += samples[0] * mult
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        point_sum = total / var_dy
+                    if not np.isfinite(point_sum):
+                        point_sum = None
+
+            # Bootstrap sums
+            bootstrap_mask = approach_data['iteration'] >= 0
+            bootstrap_data = approach_data[bootstrap_mask]
+            var_dy_samples = bootstrap_data['var_dy'].values
+
+            total_sum = np.zeros(len(bootstrap_data))
+            for key, _, mult in all_j_metrics:
+                samples = get_j_metric_samples(bootstrap_data, key)
+                if samples is not None:
+                    total_sum += samples * mult
+
+            with np.errstate(divide='ignore', invalid='ignore'):
+                sum_normalized = total_sum / var_dy_samples
+            sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
+
+            stats = compute_stats(sum_normalized, point_estimate=point_sum)
+            sum_row_j[f'{approach}_point'] = stats['point']
+            sum_row_j[f'{approach}_p5'] = stats['p5']
+            sum_row_j[f'{approach}_p25'] = stats['p25']
+            sum_row_j[f'{approach}_p50'] = stats['p50']
+            sum_row_j[f'{approach}_p75'] = stats['p75']
+            sum_row_j[f'{approach}_p95'] = stats['p95']
+
+        rows_j.append(sum_row_j)
+
+        df_j = pd.DataFrame(rows_j)
+        xlsx_path_j = output_dir / 'covariance_table_J.xlsx'
+        df_j.to_excel(xlsx_path_j, index=False, sheet_name='J Approaches')
+        csv_path_j = output_dir / 'covariance_table_J.csv'
+        df_j.to_csv(csv_path_j, index=False)
+        print(f"      [Tables] Saved covariance_table_J.xlsx ({len(rows_j)} rows × {len(available_j)} approaches)")
+
+    # =========================================================================
+    # P/L-Approach Table: 5 components (k_mean, GDP_trend, h(T), h(T_trend), ε)
+    # Identity: Δy = k + GDP_trend + h(T) - h(T_trend) + ε
+    # Transformation from stored (Delta_u, v, j_adjusted, k, epsilon):
+    #   k_mean = k (unchanged)
+    #   GDP_trend = j_adjusted + v  (since j_adjusted = j_raw - v)
+    #   h(T) = Delta_u + v
+    #   h(T_trend) = v
+    #   ε = epsilon (unchanged)
+    # Note: h(T_trend) enters with negative sign in identity
+    # =========================================================================
+    if available_pl:
+
+        def get_pl_metric(approach_data: pd.DataFrame, metric_key: str) -> np.ndarray:
+            """Compute P/L metric by transforming from stored components.
+
+            Stored: Delta_u, v, j (j_adjusted), k, epsilon
+            Target: k, GDP_trend (=j+v), h(T) (=Delta_u+v), h(T_trend) (=v), epsilon
+            """
+            # Variance terms
+            if metric_key == 'Var_k':
+                return get_raw_samples(approach_data, 'Sigma_k_k')
+            elif metric_key == 'Var_GDP_trend':
+                # Var(j+v) = Var(j) + Var(v) + 2*Cov(j,v)
+                j_j = get_raw_samples(approach_data, 'Sigma_j_j')
+                v_v = get_raw_samples(approach_data, 'Sigma_v_v')
+                v_j = get_raw_samples(approach_data, 'Sigma_v_j')
+                if j_j is not None and v_v is not None and v_j is not None:
+                    return j_j + v_v + 2 * v_j
+                return None
+            elif metric_key == 'Var_h_T':
+                # Var(Delta_u + v) = Sigma_h_h (already stored)
+                h_h = get_raw_samples(approach_data, 'Sigma_h_h')
+                if h_h is not None:
+                    return h_h
+                # Compute from components
+                du_du = get_raw_samples(approach_data, 'Sigma_Delta_u_Delta_u')
+                v_v = get_raw_samples(approach_data, 'Sigma_v_v')
+                du_v = get_raw_samples(approach_data, 'Sigma_Delta_u_v')
+                if du_du is not None and v_v is not None and du_v is not None:
+                    return du_du + v_v + 2 * du_v
+                return None
+            elif metric_key == 'Var_h_Ttrend':
+                # Var(v) = Sigma_v_v
+                return get_raw_samples(approach_data, 'Sigma_v_v')
+            elif metric_key == 'Var_epsilon':
+                return get_raw_samples(approach_data, 'Sigma_epsilon_epsilon')
+
+            # Covariance terms (with appropriate signs for h(T_trend) which enters negatively)
+            elif metric_key == 'Cov_k_GDP_trend':
+                # Cov(k, j+v) = Cov(k,j) + Cov(k,v) = Sigma_j_k + Sigma_v_k
+                j_k = get_raw_samples(approach_data, 'Sigma_j_k')
+                v_k = get_raw_samples(approach_data, 'Sigma_v_k')
+                if j_k is not None and v_k is not None:
+                    return j_k + v_k
+                return None
+            elif metric_key == 'Cov_k_h_T':
+                # Cov(k, Delta_u+v) = Sigma_h_k (already stored) or compute
+                h_k = get_raw_samples(approach_data, 'Sigma_h_k')
+                if h_k is not None:
+                    return h_k
+                du_k = get_raw_samples(approach_data, 'Sigma_Delta_u_k')
+                v_k = get_raw_samples(approach_data, 'Sigma_v_k')
+                if du_k is not None and v_k is not None:
+                    return du_k + v_k
+                return None
+            elif metric_key == 'Cov_k_h_Ttrend':
+                # Cov(k, v) = Sigma_v_k (NEGATIVE in identity contribution)
+                return get_raw_samples(approach_data, 'Sigma_v_k')
+            elif metric_key == 'Cov_k_epsilon':
+                return get_raw_samples(approach_data, 'Sigma_k_epsilon')
+            elif metric_key == 'Cov_GDP_trend_h_T':
+                # Cov(j+v, Delta_u+v) = Cov(j,Du) + Cov(j,v) + Cov(v,Du) + Var(v)
+                du_j = get_raw_samples(approach_data, 'Sigma_Delta_u_j')
+                v_j = get_raw_samples(approach_data, 'Sigma_v_j')
+                du_v = get_raw_samples(approach_data, 'Sigma_Delta_u_v')
+                v_v = get_raw_samples(approach_data, 'Sigma_v_v')
+                if all(x is not None for x in [du_j, v_j, du_v, v_v]):
+                    return du_j + v_j + du_v + v_v
+                return None
+            elif metric_key == 'Cov_GDP_trend_h_Ttrend':
+                # Cov(j+v, v) = Cov(j,v) + Var(v) (NEGATIVE in identity contribution)
+                v_j = get_raw_samples(approach_data, 'Sigma_v_j')
+                v_v = get_raw_samples(approach_data, 'Sigma_v_v')
+                if v_j is not None and v_v is not None:
+                    return v_j + v_v
+                return None
+            elif metric_key == 'Cov_GDP_trend_epsilon':
+                # Cov(j+v, epsilon) = Cov(j,eps) + Cov(v,eps)
+                j_eps = get_raw_samples(approach_data, 'Sigma_j_epsilon')
+                v_eps = get_raw_samples(approach_data, 'Sigma_v_epsilon')
+                if j_eps is not None and v_eps is not None:
+                    return j_eps + v_eps
+                return None
+            elif metric_key == 'Cov_h_T_h_Ttrend':
+                # Cov(Delta_u+v, v) = Cov(Du,v) + Var(v) (NEGATIVE in identity contribution)
+                du_v = get_raw_samples(approach_data, 'Sigma_Delta_u_v')
+                v_v = get_raw_samples(approach_data, 'Sigma_v_v')
+                if du_v is not None and v_v is not None:
+                    return du_v + v_v
+                return None
+            elif metric_key == 'Cov_h_T_epsilon':
+                # Cov(Delta_u+v, epsilon) = Sigma_h_epsilon (already stored) or compute
+                h_eps = get_raw_samples(approach_data, 'Sigma_h_epsilon')
+                if h_eps is not None:
+                    return h_eps
+                du_eps = get_raw_samples(approach_data, 'Sigma_Delta_u_epsilon')
+                v_eps = get_raw_samples(approach_data, 'Sigma_v_epsilon')
+                if du_eps is not None and v_eps is not None:
+                    return du_eps + v_eps
+                return None
+            elif metric_key == 'Cov_h_Ttrend_epsilon':
+                # Cov(v, epsilon) (NEGATIVE in identity contribution)
+                return get_raw_samples(approach_data, 'Sigma_v_epsilon')
+
+            return None
+
+        # Define P/L metrics - 5 variances + 10 covariances = 15 entries
+        # multiplier: 1 for variance, 2 for positive covariance, -2 for negative covariance
+        pl_metrics = [
+            # Variances
+            ('Var_k', 'Var(k)/Var(Δy)', 1),
+            ('Var_GDP_trend', 'Var(GDP_trend)/Var(Δy)', 1),
+            ('Var_h_T', 'Var(h(T))/Var(Δy)', 1),
+            ('Var_h_Ttrend', 'Var(h(T_trend))/Var(Δy)', 1),
+            ('Var_epsilon', 'Var(ε)/Var(Δy)', 1),
+            # Covariances (with signs reflecting identity: Δy = k + GDP_trend + h(T) - h(T_trend) + ε)
+            ('Cov_k_GDP_trend', '2Cov(k,GDP_trend)/Var(Δy)', 2),
+            ('Cov_k_h_T', '2Cov(k,h(T))/Var(Δy)', 2),
+            ('Cov_k_h_Ttrend', '-2Cov(k,h(T_trend))/Var(Δy)', -2),  # Negative sign
+            ('Cov_k_epsilon', '2Cov(k,ε)/Var(Δy)', 2),
+            ('Cov_GDP_trend_h_T', '2Cov(GDP_trend,h(T))/Var(Δy)', 2),
+            ('Cov_GDP_trend_h_Ttrend', '-2Cov(GDP_trend,h(T_trend))/Var(Δy)', -2),  # Negative sign
+            ('Cov_GDP_trend_epsilon', '2Cov(GDP_trend,ε)/Var(Δy)', 2),
+            ('Cov_h_T_h_Ttrend', '-2Cov(h(T),h(T_trend))/Var(Δy)', -2),  # Negative sign
+            ('Cov_h_T_epsilon', '2Cov(h(T),ε)/Var(Δy)', 2),
+            ('Cov_h_Ttrend_epsilon', '-2Cov(h(T_trend),ε)/Var(Δy)', -2),  # Negative sign
+        ]
+
+        rows_pl = []
+        for metric_key, label, multiplier in pl_metrics:
+            row = {'Metric': label}
+            for approach in available_pl:
+                mask = var_attrib_df['approach'] == approach
+                approach_data = var_attrib_df[mask]
+
+                if 'var_dy' not in approach_data.columns:
+                    for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                        row[f'{approach}{suffix}'] = np.nan
+                    continue
+
+                # Get point estimate (iteration -1)
+                point_estimate = None
+                if 'iteration' in approach_data.columns:
+                    point_mask = approach_data['iteration'] == -1
+                    if point_mask.any():
+                        point_data = approach_data[point_mask]
+                        samples = get_pl_metric(point_data, metric_key)
+                        if samples is not None and len(samples) > 0:
+                            var_dy = point_data['var_dy'].values[0]
+                            with np.errstate(divide='ignore', invalid='ignore'):
+                                point_estimate = (samples[0] * multiplier) / var_dy
+                            if not np.isfinite(point_estimate):
+                                point_estimate = None
+
+                # Get bootstrap samples (iteration >= 0)
+                bootstrap_mask = approach_data['iteration'] >= 0
+                bootstrap_data = approach_data[bootstrap_mask]
+
+                metric_samples = get_pl_metric(bootstrap_data, metric_key)
+                if metric_samples is None:
+                    for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                        row[f'{approach}{suffix}'] = np.nan
+                    continue
+
+                var_dy_samples = bootstrap_data['var_dy'].values
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    normalized = (metric_samples * multiplier) / var_dy_samples
+                normalized = np.where(np.isfinite(normalized), normalized, np.nan)
+
+                stats = compute_stats(normalized, point_estimate=point_estimate)
+                row[f'{approach}_point'] = stats['point']
+                row[f'{approach}_p5'] = stats['p5']
+                row[f'{approach}_p25'] = stats['p25']
+                row[f'{approach}_p50'] = stats['p50']
+                row[f'{approach}_p75'] = stats['p75']
+                row[f'{approach}_p95'] = stats['p95']
+
+            rows_pl.append(row)
+
+        # Add Sum row for P/L approaches
+        sum_row_pl = {'Metric': 'Sum'}
+        for approach in available_pl:
+            mask = var_attrib_df['approach'] == approach
+            approach_data = var_attrib_df[mask]
+
+            if 'var_dy' not in approach_data.columns:
+                for suffix in ['_point', '_p5', '_p25', '_p50', '_p75', '_p95']:
+                    sum_row_pl[f'{approach}{suffix}'] = np.nan
+                continue
+
+            # Point estimate sum
+            point_sum = None
+            if 'iteration' in approach_data.columns:
+                point_mask = approach_data['iteration'] == -1
+                if point_mask.any():
+                    point_data = approach_data[point_mask]
+                    var_dy = point_data['var_dy'].values[0]
+                    total = 0.0
+                    for metric_key, _, mult in pl_metrics:
+                        samples = get_pl_metric(point_data, metric_key)
+                        if samples is not None and len(samples) > 0:
+                            total += samples[0] * mult
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        point_sum = total / var_dy
+                    if not np.isfinite(point_sum):
+                        point_sum = None
+
+            # Bootstrap sums
+            bootstrap_mask = approach_data['iteration'] >= 0
+            bootstrap_data = approach_data[bootstrap_mask]
+            var_dy_samples = bootstrap_data['var_dy'].values
+
+            total_sum = np.zeros(len(bootstrap_data))
+            for metric_key, _, mult in pl_metrics:
+                samples = get_pl_metric(bootstrap_data, metric_key)
+                if samples is not None:
+                    total_sum += samples * mult
+
+            with np.errstate(divide='ignore', invalid='ignore'):
+                sum_normalized = total_sum / var_dy_samples
+            sum_normalized = np.where(np.isfinite(sum_normalized), sum_normalized, np.nan)
+
+            stats = compute_stats(sum_normalized, point_estimate=point_sum)
+            sum_row_pl[f'{approach}_point'] = stats['point']
+            sum_row_pl[f'{approach}_p5'] = stats['p5']
+            sum_row_pl[f'{approach}_p25'] = stats['p25']
+            sum_row_pl[f'{approach}_p50'] = stats['p50']
+            sum_row_pl[f'{approach}_p75'] = stats['p75']
+            sum_row_pl[f'{approach}_p95'] = stats['p95']
+
+        rows_pl.append(sum_row_pl)
+
+        df_pl = pd.DataFrame(rows_pl)
+        xlsx_path_pl = output_dir / 'covariance_table_PL.xlsx'
+        df_pl.to_excel(xlsx_path_pl, index=False, sheet_name='PL Approaches')
+        csv_path_pl = output_dir / 'covariance_table_PL.csv'
+        df_pl.to_csv(csv_path_pl, index=False)
+        print(f"      [Tables] Saved covariance_table_PL.xlsx ({len(rows_pl)} rows × {len(available_pl)} approaches)")
+
+
 def generate_tables(
     analysis_results: dict,
     bootstrap_results: dict,
@@ -1032,10 +1499,10 @@ def generate_tables(
     """
     # Approaches to include in tables
     table_approaches = [
-        'Approach0J', 'Approach0P', 'Approach0L',
-        'Approach1J', 'Approach1P', 'Approach1L',
-        'Approach2J', 'Approach2P', 'Approach2L',
-        'Approach3J', 'Approach3P', 'Approach3L',
+        'Approach NJ', 'Approach NP', 'Approach NL',
+        'Approach QJ', 'Approach QP', 'Approach QL',
+        'Approach PJ', 'Approach PP', 'Approach PL',
+        'Approach DJ', 'Approach DP', 'Approach DL',
     ]
 
     # Generate variance decomposition table
@@ -1046,6 +1513,9 @@ def generate_tables(
 
     # Generate variance decomposition tables by response function type
     generate_variance_decomposition_by_response(bootstrap_results, output_dir)
+
+    # Generate covariance tables (separate for J vs P/L approaches)
+    generate_covariance_tables(bootstrap_results, output_dir)
 
 
 def generate_figures(
@@ -1095,7 +1565,7 @@ def generate_figures(
             results,
             data,
             output_dir,
-            approaches=['Approach1J', 'Approach1L'],
+            approaches=['Approach QJ', 'Approach QL'],
             filename='fig_year_effects_main.pdf',
             input_file=None,
         )

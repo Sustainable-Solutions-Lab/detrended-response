@@ -5,18 +5,18 @@ This script implements and compares multiple approaches for analyzing
 the climate-economy relationship with explicit time trend detrending.
 
 Approaches (publication-ready):
-    Approach0J: Null model (h1=h2=0) with joint OLS (country trends + year effects only)
-    Approach0P: Null model (h1=h2=0) with polynomial trend identification
-    Approach0L: Null model (h1=h2=0) with LOESS trend identification
-    Approach1J: Quadratic response with joint OLS (country time trends and year fixed effects)
-    Approach1P: Quadratic response with polynomial trend identification (linear T + quadratic GDP)
-    Approach1L: Quadratic response with LOESS trend identification
-    Approach2J: Piecewise quadratic response with joint OLS
-    Approach2P: Piecewise quadratic response with polynomial trend identification
-    Approach2L: Piecewise quadratic response with LOESS trend identification
-    Approach3J: Persistence decay model with joint OLS
-    Approach3P: Persistence decay model with polynomial trend identification
-    Approach3L: Persistence decay model with LOESS trend identification
+    Approach NJ: Null model (h1=h2=0) with joint OLS (country trends + year effects only)
+    Approach NP: Null model (h1=h2=0) with polynomial trend identification
+    Approach NL: Null model (h1=h2=0) with LOESS trend identification
+    Approach QJ: Quadratic response with joint OLS (country time trends and year fixed effects)
+    Approach QP: Quadratic response with polynomial trend identification (linear T + quadratic GDP)
+    Approach QL: Quadratic response with LOESS trend identification
+    Approach PJ: Piecewise quadratic response with joint OLS
+    Approach PP: Piecewise quadratic response with polynomial trend identification
+    Approach PL: Piecewise quadratic response with LOESS trend identification
+    Approach DJ: Persistence decay model with joint OLS
+    Approach DP: Persistence decay model with polynomial trend identification
+    Approach DL: Persistence decay model with LOESS trend identification
 
 Usage:
     python scripts/run_analysis.py [--year-min YEAR] [--year-max YEAR] [--output-dir DIR]
@@ -181,14 +181,14 @@ def main():
         print(f"\n{r.approach}")
         print("-" * 50)
 
-        # Approach2L/Approach2J/Approach2P: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise)
-        if name in ['Approach2L', 'Approach2J', 'Approach2P'] and hasattr(r, 'h4'):
+        # Approach PL/Approach PJ/Approach PP: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise)
+        if name in ['Approach PL', 'Approach PJ', 'Approach PP'] and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # Approach3L/Approach3J/Approach3P: h1, h2, h4 (persistence decay), T_opt
-        elif name in ['Approach3L', 'Approach3J', 'Approach3P'] and hasattr(r, 'h4'):
+        # Approach DL/Approach DJ/Approach DP: h1, h2, h4 (persistence decay), T_opt
+        elif name in ['Approach DL', 'Approach DJ', 'Approach DP'] and hasattr(r, 'h4'):
             print(f"  h1 = {r.h1:.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (persistence decay) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
@@ -198,7 +198,7 @@ def main():
                 print(f"  T_opt = N/A")
 
         else:
-            # Standard approaches (Approach1J, Approach1P, Approach1L, null models)
+            # Standard approaches (Approach QJ, Approach QP, Approach QL, null models)
             print(f"  h1 = {r.h1:12.6f}  (SE: {r.h1_se:.6f})")
             print(f"  h2 = {r.h2:12.6f}  (SE: {r.h2_se:.6f})")
             if hasattr(r, 'T_opt') and not np.isnan(r.T_opt):
@@ -227,10 +227,10 @@ def main():
 
     # Define approach order for output tables
     approach_order = [
-        'Approach0J', 'Approach0P', 'Approach0L',
-        'Approach1J', 'Approach1P', 'Approach1L',
-        'Approach2J', 'Approach2P', 'Approach2L',
-        'Approach3J', 'Approach3P', 'Approach3L',
+        'Approach NJ', 'Approach NP', 'Approach NL',
+        'Approach QJ', 'Approach QP', 'Approach QL',
+        'Approach PJ', 'Approach PP', 'Approach PL',
+        'Approach DJ', 'Approach DP', 'Approach DL',
     ]
     save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)
     t_output = time.perf_counter() - t_start

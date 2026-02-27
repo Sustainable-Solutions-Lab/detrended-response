@@ -1,18 +1,18 @@
 """OLS fitting for climate-GDP response approaches.
 
 Approaches (publication-ready):
-    Approach0J: Null model (h1=h2=0) with joint OLS (country trends + year effects only)
-    Approach0P: Null model (h1=h2=0) with polynomial trend identification
-    Approach0L: Null model (h1=h2=0) with LOESS trend identification
-    Approach1J: Quadratic response with joint OLS (country time trends and year fixed effects)
-    Approach1P: Quadratic response with polynomial trend identification (linear T + quadratic GDP)
-    Approach1L: Quadratic response with LOESS trend identification
-    Approach2J: Piecewise quadratic response with joint OLS
-    Approach2P: Piecewise quadratic response with polynomial trend identification
-    Approach2L: Piecewise quadratic response with LOESS trend identification
-    Approach3J: Persistence decay model with joint OLS
-    Approach3P: Persistence decay model with polynomial trend identification
-    Approach3L: Persistence decay model with LOESS trend identification
+    Approach NJ: Null model (h1=h2=0) with joint OLS (country trends + year effects only)
+    Approach NP: Null model (h1=h2=0) with polynomial trend identification
+    Approach NL: Null model (h1=h2=0) with LOESS trend identification
+    Approach QJ: Quadratic response with joint OLS (country time trends and year fixed effects)
+    Approach QP: Quadratic response with polynomial trend identification (linear T + quadratic GDP)
+    Approach QL: Quadratic response with LOESS trend identification
+    Approach PJ: Piecewise quadratic response with joint OLS
+    Approach PP: Piecewise quadratic response with polynomial trend identification
+    Approach PL: Piecewise quadratic response with LOESS trend identification
+    Approach DJ: Persistence decay model with joint OLS
+    Approach DP: Persistence decay model with polynomial trend identification
+    Approach DL: Persistence decay model with LOESS trend identification
 """
 
 import time
@@ -599,7 +599,7 @@ class FitResultApproach8:
 
 @dataclass
 class FitResultApproach4:
-    """Container for Approach3L (persistence decay) results.
+    """Container for Approach DL (persistence decay) results.
 
     Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
 
@@ -819,7 +819,7 @@ def compute_rms_imbalance(
     return rms
 
 
-def fit_Approach1P_precomputed_k(
+def fit_ApproachQP_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
     """Approach 1: Pre-computed k[t] with linear temp + quadratic GDP detrending.
@@ -915,7 +915,7 @@ def fit_Approach1P_precomputed_k(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach1P: Quadratic (Polynomial Detrending)",
+        approach="Approach QP: Quadratic (Polynomial Detrending)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1169,7 +1169,7 @@ def compute_3d_se_numerical(
     return T_opt_se, sigma_se, alpha_se
 
 
-def fit_Approach1L_loess(
+def fit_ApproachQL_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
     """Approach 2: Pre-computed k[t] with LOESS country/temperature trends.
@@ -1260,7 +1260,7 @@ def fit_Approach1L_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach1L: Quadratic (LOESS Detrending)",
+        approach="Approach QL: Quadratic (LOESS Detrending)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1414,7 +1414,7 @@ def compute_2d_se_numerical(
     return f1_se, f2_se
 
 
-def fit_Approach2L_piecewise(
+def fit_ApproachPL_piecewise(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -1560,7 +1560,7 @@ def fit_Approach2L_piecewise(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8(
-        approach="Approach2L: Piecewise (LOESS Detrending)",
+        approach="Approach PL: Piecewise (LOESS Detrending)",
         h2=h2_low,
         h2_se=h2_low_se,
         h4=h2_high,
@@ -1583,7 +1583,7 @@ def fit_Approach2L_piecewise(
     )
 
 
-def fit_Approach3L_persistence_decay(
+def fit_ApproachDL_persistence_decay(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     year_means: dict,
@@ -1614,7 +1614,7 @@ def fit_Approach3L_persistence_decay(
     Returns:
         FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
     """
-    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach1L)
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach QL)
     y = np.zeros(data.n_obs)
     for i in range(data.n_obs):
         yr = data.year[i]
@@ -1750,7 +1750,7 @@ def fit_Approach3L_persistence_decay(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach4(
-        approach="Approach3L: Persistence (LOESS Detrending)",
+        approach="Approach DL: Decay (LOESS Detrending)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -1774,15 +1774,15 @@ def fit_Approach3L_persistence_decay(
     )
 
 
-def fit_Approach2J_piecewise_conjoined(
+def fit_ApproachPJ_piecewise_conjoined(
     data: AnalysisData,
     T_opt_bounds: tuple = (0.0, 30.0),
 ) -> FitResultApproach8:
     """Approach 5: Piecewise quadratic with full OLS for j_i(t) and k(t).
 
     Combines:
-    - Piecewise quadratic climate response (like Approach2L)
-    - Full OLS estimation of country trends and year effects (like Approach1J)
+    - Piecewise quadratic climate response (like Approach PL)
+    - Full OLS estimation of country trends and year effects (like Approach QJ)
 
     Model: Δy_i(t) = h2_low*(T-T_opt)² [T≤T_opt] + h2_high*(T-T_opt)² [T>T_opt]
                      + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -1928,7 +1928,7 @@ def fit_Approach2J_piecewise_conjoined(
     h_values = h2_low * low_col + h2_high * high_col
 
     # RMS imbalance: for conjoined approaches, imbalance is not well-defined
-    # since there's no separate T_trend. Use T as T_trend (like Approach1J).
+    # since there's no separate T_trend. Use T as T_trend (like Approach QJ).
     T_trend = T
     low_trend = np.where(T_trend <= T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
     high_trend = np.where(T_trend > T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
@@ -1954,7 +1954,7 @@ def fit_Approach2J_piecewise_conjoined(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
 
     return FitResultApproach8(
-        approach="Approach2J: Piecewise (Joint OLS)",
+        approach="Approach PJ: Piecewise (Joint OLS)",
         h2=h2_low,
         h2_se=h2_low_se,
         h4=h2_high,
@@ -1977,15 +1977,15 @@ def fit_Approach2J_piecewise_conjoined(
     )
 
 
-def fit_Approach3J_persistence_conjoined(
+def fit_ApproachDJ_persistence_conjoined(
     data: AnalysisData,
     h4_bounds: tuple = (0.0, 1.0),
 ) -> FitResultApproach4:
     """Approach 6: Persistence decay with full OLS for j_i(t) and k(t).
 
     Combines:
-    - Persistence decay climate response (like Approach3L)
-    - Full OLS estimation of country trends and year effects (like Approach1J)
+    - Persistence decay climate response (like Approach DL)
+    - Full OLS estimation of country trends and year effects (like Approach QJ)
 
     Model: Δy_i(t) = h1*X1 + h2*X2 + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
 
@@ -2156,7 +2156,7 @@ def fit_Approach3J_persistence_conjoined(
     # Climate response values (modified h_conv)
     h_conv_values = h1 * X1 + h2 * X2
 
-    # For imbalance, use h(T) directly (like Approach1J)
+    # For imbalance, use h(T) directly (like Approach QJ)
     h_T_full = h1 * T + h2 * T ** 2
     imbalance = h_T_full + j_trend + k_values
     rms_imb = np.sqrt(np.mean(imbalance ** 2))
@@ -2180,7 +2180,7 @@ def fit_Approach3J_persistence_conjoined(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
 
     return FitResultApproach4(
-        approach="Approach3J: Persistence (Joint OLS)",
+        approach="Approach DJ: Decay (Joint OLS)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2204,7 +2204,7 @@ def fit_Approach3J_persistence_conjoined(
     )
 
 
-def fit_Approach1J_conjoined(data: AnalysisData) -> FitResult:
+def fit_ApproachQJ_conjoined(data: AnalysisData) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
     Δy_i(t) = h1*T + h2*T² + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2324,7 +2324,7 @@ def fit_Approach1J_conjoined(data: AnalysisData) -> FitResult:
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach1J: Quadratic (Joint OLS)",
+        approach="Approach QJ: Quadratic (Joint OLS)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2346,7 +2346,7 @@ def fit_Approach1J_conjoined(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_Approach0J_joint(data: AnalysisData) -> FitResult:
+def fit_ApproachNJ_joint(data: AnalysisData) -> FitResult:
     """Null model: No climate response, joint OLS fit with country trends and year effects.
 
     Δy_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2439,7 +2439,7 @@ def fit_Approach0J_joint(data: AnalysisData) -> FitResult:
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach0J: No Climate Response (Joint)",
+        approach="Approach NJ: No Climate Response (Joint)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2461,7 +2461,7 @@ def fit_Approach0J_joint(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_Approach0P_precomputed_k(
+def fit_ApproachNP_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict
 ) -> FitResult:
     """Null model: No climate response, precomputed k with quadratic country trends.
@@ -2520,7 +2520,7 @@ def fit_Approach0P_precomputed_k(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach0P: No Climate Response (Precomputed k)",
+        approach="Approach NP: No Climate Response (Precomputed k)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2542,12 +2542,12 @@ def fit_Approach0P_precomputed_k(
     )
 
 
-def fit_Approach0L_precomputed_k_loess(
+def fit_ApproachNL_precomputed_k_loess(
     data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
 ) -> FitResult:
     """Null model: No climate response, precomputed k with LOESS country trends.
 
-    LOESS version of Approach0P:
+    LOESS version of Approach NP:
     k(t) = mean_i(Δy_i(t)) is precomputed, then country LOESS trends j_i(t)
     are smoothed from Δy_i(t) - k(t). No regression needed — all components are
     already precomputed from trends_loess and year_means.
@@ -2597,7 +2597,7 @@ def fit_Approach0L_precomputed_k_loess(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, data.growth_pcGDP)
 
     return FitResult(
-        approach="Approach0L: No Climate Response (LOESS Precomputed k)",
+        approach="Approach NL: No Climate Response (LOESS Precomputed k)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -2619,7 +2619,7 @@ def fit_Approach0L_precomputed_k_loess(
     )
 
 
-def fit_Approach2P_piecewise_linear_detrend(
+def fit_ApproachPP_piecewise_linear_detrend(
     data: AnalysisData,
     trends: CountryTrends,
     year_means: dict,
@@ -2628,8 +2628,8 @@ def fit_Approach2P_piecewise_linear_detrend(
     """Approach 7: Piecewise quadratic response with linear T + quadratic GDP detrending.
 
     Combines:
-    - Piecewise quadratic climate response (like Approach2L)
-    - Linear temperature + quadratic GDP detrending with pre-computed k (like Approach1P)
+    - Piecewise quadratic climate response (like Approach PL)
+    - Linear temperature + quadratic GDP detrending with pre-computed k (like Approach QP)
 
     Model: h(T) = h2 * (T - T_opt)²  if T ≤ T_opt
            h(T) = h4 * (T - T_opt)²  if T > T_opt
@@ -2777,7 +2777,7 @@ def fit_Approach2P_piecewise_linear_detrend(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach8(
-        approach="Approach2P: Piecewise (Polynomial Detrending)",
+        approach="Approach PP: Piecewise (Polynomial Detrending)",
         h2=h2_low,
         h2_se=h2_low_se,
         h4=h2_high,
@@ -2800,7 +2800,7 @@ def fit_Approach2P_piecewise_linear_detrend(
     )
 
 
-def fit_Approach3P_persistence_linear_detrend(
+def fit_ApproachDP_persistence_linear_detrend(
     data: AnalysisData,
     trends: CountryTrends,
     year_means: dict,
@@ -2809,8 +2809,8 @@ def fit_Approach3P_persistence_linear_detrend(
     """Approach 8: Persistence decay with linear T + quadratic GDP detrending.
 
     Combines:
-    - Persistence decay climate response (like Approach3L)
-    - Linear temperature + quadratic GDP detrending with pre-computed k (like Approach1P)
+    - Persistence decay climate response (like Approach DL)
+    - Linear temperature + quadratic GDP detrending with pre-computed k (like Approach QP)
 
     Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
 
@@ -2850,7 +2850,7 @@ def fit_Approach3P_persistence_linear_detrend(
         t = data.time[i]
         T_trend[i] = trends.T0[c] + trends.T1[c] * t
 
-    # Compute T_linear at first year for pre-history correction (same as Approach3J)
+    # Compute T_linear at first year for pre-history correction (same as Approach DJ)
     T_linear_first = compute_T_linear_at_first_year(data)
 
     def compute_sse_for_h4(h4_val):
@@ -2985,7 +2985,7 @@ def fit_Approach3P_persistence_linear_detrend(
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
 
     return FitResultApproach4(
-        approach="Approach3P: Persistence (Polynomial Detrending)",
+        approach="Approach DP: Decay (Polynomial Detrending)",
         h1=h1,
         h2=h2,
         h1_se=h1_se,
@@ -3018,21 +3018,21 @@ def fit_all_approaches(
 
     Returns dict with keys:
         Publication-ready approaches:
-        'Approach1J': Conjoined OLS fit, with j terms and year fixed effects
-        'Approach1P': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
-        'Approach1L': Pre-computed k with LOESS trends (if trends_loess provided)
-        'Approach2L': Piecewise quadratic response with LOESS (if trends_loess provided)
-        'Approach3L': Persistence decay model with LOESS (if trends_loess provided)
-        'Approach2J': Piecewise quadratic with full OLS (like Approach2L + Approach1J)
-        'Approach3J': Persistence decay with full OLS (like Approach3L + Approach1J)
-        'Approach0J': No climate response, joint OLS (country trends + year effects only)
-        'Approach0P': No climate response, precomputed k (if trends_with_k and year_means provided)
-        'Approach0L': No climate response, LOESS precomputed k (if trends_loess provided)
+        'Approach QJ': Conjoined OLS fit, with j terms and year fixed effects
+        'Approach QP': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
+        'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
+        'Approach PL': Piecewise quadratic response with LOESS (if trends_loess provided)
+        'Approach DL': Persistence decay model with LOESS (if trends_loess provided)
+        'Approach PJ': Piecewise quadratic with full OLS (like Approach PL + Approach QJ)
+        'Approach DJ': Persistence decay with full OLS (like Approach DL + Approach QJ)
+        'Approach NJ': No climate response, joint OLS (country trends + year effects only)
+        'Approach NP': No climate response, precomputed k (if trends_with_k and year_means provided)
+        'Approach NL': No climate response, LOESS precomputed k (if trends_loess provided)
 
     Args:
         data: AnalysisData object
         trends: CountryTrends (unused, kept for API compatibility)
-        trends_with_k: CountryTrends for Approach1P (fit to dy - k)
+        trends_with_k: CountryTrends for Approach QP (fit to dy - k)
         year_means: Pre-computed k[t] for approaches 1-4
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
     """
@@ -3049,35 +3049,35 @@ def fit_all_approaches(
         print(f"      {name}: {elapsed:.3f}s")
 
     # Conjoined approaches
-    timed_fit('Approach1J', fit_Approach1J_conjoined, data)
-    timed_fit('Approach0J', fit_Approach0J_joint, data)
-    timed_fit('Approach2J', fit_Approach2J_piecewise_conjoined, data)
-    timed_fit('Approach3J', fit_Approach3J_persistence_conjoined, data)
+    timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data)
+    timed_fit('Approach NJ', fit_ApproachNJ_joint, data)
+    timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data)
+    timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data)
 
-    # Add Approach1P and Approach0P if trends_with_k and year_means are provided
+    # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
-        timed_fit('Approach1P', fit_Approach1P_precomputed_k,
+        timed_fit('Approach QP', fit_ApproachQP_precomputed_k,
                   data, trends_with_k, year_means)
-        timed_fit('Approach0P', fit_Approach0P_precomputed_k,
+        timed_fit('Approach NP', fit_ApproachNP_precomputed_k,
                   data, trends_with_k, year_means)
 
-    # Add Approach1L, Approach2L, Approach3L and Approach0L if trends_loess and year_means are provided
+    # Add Approach QL, Approach PL, Approach DL and Approach NL if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
-        timed_fit('Approach1L', fit_Approach1L_loess,
+        timed_fit('Approach QL', fit_ApproachQL_loess,
                   data, trends_loess, year_means)
-        timed_fit('Approach0L', fit_Approach0L_precomputed_k_loess,
+        timed_fit('Approach NL', fit_ApproachNL_precomputed_k_loess,
                   data, trends_loess, year_means)
-        timed_fit('Approach2L', fit_Approach2L_piecewise,
+        timed_fit('Approach PL', fit_ApproachPL_piecewise,
                   data, trends_loess, year_means)
-        timed_fit('Approach3L', fit_Approach3L_persistence_decay,
+        timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
                   data, trends_loess, year_means)
 
-    # Add Approach2P and Approach3P if trends_with_k and year_means are provided
+    # Add Approach PP and Approach DP if trends_with_k and year_means are provided
     # These use linear T / quadratic GDP detrending with alternative climate response functions
     if trends_with_k is not None and year_means is not None:
-        timed_fit('Approach2P', fit_Approach2P_piecewise_linear_detrend,
+        timed_fit('Approach PP', fit_ApproachPP_piecewise_linear_detrend,
                   data, trends_with_k, year_means)
-        timed_fit('Approach3P', fit_Approach3P_persistence_linear_detrend,
+        timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,
                   data, trends_with_k, year_means)
 
     total_time = sum(timings.values())

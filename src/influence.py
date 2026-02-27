@@ -23,21 +23,21 @@ PERSISTENCE_COEFFICIENTS = ['h1', 'h2', 'h4', 'T_opt']
 NULL_MODEL_COEFFICIENTS = ['r_squared']
 APPROACH_COEFFICIENTS = {
     # Standard methods (quadratic response)
-    'Approach1J': STANDARD_COEFFICIENTS,
-    'Approach1P': STANDARD_COEFFICIENTS,
-    'Approach1L': STANDARD_COEFFICIENTS,
+    'Approach QJ': STANDARD_COEFFICIENTS,
+    'Approach QP': STANDARD_COEFFICIENTS,
+    'Approach QL': STANDARD_COEFFICIENTS,
     # Null models (h1=h2=0, no climate response)
-    'Approach0J': NULL_MODEL_COEFFICIENTS,
-    'Approach0P': NULL_MODEL_COEFFICIENTS,
-    'Approach0L': NULL_MODEL_COEFFICIENTS,
+    'Approach NJ': NULL_MODEL_COEFFICIENTS,
+    'Approach NP': NULL_MODEL_COEFFICIENTS,
+    'Approach NL': NULL_MODEL_COEFFICIENTS,
     # Piecewise methods: h2 (below T_opt), h4 (above T_opt), T_opt
-    'Approach2J': ['h2', 'h4', 'T_opt'],
-    'Approach2P': ['h2', 'h4', 'T_opt'],
-    'Approach2L': ['h2', 'h4', 'T_opt'],
+    'Approach PJ': ['h2', 'h4', 'T_opt'],
+    'Approach PP': ['h2', 'h4', 'T_opt'],
+    'Approach PL': ['h2', 'h4', 'T_opt'],
     # Persistence methods: h1, h2, h4 (decay parameter), T_opt
-    'Approach3J': PERSISTENCE_COEFFICIENTS,
-    'Approach3P': PERSISTENCE_COEFFICIENTS,
-    'Approach3L': PERSISTENCE_COEFFICIENTS,
+    'Approach DJ': PERSISTENCE_COEFFICIENTS,
+    'Approach DP': PERSISTENCE_COEFFICIENTS,
+    'Approach DL': PERSISTENCE_COEFFICIENTS,
 }
 
 

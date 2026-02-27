@@ -215,6 +215,37 @@ def compute_growth_rate(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def permute_climate_countries(df: pd.DataFrame, seed: int = None) -> pd.DataFrame:
+    """Randomly permute country assignments for climate data.
+
+    Creates a random one-to-one mapping between countries, so country A's
+    temperature time series is assigned to country B, etc.
+
+    Args:
+        df: DataFrame with columns iso_id, year, temp, precp
+        seed: Random seed for reproducibility
+
+    Returns:
+        DataFrame with iso_id values permuted
+    """
+    rng = np.random.default_rng(seed)
+
+    # Get unique countries
+    countries = df['iso_id'].unique()
+
+    # Create random permutation
+    permuted_countries = rng.permutation(countries)
+
+    # Create mapping from original to permuted
+    country_map = dict(zip(countries, permuted_countries))
+
+    # Apply mapping
+    df = df.copy()
+    df['iso_id'] = df['iso_id'].map(country_map)
+
+    return df
+
+
 def compute_time_variables(df: pd.DataFrame) -> pd.DataFrame:
     """Compute time-related variables.
 
@@ -326,8 +357,24 @@ def main():
         action='store_true',
         help='Run validation checks on output'
     )
+    parser.add_argument(
+        '--randomT',
+        action='store_true',
+        help='Randomly permute temperature data across countries (for synthetic null dataset)'
+    )
+    parser.add_argument(
+        '--seed',
+        type=int,
+        default=None,
+        help='Random seed for temperature permutation (default: random)'
+    )
 
     args = parser.parse_args()
+
+    # Use different default output filename for randomT
+    if args.randomT and args.output == 'data/input/Maddison_CRU_dataset.csv':
+        args.output = 'data/input/Maddison_CRU_dataset_randomT.csv'
+        print(f"Using randomT default output: {args.output}")
 
     print("Loading Maddison GDP data from GDPpc sheet...")
     df_gdp = load_maddison_gdp_wide(args.maddison)
@@ -344,6 +391,11 @@ def main():
     print("Loading CRU climate data...")
     df_cru = load_cru_data(args.cru)
     print(f"  Loaded {len(df_cru)} climate observations for {df_cru['iso_id'].nunique()} countries")
+
+    if args.randomT:
+        print(f"Permuting temperature data across countries (seed={args.seed})...")
+        df_cru = permute_climate_countries(df_cru, seed=args.seed)
+        print("  Temperature and precipitation data now randomly assigned to different countries")
 
     print("Merging GDP and population data...")
     df = pd.merge(df_gdp, df_pop, on=['iso_id', 'year'], how='inner')

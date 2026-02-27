@@ -72,12 +72,12 @@ def load_run_metadata(directory: Path) -> dict:
 # ==============================================================================
 
 # Central approaches for analysis (in display order)
-CENTRAL_APPROACHES_POINT = ['Approach1J', 'Approach1P', 'Approach1L', 'Approach2L', 'Approach3L']
+CENTRAL_APPROACHES_POINT = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL']
 # All 9 approaches grouped by method (J, P, L) for boxplot figures
 CENTRAL_APPROACHES_BOXPLOT = [
-    'Approach1J', 'Approach2J', 'Approach3J',
-    'Approach1P', 'Approach2P', 'Approach3P',
-    'Approach1L', 'Approach2L', 'Approach3L',
+    'Approach QJ', 'Approach PJ', 'Approach DJ',
+    'Approach QP', 'Approach PP', 'Approach DP',
+    'Approach QL', 'Approach PL', 'Approach DL',
 ]
 
 # Base year for cumulative effect calculation
@@ -99,7 +99,7 @@ def calculate_h_T_delta_cumulative(h_T_delta: np.ndarray, years: np.ndarray) -> 
 
     This is the sum of annual climate effects relative to the baseline year.
 
-    Note: For Approach3L, the h_T values in bootstrap_h_values.csv already incorporate
+    Note: For Approach DL, the h_T values in bootstrap_h_values.csv already incorporate
     persistence decay via h_conv(T), so no additional decay is applied here.
 
     Args:
@@ -439,7 +439,7 @@ def plot_cumulative_effects_by_approach_grouped(
 
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
-    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022) by Approach')
+    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022) by Approach', pad=25)
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
 
     # Add group labels above the plot
@@ -518,13 +518,13 @@ def process_group(group: pd.DataFrame, approach: str, loess_window: int, h_T_bas
 
     # All approaches use the same logic: subtract 1961 baseline, then sum
     #
-    # For approaches Approach1J, Approach1P, Approach1L, Approach2L: h_T = h(T), so h_T_delta = h(T) - h(T_baseline)
+    # For approaches Approach QJ, Approach QP, Approach QL, Approach PL: h_T = h(T), so h_T_delta = h(T) - h(T_baseline)
     #
-    # For Approach3L: h_T = h_conv which already incorporates persistence decay.
+    # For Approach DL: h_T = h_conv which already incorporates persistence decay.
     # We use the same formula: h_T_delta = h_conv - h_conv(baseline)
     # When h4 > 0, h_conv values are smaller due to built-in decay, so cumulative
-    # effects will be smaller/bounded compared to Approach1L.
-    # When h4 ≈ 0, h_conv ≈ h(T), so results match Approach1L.
+    # effects will be smaller/bounded compared to Approach QL.
+    # When h4 ≈ 0, h_conv ≈ h(T), so results match Approach QL.
     #
     # This unified approach avoids the "double-decay" bug where we incorrectly
     # applied additional decay to the baseline.
@@ -631,9 +631,9 @@ def plot_cumulative_effects_by_approach(
         Rows = response functions (1=quadratic, 2=piecewise, 3=persistence)
         Columns = methods (J=Joint, P=Polynomial, L=LOESS)
 
-        Row 0: Approach1J, Approach1P, Approach1L
-        Row 1: Approach2J, Approach2P, Approach2L
-        Row 2: Approach3J, Approach3P, Approach3L
+        Row 0: Approach QJ, Approach QP, Approach QL
+        Row 1: Approach PJ, Approach PP, Approach PL
+        Row 2: Approach DJ, Approach DP, Approach DL
 
     Each panel shows one approach with:
     - 90% range (5th-95th percentile) as light shading
@@ -649,9 +649,9 @@ def plot_cumulative_effects_by_approach(
     """
     # 3x3 grid: rows = response functions (1,2,3), columns = methods (J,P,L)
     approach_order = [
-        ['Approach1J', 'Approach1P', 'Approach1L'],
-        ['Approach2J', 'Approach2P', 'Approach2L'],
-        ['Approach3J', 'Approach3P', 'Approach3L'],
+        ['Approach QJ', 'Approach QP', 'Approach QL'],
+        ['Approach PJ', 'Approach PP', 'Approach PL'],
+        ['Approach DJ', 'Approach DP', 'Approach DL'],
     ]
 
     # Check for missing approaches
@@ -668,7 +668,7 @@ def plot_cumulative_effects_by_approach(
     fig, axes = plt.subplots(3, 3, figsize=(12, 10), sharey=True, sharex=True)
 
     # Row and column labels
-    row_labels = ['Quadratic', 'Piecewise', 'Persistence']
+    row_labels = ['Quadratic (Q)', 'Piecewise (P)', 'Decay (D)']
     col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
     for row_idx, row_approaches in enumerate(approach_order):
@@ -776,14 +776,14 @@ def plot_cumulative_effects_by_approach(
     print(f"      Saved: {output_path}")
 
 
-def plot_cumulative_effects_Approach3L(
+def plot_cumulative_effects_ApproachDL(
     df_all_countries: pd.DataFrame,
     df_representative: pd.DataFrame,
     representatives: dict,
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create 2x3 panel plot for persistence approaches (Approach3J, Approach3P, Approach3L).
+    """Create 2x3 panel plot for persistence approaches (Approach DJ, Approach DP, Approach DL).
 
     Layout:
         Top row: Cumulative effects by year (all countries) for each approach
@@ -797,7 +797,7 @@ def plot_cumulative_effects_Approach3L(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    approaches = ['Approach3J', 'Approach3P', 'Approach3L']
+    approaches = ['Approach DJ', 'Approach DP', 'Approach DL']
     col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
     # Check for missing approaches
@@ -979,7 +979,7 @@ def select_representative_countries_from_file(
 ) -> dict:
     """Select representative countries using only point estimate data.
 
-    Loads only iteration=-1, approach=Approach1J to minimize memory usage.
+    Loads only iteration=-1, approach=Approach QJ to minimize memory usage.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -991,27 +991,27 @@ def select_representative_countries_from_file(
     Returns:
         Dictionary mapping percentile (or 'min'/'max') -> {'iso3': str, 'value': float, 'target': float}
     """
-    print("      Loading point estimate data (iteration=-1, Approach1J)...")
+    print("      Loading point estimate data (iteration=-1, Approach QJ)...")
 
     # Read CSV in chunks, filtering to only needed rows
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'Approach1J')]
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'Approach QJ')]
         if len(filtered) > 0:
             chunks.append(filtered)
 
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for country selection")
 
-    # Load baselines (point estimates only, Approach1J)
+    # Load baselines (point estimates only, Approach QJ)
     baselines = load_baselines(bootstrap_dir, iteration=-1)
     if baselines is not None:
-        baselines_Approach1J = baselines[baselines['approach'] == 'Approach1J']
+        baselines_ApproachQJ = baselines[baselines['approach'] == 'Approach QJ']
         baselines_dict = {
             row['iso3']: row['h_T_baseline']
-            for _, row in baselines_Approach1J.iterrows()
+            for _, row in baselines_ApproachQJ.iterrows()
         }
-        print(f"      Loaded {len(baselines_dict):,} baseline values for Approach1J")
+        print(f"      Loaded {len(baselines_dict):,} baseline values for Approach QJ")
     else:
         baselines_dict = {}
 
@@ -1019,7 +1019,7 @@ def select_representative_countries_from_file(
     results = []
     for iso3, group in df.groupby('iso3'):
         h_T_baseline = baselines_dict.get(iso3)
-        processed = process_group(group, 'Approach1J', loess_window, h_T_baseline=h_T_baseline)
+        processed = process_group(group, 'Approach QJ', loess_window, h_T_baseline=h_T_baseline)
         # Get 2022 value
         row_2022 = processed[processed['year'] == 2022]
         if len(row_2022) > 0:
@@ -1321,9 +1321,9 @@ def main():
     print("\n[7/7] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
 
-    # Additional: Create 2-panel Approach3L plot
-    print("\n[Bonus] Creating Approach3L 2-panel visualization...")
-    plot_cumulative_effects_Approach3L(df_all_countries, df_summary, representatives, output_dir, input_file)
+    # Additional: Create 2-panel Approach DL plot
+    print("\n[Bonus] Creating Approach DL 2-panel visualization...")
+    plot_cumulative_effects_ApproachDL(df_all_countries, df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
