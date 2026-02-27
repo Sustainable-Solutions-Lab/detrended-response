@@ -429,7 +429,10 @@ python scripts/run_analysis.py --year-min 1970 --year-max 2010
 
 ### Bootstrap Uncertainty Analysis
 
-The `run_bootstrap.py` script performs country-level cluster bootstrap resampling to compute confidence intervals for all parameters across all methods.
+The `run_bootstrap.py` script performs cluster bootstrap resampling to compute confidence intervals for all parameters across all methods. Two bootstrap modes are available:
+
+1. **Country-only bootstrap** (default): Resamples 140 countries with replacement
+2. **Country + Year bootstrap**: Resamples both 140 countries AND 62 years with replacement
 
 ```bash
 python scripts/run_bootstrap.py
@@ -437,9 +440,10 @@ python scripts/run_bootstrap.py
 
 **What it does:**
 1. Resamples countries with replacement (cluster bootstrap preserves within-country correlation)
-2. Re-fits all methods for each bootstrap iteration
-3. Computes percentile-based confidence intervals (90% CI, IQR)
-4. Generates distribution plots and summary statistics
+2. Optionally resamples years with replacement (when `--sample-years` is enabled)
+3. Re-fits all methods for each bootstrap iteration
+4. Computes percentile-based confidence intervals (90% CI, IQR)
+5. Generates distribution plots and summary statistics
 
 **Options:**
 ```
@@ -451,13 +455,36 @@ python scripts/run_bootstrap.py
 --output-dir DIR          Output directory (default: timestamped)
 --loess-window N          LOESS window size (default: 25)
 --mean-weight-distance N  Mean weighting distance for LOESS (alternative to --loess-window)
+--sample-years            Enable time-dimension bootstrap (sample years with replacement)
 --quiet                   Suppress progress messages
 ```
 
-**Example:**
+**Examples:**
 ```bash
+# Standard country-only bootstrap
 python scripts/run_bootstrap.py --n-bootstrap 1000 --output-dir results/bootstrap
+
+# Combined country + year bootstrap
+python scripts/run_bootstrap.py --n-bootstrap 1000 --sample-years --output-dir results/bootstrap_time
 ```
+
+#### Time-Dimension Bootstrap (`--sample-years`)
+
+When `--sample-years` is enabled, the bootstrap additionally samples 62 years with replacement. This captures uncertainty from year-to-year variation in addition to country-to-country variation.
+
+**How it works:**
+- Within each bootstrap iteration, the same set of years is used for all countries
+- Observation weights are computed as: `weight = country_count × year_count`
+- Weighted least squares is used for trend fitting and regression
+- Years not sampled have weight = 0 and k(t) = NaN for those years
+
+**Technical details:**
+- Weighted detrending: Year means and country trends are computed using observation weights
+- Weighted OLS: All approach fitting functions accept weights and use weighted least squares
+- LOESS with weights: Country-specific LOESS trends are fitted with observation weights
+- Numerical stability: SVD-based least squares handles rank-deficient matrices when some years have zero weight
+
+**Forward integration note:** For cumulative effects analysis, years with NaN k(t) values (not sampled in that bootstrap iteration) should be infilled with the central point estimate k(t) values. This is handled in `calculate_cumulative_effects.py`.
 
 ### Country Influence Analysis
 
@@ -705,6 +732,11 @@ Results are saved to a timestamped directory in `data/output/`. Files include:
 | `bootstrap_temperature_response_*.pdf` | Temperature response curves with 90% uncertainty bands |
 | `bootstrap_temperature_derivative.pdf` | Derivative curves with uncertainty bands |
 | `bootstrap_T_opt_comparison.pdf` | Optimal temperature comparison with error bars |
+| `bootstrap_country_samples.csv` | Country indices sampled in each bootstrap iteration |
+| `bootstrap_year_samples.csv` | Year indices sampled (only when `--sample-years` used) |
+| `bootstrap_k_samples.csv` | Year fixed effects k(t) for each bootstrap iteration |
+| `bootstrap_h_values.csv` | h(T) values for each observation and bootstrap iteration |
+| `bootstrap_h_baselines.csv` | h(T) baseline values at 1961 for each country |
 
 ### Country Influence Outputs
 

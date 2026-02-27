@@ -764,6 +764,9 @@ def fit_ols_weighted(y: np.ndarray, X: np.ndarray, weights: np.ndarray) -> tuple
 
     where W = diag(weights).
 
+    Uses SVD-based least squares to handle rank-deficient matrices (e.g., when
+    some years have zero weight in bootstrap).
+
     Args:
         y: Target values, shape (n,)
         X: Design matrix, shape (n, p)
@@ -776,32 +779,34 @@ def fit_ols_weighted(y: np.ndarray, X: np.ndarray, weights: np.ndarray) -> tuple
         - sigma_squared: Weighted residual variance
         - cov_matrix: Covariance matrix of beta, shape (p, p)
     """
-    # Weighted normal equations: (X'WX) beta = X'Wy
-    W = weights
-    XtW = X.T * W  # Shape (p, n) - broadcasting weights across rows
-    XtWX = XtW @ X  # Shape (p, p)
-    XtWy = XtW @ y  # Shape (p,)
+    # Transform to standard OLS by weighting: sqrt(W) @ X, sqrt(W) @ y
+    sqrt_W = np.sqrt(weights)
+    X_weighted = X * sqrt_W[:, np.newaxis]  # Scale each row by sqrt(w_i)
+    y_weighted = y * sqrt_W
 
-    # Solve for beta
-    beta = linalg.solve(XtWX, XtWy)
+    # Solve weighted least squares using SVD (handles rank-deficient matrices)
+    beta, _, rank, _ = np.linalg.lstsq(X_weighted, y_weighted, rcond=None)
 
     # Compute residuals
     y_pred = X @ beta
     residuals = y - y_pred
 
-    # Degrees of freedom: effective sample size - parameters
+    # Degrees of freedom: effective sample size - rank (actual parameters estimated)
     # For WLS, use sum of weights as effective sample size
     n_eff = np.sum(weights)
     p = X.shape[1]
-    df = n_eff - p
+    df = n_eff - rank  # Use rank instead of p for rank-deficient matrices
 
     # Weighted residual variance: sum(w_i * e_i^2) / df
     sse_weighted = np.sum(weights * residuals ** 2)
     sigma_squared = sse_weighted / df if df > 0 else np.nan
 
-    # Covariance matrix of beta: sigma^2 * (X'WX)^(-1)
-    XtWX_inv = linalg.inv(XtWX)
-    cov_matrix = sigma_squared * XtWX_inv
+    # Covariance matrix of beta: sigma^2 * (X'WX)^+
+    # Use pseudoinverse for rank-deficient matrices
+    XtW = X.T * weights  # Shape (p, n)
+    XtWX = XtW @ X  # Shape (p, p)
+    XtWX_pinv = np.linalg.pinv(XtWX)
+    cov_matrix = sigma_squared * XtWX_pinv
 
     return beta, residuals, sigma_squared, cov_matrix
 
@@ -870,7 +875,8 @@ def compute_rms_imbalance(
 
 
 def fit_ApproachQP_precomputed_k(
-    data: AnalysisData, trends: CountryTrends, year_means: dict
+    data: AnalysisData, trends: CountryTrends, year_means: dict,
+    weights: np.ndarray = None
 ) -> FitResult:
     """Approach 1: Pre-computed k[t] with linear temp + quadratic GDP detrending.
 
@@ -881,6 +887,12 @@ def fit_ApproachQP_precomputed_k(
     4. Final regression: (dy_i[t] - k[t]) - j_i[t] = h1*T* + h2*T*²
 
     Note: Linear temperature detrending + quadratic GDP detrending.
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends with polynomial trends
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        weights: Optional observation weights for weighted least squares
     """
     # Compute detrended temperature terms (linear)
     T_star = compute_detrended_temperature(data, trends)
@@ -900,14 +912,17 @@ def fit_ApproachQP_precomputed_k(
     # Design matrix: just [T*, T*²] - no year fixed effects
     X = np.column_stack([T_star, T2_detrend])
 
-    # Fit OLS
-    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+    # Fit OLS (weighted if weights provided)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
     # Extract coefficients
     h1 = beta[0]
     h2 = beta[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Year effects are pre-computed year means
     k = dict(year_means)
@@ -1220,7 +1235,8 @@ def compute_3d_se_numerical(
 
 
 def fit_ApproachQL_loess(
-    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict,
+    weights: np.ndarray = None
 ) -> FitResult:
     """Approach 2: Pre-computed k[t] with LOESS country/temperature trends.
 
@@ -1234,6 +1250,7 @@ def fit_ApproachQL_loess(
         data: AnalysisData object
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResult
@@ -1252,14 +1269,17 @@ def fit_ApproachQL_loess(
     # Design matrix: just [T*, T*²] - no year fixed effects
     X = np.column_stack([T_star, T2_detrend])
 
-    # Fit OLS
-    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+    # Fit OLS (weighted if weights provided)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
     # Extract coefficients
     h1 = beta[0]
     h2 = beta[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Year effects are pre-computed year means
     k = dict(year_means)
@@ -1469,6 +1489,7 @@ def fit_ApproachPL_piecewise(
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach8:
     """Approach 3: Piecewise quadratic temperature response with LOESS detrending.
 
@@ -1487,6 +1508,7 @@ def fit_ApproachPL_piecewise(
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach8Piecewise with T_opt, h2_low, h2_high, and standard errors
@@ -1522,11 +1544,20 @@ def fit_ApproachPL_piecewise(
         X2 = high_T - high_trend  # Column for h2_high
         X = np.column_stack([X1, X2])
 
-        # Solve OLS: min ||y - X @ [h2_low, h2_high]||^2
+        # Solve OLS: min ||y - X @ [h2_low, h2_high]||^2 (weighted if weights provided)
         try:
-            beta_ols, _, _, _ = linalg.lstsq(X, y)
-            y_pred = X @ beta_ols
-            sse = np.sum((y - y_pred) ** 2)
+            if weights is not None:
+                # Weighted least squares (use lstsq for numerical stability)
+                sqrt_W = np.sqrt(weights)
+                X_w = X * sqrt_W[:, np.newaxis]
+                y_w = y * sqrt_W
+                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+                y_pred = X @ beta_ols
+                sse = np.sum(weights * (y - y_pred) ** 2)
+            else:
+                beta_ols, _, _, _ = linalg.lstsq(X, y)
+                y_pred = X @ beta_ols
+                sse = np.sum((y - y_pred) ** 2)
             return sse
         except Exception:
             return np.inf
@@ -1551,11 +1582,14 @@ def fit_ApproachPL_piecewise(
     X2 = high_T - high_trend
     X_opt = np.column_stack([X1, X2])
 
-    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
     h2_low = beta_ols[0]
     h2_high = beta_ols[1]
-    h2_low_se = np.sqrt(cov[0, 0])
-    h2_high_se = np.sqrt(cov[1, 1])
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for T_opt using numerical Hessian
     T_opt_se = compute_1d_se_numerical(
@@ -1638,6 +1672,7 @@ def fit_ApproachDL_persistence_decay(
     trends_loess: CountryTrendsLoess,
     year_means: dict,
     h4_bounds: tuple = (0.0, 1.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach4:
     """Approach 4: Persistence decay model with LOESS detrending.
 
@@ -1660,6 +1695,7 @@ def fit_ApproachDL_persistence_decay(
         trends_loess: CountryTrendsLoess (with LOESS trends)
         year_means: Pre-computed k[t] = mean(dy_i[t])
         h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
@@ -1695,10 +1731,19 @@ def fit_ApproachDL_persistence_decay(
 
         X = np.column_stack([X1, X2])
 
-        # Solve OLS: min ||y - X @ [h1, h2]||^2
-        beta_ols, _, _, _ = linalg.lstsq(X, y)
-        y_pred = X @ beta_ols
-        sse = np.sum((y - y_pred) ** 2)
+        # Solve OLS: min ||y - X @ [h1, h2]||^2 (weighted if weights provided)
+        if weights is not None:
+            # Weighted least squares (use lstsq for numerical stability)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum(weights * (y - y_pred) ** 2)
+        else:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
         return sse
 
     # 1D optimization using Brent's method (more robust for 1D bounded problems)
@@ -1733,11 +1778,14 @@ def fit_ApproachDL_persistence_decay(
     X2 = (T**2 - h4_opt * A_T2_lag - correction_T2) - (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
     X_opt = np.column_stack([X1, X2])
 
-    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
     h1 = beta_ols[0]
     h2 = beta_ols[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for h4 using numerical Hessian
     h4_se = compute_1d_se_numerical(
@@ -1827,6 +1875,7 @@ def fit_ApproachDL_persistence_decay(
 def fit_ApproachPJ_piecewise_conjoined(
     data: AnalysisData,
     T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach8:
     """Approach 5: Piecewise quadratic with full OLS for j_i(t) and k(t).
 
@@ -1848,6 +1897,7 @@ def fit_ApproachPJ_piecewise_conjoined(
     Args:
         data: AnalysisData object
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach8 with T_opt, h2 (below), h4 (above), and standard errors
@@ -1901,10 +1951,19 @@ def fit_ApproachPJ_piecewise_conjoined(
         X[:, 0] = low_col
         X[:, 1] = high_col
 
-        # Solve OLS
-        beta_ols, _, _, _ = linalg.lstsq(X, y)
-        y_pred = X @ beta_ols
-        sse = np.sum((y - y_pred) ** 2)
+        # Solve OLS (weighted if weights provided)
+        if weights is not None:
+            # Weighted least squares (use lstsq for numerical stability)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum(weights * (y - y_pred) ** 2)
+        else:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
         return sse
 
     # 1D optimization: grid search then Brent's method
@@ -1931,12 +1990,15 @@ def fit_ApproachPJ_piecewise_conjoined(
     X_opt[:, 0] = low_col
     X_opt[:, 1] = high_col
 
-    beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
 
     h2_low = beta[0]
     h2_high = beta[1]
-    h2_low_se = np.sqrt(cov[0, 0])
-    h2_high_se = np.sqrt(cov[1, 1])
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for T_opt using numerical Hessian
     T_opt_se = compute_1d_se_numerical(
@@ -2030,6 +2092,7 @@ def fit_ApproachPJ_piecewise_conjoined(
 def fit_ApproachDJ_persistence_conjoined(
     data: AnalysisData,
     h4_bounds: tuple = (0.0, 1.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach4:
     """Approach 6: Persistence decay with full OLS for j_i(t) and k(t).
 
@@ -2061,6 +2124,7 @@ def fit_ApproachDJ_persistence_conjoined(
     Args:
         data: AnalysisData object
         h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
@@ -2123,10 +2187,19 @@ def fit_ApproachDJ_persistence_conjoined(
         X[:, 0] = X1
         X[:, 1] = X2
 
-        # Solve OLS
-        beta_ols, _, _, _ = linalg.lstsq(X, y)
-        y_pred = X @ beta_ols
-        sse = np.sum((y - y_pred) ** 2)
+        # Solve OLS (weighted if weights provided)
+        if weights is not None:
+            # Weighted least squares (use lstsq for numerical stability)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum(weights * (y - y_pred) ** 2)
+        else:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
         return sse
 
     # 1D optimization: grid search then Brent's method
@@ -2157,12 +2230,15 @@ def fit_ApproachDJ_persistence_conjoined(
     X_opt[:, 0] = X1
     X_opt[:, 1] = X2
 
-    beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
 
     h1 = beta[0]
     h2 = beta[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for h4 using numerical Hessian
     h4_se = compute_1d_se_numerical(
@@ -2254,7 +2330,7 @@ def fit_ApproachDJ_persistence_conjoined(
     )
 
 
-def fit_ApproachQJ_conjoined(data: AnalysisData) -> FitResult:
+def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
     Δy_i(t) = h1*T + h2*T² + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2267,6 +2343,10 @@ def fit_ApproachQJ_conjoined(data: AnalysisData) -> FitResult:
     For identifiability, we set j_{0,0} = j_{1,0} = j_{2,0} = 0 (first country is reference).
     This provides 3 constraints to pin down the arbitrary quadratic that could otherwise
     be added to all j_i(t) and subtracted from all k_t.
+
+    Args:
+        data: AnalysisData object
+        weights: Optional observation weights for weighted least squares
     """
     n_obs = data.n_obs
     n_countries = data.n_countries
@@ -2307,15 +2387,18 @@ def fit_ApproachQJ_conjoined(data: AnalysisData) -> FitResult:
         yr_idx = year_to_idx[data.year[i]]
         X[i, k_col_start + yr_idx] = 1.0
 
-    # Fit OLS
+    # Fit OLS (weighted if weights provided)
     y = data.growth_pcGDP
-    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
     # Extract coefficients
     h1 = beta[0]
     h2 = beta[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Year fixed effects (store by actual year for consistency with other approaches)
     k = {}
@@ -2396,7 +2479,7 @@ def fit_ApproachQJ_conjoined(data: AnalysisData) -> FitResult:
     )
 
 
-def fit_ApproachNJ_joint(data: AnalysisData) -> FitResult:
+def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitResult:
     """Null model: No climate response, joint OLS fit with country trends and year effects.
 
     Δy_i(t) = j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
@@ -2405,6 +2488,10 @@ def fit_ApproachNJ_joint(data: AnalysisData) -> FitResult:
     is explained by country trends and year effects alone.
 
     For identifiability, we set j_{0,0} = j_{1,0} = j_{2,0} = 0 (first country is reference).
+
+    Args:
+        data: AnalysisData object
+        weights: Optional observation weights for weighted least squares
     """
     n_obs = data.n_obs
     n_countries = data.n_countries
@@ -2439,9 +2526,12 @@ def fit_ApproachNJ_joint(data: AnalysisData) -> FitResult:
         yr_idx = year_to_idx[data.year[i]]
         X[i, k_col_start + yr_idx] = 1.0
 
-    # Fit OLS
+    # Fit OLS (weighted if weights provided)
     y = data.growth_pcGDP
-    beta, residuals, sigma_sq, cov = fit_ols(y, X)
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X)
 
     # No climate response coefficients
     h1 = 0.0
@@ -2674,6 +2764,7 @@ def fit_ApproachPP_piecewise_linear_detrend(
     trends: CountryTrends,
     year_means: dict,
     T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach8:
     """Approach 7: Piecewise quadratic response with linear T + quadratic GDP detrending.
 
@@ -2695,6 +2786,7 @@ def fit_ApproachPP_piecewise_linear_detrend(
         trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
         year_means: Pre-computed k[t] = mean(dy_i[t])
         T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach8 with T_opt, h2 (below), h4 (above), and standard errors
@@ -2736,11 +2828,23 @@ def fit_ApproachPP_piecewise_linear_detrend(
         X2 = high_T - high_trend  # Column for h2_high
         X = np.column_stack([X1, X2])
 
-        # Solve OLS: min ||y - X @ [h2_low, h2_high]||^2
-        beta_ols, _, _, _ = linalg.lstsq(X, y)
-        y_pred = X @ beta_ols
-        sse = np.sum((y - y_pred) ** 2)
-        return sse
+        # Solve OLS: min ||y - X @ [h2_low, h2_high]||^2 (weighted if weights provided)
+        try:
+            if weights is not None:
+                # Weighted least squares (use lstsq for numerical stability)
+                sqrt_W = np.sqrt(weights)
+                X_w = X * sqrt_W[:, np.newaxis]
+                y_w = y * sqrt_W
+                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+                y_pred = X @ beta_ols
+                sse = np.sum(weights * (y - y_pred) ** 2)
+            else:
+                beta_ols, _, _, _ = linalg.lstsq(X, y)
+                y_pred = X @ beta_ols
+                sse = np.sum((y - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
 
     # Initial guess: T_opt = 15°C
     x0 = 15.0
@@ -2762,11 +2866,14 @@ def fit_ApproachPP_piecewise_linear_detrend(
     X2 = high_T - high_trend
     X_opt = np.column_stack([X1, X2])
 
-    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
     h2_low = beta_ols[0]
     h2_high = beta_ols[1]
-    h2_low_se = np.sqrt(cov[0, 0])
-    h2_high_se = np.sqrt(cov[1, 1])
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for T_opt using numerical Hessian
     T_opt_se = compute_1d_se_numerical(
@@ -2855,6 +2962,7 @@ def fit_ApproachDP_persistence_linear_detrend(
     trends: CountryTrends,
     year_means: dict,
     h4_bounds: tuple = (0.0, 1.0),
+    weights: np.ndarray = None,
 ) -> FitResultApproach4:
     """Approach 8: Persistence decay with linear T + quadratic GDP detrending.
 
@@ -2878,6 +2986,7 @@ def fit_ApproachDP_persistence_linear_detrend(
         trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
         year_means: Pre-computed k[t] = mean(dy_i[t])
         h4_bounds: Bounds for persistence decay parameter (default [0, 1])
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         FitResultApproach4 with h1, h2, h4, T_opt, and standard errors
@@ -2924,10 +3033,19 @@ def fit_ApproachDP_persistence_linear_detrend(
 
         X = np.column_stack([X1, X2])
 
-        # Solve OLS: min ||y - X @ [h1, h2]||^2
-        beta_ols, _, _, _ = linalg.lstsq(X, y)
-        y_pred = X @ beta_ols
-        sse = np.sum((y - y_pred) ** 2)
+        # Solve OLS: min ||y - X @ [h1, h2]||^2 (weighted if weights provided)
+        if weights is not None:
+            # Weighted least squares (use lstsq for numerical stability)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum(weights * (y - y_pred) ** 2)
+        else:
+            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
         return sse
 
     # 1D optimization using Brent's method (more robust for 1D bounded problems)
@@ -2962,11 +3080,14 @@ def fit_ApproachDP_persistence_linear_detrend(
     X2 = (T**2 - h4_opt * A_T2_lag - correction_T2) - (T_trend**2 - h4_opt * A_T2_trend_lag - correction_T2_trend)
     X_opt = np.column_stack([X1, X2])
 
-    beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
     h1 = beta_ols[0]
     h2 = beta_ols[1]
-    h1_se = np.sqrt(cov[0, 0])
-    h2_se = np.sqrt(cov[1, 1])
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
 
     # Compute SE for h4 using numerical Hessian
     h4_se = compute_1d_se_numerical(
@@ -3062,7 +3183,8 @@ def fit_ApproachDP_persistence_linear_detrend(
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
-    trends_loess: CountryTrendsLoess = None
+    trends_loess: CountryTrendsLoess = None,
+    weights: np.ndarray = None
 ) -> dict:
     """Fit all approaches and return results.
 
@@ -3085,6 +3207,7 @@ def fit_all_approaches(
         trends_with_k: CountryTrends for Approach QP (fit to dy - k)
         year_means: Pre-computed k[t] for approaches 1-4
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
+        weights: Optional observation weights for weighted least squares (bootstrap)
     """
     results = {}
     timings = {}
@@ -3099,36 +3222,38 @@ def fit_all_approaches(
         print(f"      {name}: {elapsed:.3f}s")
 
     # Conjoined approaches
-    timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data)
-    timed_fit('Approach NJ', fit_ApproachNJ_joint, data)
-    timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data)
-    timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data)
+    timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data, weights)
+    timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
+    timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
+    timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
         timed_fit('Approach QP', fit_ApproachQP_precomputed_k,
-                  data, trends_with_k, year_means)
+                  data, trends_with_k, year_means, weights)
+        # NP uses precomputed trends - weighting is done in detrending step
         timed_fit('Approach NP', fit_ApproachNP_precomputed_k,
                   data, trends_with_k, year_means)
 
     # Add Approach QL, Approach PL, Approach DL and Approach NL if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
         timed_fit('Approach QL', fit_ApproachQL_loess,
-                  data, trends_loess, year_means)
+                  data, trends_loess, year_means, weights)
+        # NL uses precomputed trends - weighting is done in detrending step
         timed_fit('Approach NL', fit_ApproachNL_precomputed_k_loess,
                   data, trends_loess, year_means)
         timed_fit('Approach PL', fit_ApproachPL_piecewise,
-                  data, trends_loess, year_means)
+                  data, trends_loess, year_means, (0.0, 30.0), weights)
         timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
-                  data, trends_loess, year_means)
+                  data, trends_loess, year_means, (0.0, 1.0), weights)
 
     # Add Approach PP and Approach DP if trends_with_k and year_means are provided
     # These use linear T / quadratic GDP detrending with alternative climate response functions
     if trends_with_k is not None and year_means is not None:
         timed_fit('Approach PP', fit_ApproachPP_piecewise_linear_detrend,
-                  data, trends_with_k, year_means)
+                  data, trends_with_k, year_means, (0.0, 30.0), weights)
         timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,
-                  data, trends_with_k, year_means)
+                  data, trends_with_k, year_means, (0.0, 1.0), weights)
 
     total_time = sum(timings.values())
     print(f"      Total fitting time: {total_time:.3f}s")

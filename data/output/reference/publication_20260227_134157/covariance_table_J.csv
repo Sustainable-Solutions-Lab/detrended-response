@@ -1,0 +1,12 @@
+Metric,Approach NJ_point,Approach NJ_p5,Approach NJ_p25,Approach NJ_p50,Approach NJ_p75,Approach NJ_p95,Approach QJ_point,Approach QJ_p5,Approach QJ_p25,Approach QJ_p50,Approach QJ_p75,Approach QJ_p95,Approach PJ_point,Approach PJ_p5,Approach PJ_p25,Approach PJ_p50,Approach PJ_p75,Approach PJ_p95,Approach DJ_point,Approach DJ_p5,Approach DJ_p25,Approach DJ_p50,Approach DJ_p75,Approach DJ_p95
+Var(h(T))/Var(Δy),,,,,,,,,,,,,,,,,,,,,,,,
+Var(j)/Var(Δy),,,,,,,,,,,,,,,,,,,,,,,,
+Var(k)/Var(Δy),,,,,,,,,,,,,,,,,,,,,,,,
+Var(ε)/Var(Δy),,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(h(T),j)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(h(T),k)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(h(T),ε)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(j,k)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(j,ε)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+"2Cov(k,ε)/Var(Δy)",,,,,,,,,,,,,,,,,,,,,,,,
+Sum,,,,,,,,,,,,,,,,,,,,,,,,

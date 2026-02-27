@@ -982,14 +982,13 @@ def run_bootstrap(
                 boot_trends_with_k = compute_country_trends_with_k_weighted(data, boot_year_means, weights)
                 boot_trends_loess = compute_country_trends_loess_weighted(data, boot_year_means, weights, loess_window)
 
-                # Fit all methods with weighted OLS
-                # Use fit_all_approaches_weighted helper
-                boot_results = _fit_all_approaches_weighted(
-                    data, boot_trends, weights,
+                # Fit all methods with weighted OLS using full fit_all_approaches
+                boot_results = fit_all_approaches(
+                    data, boot_trends,
                     trends_with_k=boot_trends_with_k,
                     year_means=boot_year_means,
                     trends_loess=boot_trends_loess,
-                    loess_window=loess_window
+                    weights=weights
                 )
             else:
                 # Original country-only bootstrap (observation duplication)
