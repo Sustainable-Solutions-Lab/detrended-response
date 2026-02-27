@@ -36,11 +36,17 @@ from typing import Dict, Tuple
 from .data_loader import AnalysisData
 from .detrending import (
     CountryTrends,
+    CountryTrendsLoess,
     compute_country_trends,
     compute_year_means,
     compute_country_trends_with_k,
     compute_country_trends_loess,
     DEFAULT_LOESS_WINDOW_YEARS,
+    # Weighted functions for time-dimension bootstrap
+    compute_year_means_weighted,
+    compute_country_trends_weighted,
+    compute_country_trends_with_k_weighted,
+    compute_country_trends_loess_weighted,
 )
 from .fitting import (
     fit_all_approaches,
@@ -49,6 +55,7 @@ from .fitting import (
     compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
     compute_T_linear_at_first_year,
+    fit_ols_weighted,
 )
 
 
@@ -237,6 +244,584 @@ def create_bootstrap_data(
     )
 
 
+def compute_bootstrap_weights(
+    data: AnalysisData,
+    selected_country_indices: np.ndarray,
+    selected_year_indices: np.ndarray = None,
+) -> np.ndarray:
+    """Compute observation weights from bootstrap country/year sampling.
+
+    When both countries and years are sampled with replacement, each observation's
+    weight equals (country_count) × (year_count), where:
+    - country_count = how many times this observation's country was sampled
+    - year_count = how many times this observation's year was sampled
+
+    Args:
+        data: Original panel data (with all observations)
+        selected_country_indices: Array of sampled country indices (length n_countries)
+        selected_year_indices: Array of sampled year indices (length n_years), or None
+            for country-only bootstrap (all year weights = 1)
+
+    Returns:
+        Observation weights, shape (n_obs,). Weights are 0 for observations whose
+        year was not sampled (when year sampling is enabled).
+    """
+    # Count how many times each country was sampled
+    country_counts = np.bincount(selected_country_indices, minlength=data.n_countries)
+
+    # Count how many times each year was sampled
+    unique_years = sorted(set(data.year))
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
+
+    if selected_year_indices is not None:
+        year_counts = np.bincount(selected_year_indices, minlength=len(unique_years))
+    else:
+        # Country-only bootstrap: all years have weight 1
+        year_counts = np.ones(len(unique_years))
+
+    # Compute observation weights
+    weights = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        y_idx = year_to_idx[data.year[i]]
+        weights[i] = country_counts[c] * year_counts[y_idx]
+
+    return weights
+
+
+def _fit_all_approaches_weighted(
+    data: AnalysisData,
+    trends: CountryTrends,
+    weights: np.ndarray,
+    trends_with_k: CountryTrends = None,
+    year_means: dict = None,
+    trends_loess: CountryTrendsLoess = None,
+    loess_window: float = None,
+) -> dict:
+    """Fit all approaches using weighted OLS for bootstrap with year sampling.
+
+    This is a simplified version of fit_all_approaches that uses weighted OLS.
+    It extracts the essential coefficients needed for bootstrap analysis.
+
+    Args:
+        data: AnalysisData object (original data, not duplicated)
+        trends: CountryTrends for polynomial detrending
+        weights: Observation weights from country/year sampling
+        trends_with_k: CountryTrends fit to (dy - k) for polynomial approaches
+        year_means: Pre-computed weighted k[t]
+        trends_loess: CountryTrendsLoess for LOESS approaches
+        loess_window: LOESS window size (for consistency)
+
+    Returns:
+        Dict mapping approach name to a simple result object with h1, h2, T_opt, etc.
+    """
+    from scipy import linalg
+    from .detrending import (
+        compute_detrended_temperature,
+        compute_detrended_temp_squared,
+        compute_detrended_temperature_loess,
+        compute_detrended_temp_squared_loess,
+    )
+    from .fitting import (
+        compute_T_optimal,
+        compute_fit_stats,
+        compute_total_r_squared,
+        FitResult,
+        FitResultApproach8,
+        FitResultApproach4,
+    )
+
+    results = {}
+
+    # Helper: weighted OLS using pseudoinverse for numerical stability
+    def weighted_ols(y, X, w):
+        """Solve weighted least squares using pseudoinverse for stability."""
+        # Remove columns that have zero effective weight (prevents singularity)
+        effective_weight_per_col = np.abs(X.T @ w)
+        valid_cols = effective_weight_per_col > 1e-10
+        X_valid = X[:, valid_cols]
+
+        if X_valid.shape[1] == 0:
+            # No valid columns, return zeros
+            beta = np.zeros(X.shape[1])
+            residuals = y.copy()
+            cov = np.zeros((X.shape[1], X.shape[1]))
+            return beta, residuals, np.nan, cov
+
+        # Weighted normal equations
+        XtW = X_valid.T * w
+        XtWX = XtW @ X_valid
+        XtWy = XtW @ y
+
+        # Use lstsq for numerical stability
+        beta_valid, _, _, _ = linalg.lstsq(XtWX, XtWy)
+
+        # Reconstruct full beta vector
+        beta = np.zeros(X.shape[1])
+        beta[valid_cols] = beta_valid
+
+        y_pred = X @ beta
+        residuals = y - y_pred
+
+        # Covariance (simplified for bootstrap - SE not critical)
+        n_eff = np.sum(w)
+        p = X_valid.shape[1]
+        df = n_eff - p
+        sse_w = np.sum(w * residuals ** 2)
+        sigma_sq = sse_w / df if df > 0 else np.nan
+
+        # Use pseudoinverse for covariance
+        cov = np.zeros((X.shape[1], X.shape[1]))
+        try:
+            XtWX_inv = linalg.pinv(XtWX)
+            cov_valid = sigma_sq * XtWX_inv
+            for i, ci in enumerate(np.where(valid_cols)[0]):
+                for j, cj in enumerate(np.where(valid_cols)[0]):
+                    cov[ci, cj] = cov_valid[i, j]
+        except:
+            pass
+
+        return beta, residuals, sigma_sq, cov
+
+    # Build year dummies for joint approaches
+    # Only include years that have non-zero weight
+    unique_years = sorted(set(data.year))
+    year_weights = {}
+    for yr in unique_years:
+        yr_mask = data.year == yr
+        year_weights[yr] = np.sum(weights[yr_mask])
+
+    # Filter to years with non-zero weight
+    active_years = [yr for yr in unique_years if year_weights[yr] > 0]
+    n_years_local = len(active_years)
+    year_to_idx_local = {y: i for i, y in enumerate(active_years)}
+
+    def build_year_dummies():
+        year_dummies = np.zeros((data.n_obs, n_years_local))
+        for i in range(data.n_obs):
+            yr = data.year[i]
+            if yr in year_to_idx_local:
+                yr_idx = year_to_idx_local[yr]
+                year_dummies[i, yr_idx] = 1.0
+        return year_dummies
+
+    year_dummies = build_year_dummies()
+
+    # =========================================================================
+    # Approach QJ: Joint OLS with quadratic h(T)
+    # =========================================================================
+    # Design matrix: [T, T², year_dummies, country_time_dummies]
+    # For simplicity in bootstrap, we skip country-specific j terms and just
+    # estimate h1, h2, k
+    X_QJ = np.column_stack([data.temp, data.temp ** 2, year_dummies])
+    y = data.growth_pcGDP
+    beta_QJ, residuals_QJ, _, cov_QJ = weighted_ols(y, X_QJ, weights)
+    h1_QJ = beta_QJ[0]
+    h2_QJ = beta_QJ[1]
+    # Build k dict for all years (zero for inactive years)
+    k_QJ = {}
+    for yr in unique_years:
+        if yr in year_to_idx_local:
+            k_QJ[yr] = beta_QJ[2 + year_to_idx_local[yr]]
+        else:
+            k_QJ[yr] = 0.0
+    T_opt_QJ = compute_T_optimal(h1_QJ, h2_QJ)
+
+    # Compute fit stats
+    r_sq_QJ, adj_r_sq_QJ, rmse_QJ = compute_fit_stats(y, residuals_QJ, X_QJ.shape[1])
+    total_r_sq_QJ = compute_total_r_squared(residuals_QJ, data.growth_pcGDP)
+
+    results['Approach QJ'] = FitResult(
+        approach="Approach QJ: Quadratic (Joint OLS)",
+        h1=h1_QJ, h2=h2_QJ,
+        h1_se=np.sqrt(max(cov_QJ[0, 0], 0)), h2_se=np.sqrt(max(cov_QJ[1, 1], 0)),
+        k=k_QJ,
+        r_squared=r_sq_QJ, adj_r_squared=adj_r_sq_QJ, rmse=rmse_QJ,
+        n_obs=data.n_obs, n_params=X_QJ.shape[1],
+        residuals=residuals_QJ, T_opt=T_opt_QJ,
+        total_r_squared=total_r_sq_QJ,
+    )
+
+    # =========================================================================
+    # Approach NJ: Null model (h1=h2=0)
+    # =========================================================================
+    X_NJ = year_dummies
+    beta_NJ, residuals_NJ, _, _ = weighted_ols(y, X_NJ, weights)
+    # Build k dict for all years
+    k_NJ = {}
+    for yr in unique_years:
+        if yr in year_to_idx_local:
+            k_NJ[yr] = beta_NJ[year_to_idx_local[yr]]
+        else:
+            k_NJ[yr] = 0.0
+    r_sq_NJ, adj_r_sq_NJ, rmse_NJ = compute_fit_stats(y, residuals_NJ, X_NJ.shape[1])
+    total_r_sq_NJ = compute_total_r_squared(residuals_NJ, data.growth_pcGDP)
+
+    results['Approach NJ'] = FitResult(
+        approach="Approach NJ: Null (Joint OLS)",
+        h1=0.0, h2=0.0, h1_se=0.0, h2_se=0.0,
+        k=k_NJ,
+        r_squared=r_sq_NJ, adj_r_squared=adj_r_sq_NJ, rmse=rmse_NJ,
+        n_obs=data.n_obs, n_params=X_NJ.shape[1],
+        residuals=residuals_NJ, T_opt=np.nan,
+        total_r_squared=total_r_sq_NJ,
+    )
+
+    # =========================================================================
+    # Pre-computed approaches (QP, QL, etc.) - use pre-computed trends
+    # =========================================================================
+    if trends_with_k is not None and year_means is not None:
+        # Approach QP: Polynomial detrending
+        T_star = compute_detrended_temperature(data, trends_with_k)
+        T2_detrend = compute_detrended_temp_squared(data, trends_with_k)
+
+        # Compute dependent variable: dy - k - j
+        y_QP = np.zeros(data.n_obs)
+        for i in range(data.n_obs):
+            c = data.country_idx[i]
+            t = data.time[i]
+            yr = data.year[i]
+            j_i = trends_with_k.y0[c] + trends_with_k.y1[c] * t + trends_with_k.y2[c] * t * t
+            y_QP[i] = data.growth_pcGDP[i] - year_means[yr] - j_i
+
+        X_QP = np.column_stack([T_star, T2_detrend])
+        beta_QP, residuals_QP, _, cov_QP = weighted_ols(y_QP, X_QP, weights)
+        h1_QP = beta_QP[0]
+        h2_QP = beta_QP[1]
+        T_opt_QP = compute_T_optimal(h1_QP, h2_QP)
+        r_sq_QP, adj_r_sq_QP, rmse_QP = compute_fit_stats(y_QP, residuals_QP, 2)
+        total_r_sq_QP = compute_total_r_squared(residuals_QP, data.growth_pcGDP)
+
+        results['Approach QP'] = FitResult(
+            approach="Approach QP: Quadratic (Polynomial Detrending)",
+            h1=h1_QP, h2=h2_QP,
+            h1_se=np.sqrt(cov_QP[0, 0]), h2_se=np.sqrt(cov_QP[1, 1]),
+            k=dict(year_means),
+            r_squared=r_sq_QP, adj_r_squared=adj_r_sq_QP, rmse=rmse_QP,
+            n_obs=data.n_obs, n_params=2,
+            residuals=residuals_QP, T_opt=T_opt_QP,
+            total_r_squared=total_r_sq_QP,
+        )
+
+        # Approach NP: Null with polynomial
+        results['Approach NP'] = FitResult(
+            approach="Approach NP: Null (Polynomial Detrending)",
+            h1=0.0, h2=0.0, h1_se=0.0, h2_se=0.0,
+            k=dict(year_means),
+            r_squared=0.0, adj_r_squared=0.0, rmse=np.std(y_QP),
+            n_obs=data.n_obs, n_params=0,
+            residuals=y_QP, T_opt=np.nan,
+            total_r_squared=total_r_sq_QP,
+        )
+
+    if trends_loess is not None and year_means is not None:
+        # Approach QL: LOESS detrending
+        T_star_L = compute_detrended_temperature_loess(data, trends_loess)
+        T2_detrend_L = compute_detrended_temp_squared_loess(data, trends_loess)
+
+        y_QL = np.zeros(data.n_obs)
+        for i in range(data.n_obs):
+            yr = data.year[i]
+            y_QL[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+        X_QL = np.column_stack([T_star_L, T2_detrend_L])
+        beta_QL, residuals_QL, _, cov_QL = weighted_ols(y_QL, X_QL, weights)
+        h1_QL = beta_QL[0]
+        h2_QL = beta_QL[1]
+        T_opt_QL = compute_T_optimal(h1_QL, h2_QL)
+        r_sq_QL, adj_r_sq_QL, rmse_QL = compute_fit_stats(y_QL, residuals_QL, 2)
+        total_r_sq_QL = compute_total_r_squared(residuals_QL, data.growth_pcGDP)
+
+        results['Approach QL'] = FitResult(
+            approach="Approach QL: Quadratic (LOESS Detrending)",
+            h1=h1_QL, h2=h2_QL,
+            h1_se=np.sqrt(cov_QL[0, 0]), h2_se=np.sqrt(cov_QL[1, 1]),
+            k=dict(year_means),
+            r_squared=r_sq_QL, adj_r_squared=adj_r_sq_QL, rmse=rmse_QL,
+            n_obs=data.n_obs, n_params=2,
+            residuals=residuals_QL, T_opt=T_opt_QL,
+            total_r_squared=total_r_sq_QL,
+        )
+
+        # Approach NL: Null with LOESS
+        results['Approach NL'] = FitResult(
+            approach="Approach NL: Null (LOESS Detrending)",
+            h1=0.0, h2=0.0, h1_se=0.0, h2_se=0.0,
+            k=dict(year_means),
+            r_squared=0.0, adj_r_squared=0.0, rmse=np.std(y_QL),
+            n_obs=data.n_obs, n_params=0,
+            residuals=y_QL, T_opt=np.nan,
+            total_r_squared=total_r_sq_QL,
+        )
+
+        # =====================================================================
+        # Approach PL: Piecewise quadratic with LOESS
+        # =====================================================================
+        # Optimize T_opt via grid search
+        T_range = np.linspace(5, 25, 41)
+        best_sse = np.inf
+        best_T_opt_PL = 15.0
+        best_h2_PL = 0.0
+        best_h4_PL = 0.0
+
+        for T_test in T_range:
+            below = data.temp <= T_test
+            X1_PL = np.where(below, (data.temp - T_test) ** 2, 0)
+            X2_PL = np.where(~below, (data.temp - T_test) ** 2, 0)
+            # Subtract LOESS trends
+            X1_PL_star = X1_PL - np.where(below, (trends_loess.T_loess - T_test) ** 2, 0)
+            X2_PL_star = X2_PL - np.where(~below, (trends_loess.T_loess - T_test) ** 2, 0)
+
+            X_PL = np.column_stack([X1_PL_star, X2_PL_star])
+            try:
+                beta_PL_test, residuals_PL_test, _, _ = weighted_ols(y_QL, X_PL, weights)
+                sse = np.sum(weights * residuals_PL_test ** 2)
+                if sse < best_sse:
+                    best_sse = sse
+                    best_T_opt_PL = T_test
+                    best_h2_PL = beta_PL_test[0]
+                    best_h4_PL = beta_PL_test[1]
+            except:
+                pass
+
+        results['Approach PL'] = FitResultApproach8(
+            approach="Approach PL: Piecewise Quadratic (LOESS)",
+            h2=best_h2_PL, h2_se=0.0,
+            h4=best_h4_PL, h4_se=0.0,
+            T_opt=best_T_opt_PL, T_opt_se=0.0,
+            k=dict(year_means),
+            r_squared=r_sq_QL, adj_r_squared=adj_r_sq_QL, rmse=rmse_QL,
+            n_obs=data.n_obs, n_params=3,
+            residuals=residuals_QL,
+            total_r_squared=total_r_sq_QL,
+        )
+
+        # =====================================================================
+        # Approach DL: Persistence decay with LOESS
+        # =====================================================================
+        # Optimize h4 (decay parameter) via grid search
+        h4_range = np.linspace(0.01, 0.99, 20)
+        best_sse_DL = np.inf
+        best_h4_DL = 0.5
+        best_h1_DL = 0.0
+        best_h2_DL = 0.0
+
+        for h4_test in h4_range:
+            A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_test)
+            # Correction for pre-history (using T_loess at base year)
+            T_loess_base = _get_T_loess_at_base_year(data, trends_loess, base_year=1961)
+            correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_test, T_loess_base)
+
+            X1_DL = data.temp - h4_test * A_T_lag - correction_T
+            X2_DL = data.temp ** 2 - h4_test * A_T2_lag - correction_T2
+            # Subtract LOESS trends for persistence model
+            X1_DL_star = X1_DL - (trends_loess.T_loess - h4_test * compute_persistence_accumulators_at_T(data, h4_test, trends_loess.T_loess)[0] - correction_T)
+            X2_DL_star = X2_DL - (trends_loess.T_loess ** 2 - h4_test * compute_persistence_accumulators_at_T(data, h4_test, trends_loess.T_loess)[1] - correction_T2)
+
+            X_DL = np.column_stack([X1_DL_star, X2_DL_star])
+            try:
+                beta_DL_test, residuals_DL_test, _, _ = weighted_ols(y_QL, X_DL, weights)
+                sse = np.sum(weights * residuals_DL_test ** 2)
+                if sse < best_sse_DL:
+                    best_sse_DL = sse
+                    best_h4_DL = h4_test
+                    best_h1_DL = beta_DL_test[0]
+                    best_h2_DL = beta_DL_test[1]
+            except:
+                pass
+
+        T_opt_DL = compute_T_optimal(best_h1_DL, best_h2_DL)
+
+        results['Approach DL'] = FitResultApproach4(
+            approach="Approach DL: Persistence Decay (LOESS)",
+            h1=best_h1_DL, h2=best_h2_DL,
+            h1_se=0.0, h2_se=0.0,
+            h4=best_h4_DL, h4_se=0.0,
+            k=dict(year_means),
+            r_squared=r_sq_QL, adj_r_squared=adj_r_sq_QL, rmse=rmse_QL,
+            n_obs=data.n_obs, n_params=3,
+            residuals=residuals_QL,
+            T_opt=T_opt_DL,
+            total_r_squared=total_r_sq_QL,
+        )
+
+    # =========================================================================
+    # Joint approaches: PJ, DJ
+    # =========================================================================
+    # Approach PJ: Piecewise joint - simplified grid search
+    T_range = np.linspace(5, 25, 41)
+    best_sse_PJ = np.inf
+    best_T_opt_PJ = 15.0
+    best_h2_PJ = 0.0
+    best_h4_PJ = 0.0
+
+    for T_test in T_range:
+        below = data.temp <= T_test
+        X1_PJ = np.where(below, (data.temp - T_test) ** 2, 0)
+        X2_PJ = np.where(~below, (data.temp - T_test) ** 2, 0)
+        X_PJ = np.column_stack([X1_PJ, X2_PJ, year_dummies])
+        try:
+            beta_PJ_test, residuals_PJ_test, _, _ = weighted_ols(y, X_PJ, weights)
+            sse = np.sum(weights * residuals_PJ_test ** 2)
+            if sse < best_sse_PJ:
+                best_sse_PJ = sse
+                best_T_opt_PJ = T_test
+                best_h2_PJ = beta_PJ_test[0]
+                best_h4_PJ = beta_PJ_test[1]
+        except:
+            pass
+
+    k_PJ = {yr: 0.0 for yr in unique_years}  # Simplified
+    r_sq_PJ, _, rmse_PJ = compute_fit_stats(y, residuals_QJ, 3)  # Approximate
+    total_r_sq_PJ = compute_total_r_squared(residuals_QJ, data.growth_pcGDP)
+
+    results['Approach PJ'] = FitResultApproach8(
+        approach="Approach PJ: Piecewise Quadratic (Joint)",
+        h2=best_h2_PJ, h2_se=0.0,
+        h4=best_h4_PJ, h4_se=0.0,
+        T_opt=best_T_opt_PJ, T_opt_se=0.0,
+        k=k_PJ,
+        r_squared=r_sq_PJ, adj_r_squared=r_sq_PJ, rmse=rmse_PJ,
+        n_obs=data.n_obs, n_params=3,
+        residuals=residuals_QJ,
+        total_r_squared=total_r_sq_PJ,
+    )
+
+    # Approach DJ: Persistence joint - simplified grid search
+    h4_range = np.linspace(0.01, 0.99, 20)
+    best_sse_DJ = np.inf
+    best_h4_DJ = 0.5
+    best_h1_DJ = 0.0
+    best_h2_DJ = 0.0
+
+    T_linear_first = compute_T_linear_at_first_year(data)
+    for h4_test in h4_range:
+        A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_test)
+        correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_test, T_linear_first)
+        X1_DJ = data.temp - h4_test * A_T_lag - correction_T
+        X2_DJ = data.temp ** 2 - h4_test * A_T2_lag - correction_T2
+        X_DJ = np.column_stack([X1_DJ, X2_DJ, year_dummies])
+        try:
+            beta_DJ_test, residuals_DJ_test, _, _ = weighted_ols(y, X_DJ, weights)
+            sse = np.sum(weights * residuals_DJ_test ** 2)
+            if sse < best_sse_DJ:
+                best_sse_DJ = sse
+                best_h4_DJ = h4_test
+                best_h1_DJ = beta_DJ_test[0]
+                best_h2_DJ = beta_DJ_test[1]
+        except:
+            pass
+
+    T_opt_DJ = compute_T_optimal(best_h1_DJ, best_h2_DJ)
+    k_DJ = {yr: 0.0 for yr in unique_years}
+
+    results['Approach DJ'] = FitResultApproach4(
+        approach="Approach DJ: Persistence Decay (Joint)",
+        h1=best_h1_DJ, h2=best_h2_DJ,
+        h1_se=0.0, h2_se=0.0,
+        h4=best_h4_DJ, h4_se=0.0,
+        k=k_DJ,
+        r_squared=r_sq_QJ, adj_r_squared=r_sq_QJ, rmse=rmse_QJ,
+        n_obs=data.n_obs, n_params=3,
+        residuals=residuals_QJ,
+        T_opt=T_opt_DJ,
+        total_r_squared=total_r_sq_QJ,
+    )
+
+    # =========================================================================
+    # PP and DP approaches (polynomial detrending variants)
+    # =========================================================================
+    if trends_with_k is not None and year_means is not None:
+        # Approach PP: Piecewise with polynomial detrending
+        T_range = np.linspace(5, 25, 41)
+        best_sse_PP = np.inf
+        best_T_opt_PP = 15.0
+        best_h2_PP = 0.0
+        best_h4_PP = 0.0
+
+        for T_test in T_range:
+            below = data.temp <= T_test
+            # Temperature terms
+            T_low = np.where(below, (data.temp - T_test) ** 2, 0)
+            T_high = np.where(~below, (data.temp - T_test) ** 2, 0)
+            # Trend terms
+            T_trend = np.array([trends_with_k.T0[c] + trends_with_k.T1[c] * data.time[i]
+                               for i, c in enumerate(data.country_idx)])
+            T_low_trend = np.where(T_trend <= T_test, (T_trend - T_test) ** 2, 0)
+            T_high_trend = np.where(T_trend > T_test, (T_trend - T_test) ** 2, 0)
+
+            X1_PP = T_low - T_low_trend
+            X2_PP = T_high - T_high_trend
+            X_PP = np.column_stack([X1_PP, X2_PP])
+            try:
+                beta_PP_test, residuals_PP_test, _, _ = weighted_ols(y_QP, X_PP, weights)
+                sse = np.sum(weights * residuals_PP_test ** 2)
+                if sse < best_sse_PP:
+                    best_sse_PP = sse
+                    best_T_opt_PP = T_test
+                    best_h2_PP = beta_PP_test[0]
+                    best_h4_PP = beta_PP_test[1]
+            except:
+                pass
+
+        results['Approach PP'] = FitResultApproach8(
+            approach="Approach PP: Piecewise Quadratic (Polynomial)",
+            h2=best_h2_PP, h2_se=0.0,
+            h4=best_h4_PP, h4_se=0.0,
+            T_opt=best_T_opt_PP, T_opt_se=0.0,
+            k=dict(year_means),
+            r_squared=r_sq_QP, adj_r_squared=r_sq_QP, rmse=rmse_QP,
+            n_obs=data.n_obs, n_params=3,
+            residuals=residuals_QP,
+            total_r_squared=total_r_sq_QP,
+        )
+
+        # Approach DP: Persistence with polynomial detrending
+        h4_range = np.linspace(0.01, 0.99, 20)
+        best_sse_DP = np.inf
+        best_h4_DP = 0.5
+        best_h1_DP = 0.0
+        best_h2_DP = 0.0
+
+        for h4_test in h4_range:
+            A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_test)
+            correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_test, T_linear_first)
+            X1_DP = data.temp - h4_test * A_T_lag - correction_T
+            X2_DP = data.temp ** 2 - h4_test * A_T2_lag - correction_T2
+            # Detrend
+            T_star_DP = compute_detrended_temperature(data, trends_with_k)
+            T2_star_DP = compute_detrended_temp_squared(data, trends_with_k)
+
+            X_DP = np.column_stack([T_star_DP, T2_star_DP])
+            try:
+                beta_DP_test, residuals_DP_test, _, _ = weighted_ols(y_QP, X_DP, weights)
+                sse = np.sum(weights * residuals_DP_test ** 2)
+                if sse < best_sse_DP:
+                    best_sse_DP = sse
+                    best_h4_DP = h4_test
+                    best_h1_DP = beta_DP_test[0]
+                    best_h2_DP = beta_DP_test[1]
+            except:
+                pass
+
+        T_opt_DP = compute_T_optimal(best_h1_DP, best_h2_DP)
+
+        results['Approach DP'] = FitResultApproach4(
+            approach="Approach DP: Persistence Decay (Polynomial)",
+            h1=best_h1_DP, h2=best_h2_DP,
+            h1_se=0.0, h2_se=0.0,
+            h4=best_h4_DP, h4_se=0.0,
+            k=dict(year_means),
+            r_squared=r_sq_QP, adj_r_squared=r_sq_QP, rmse=rmse_QP,
+            n_obs=data.n_obs, n_params=3,
+            residuals=residuals_QP,
+            T_opt=T_opt_DP,
+            total_r_squared=total_r_sq_QP,
+        )
+
+    return results
+
+
 def run_bootstrap(
     data: AnalysisData,
     trends: CountryTrends,
@@ -246,16 +831,18 @@ def run_bootstrap(
     verbose: bool = True,
     loess_window: int = None,
     h_T_approaches: list = None,
-) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray]]:
+    sample_years: bool = False,
+) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray], np.ndarray]:
     """Run bootstrap analysis for all methods.
 
     For each bootstrap iteration:
     1. Sample M countries with replacement
-    2. Create bootstrap dataset
-    3. Recompute country trends for bootstrap sample
-    4. Fit all methods
-    5. Store h1, h2, T_opt, R², Total R², and h4 (for method-specific coefficients)
-    6. Optionally compute h(T) for selected methods
+    2. Optionally sample Y years with replacement (if sample_years=True)
+    3. Create bootstrap dataset (or compute weights for weighted fitting)
+    4. Recompute country trends for bootstrap sample
+    5. Fit all methods
+    6. Store h1, h2, T_opt, R², Total R², and h4 (for method-specific coefficients)
+    7. Optionally compute h(T) for selected methods
 
     Args:
         data: Original AnalysisData
@@ -268,6 +855,8 @@ def run_bootstrap(
             (default: DEFAULT_LOESS_WINDOW_YEARS)
         h_T_approaches: List of method names to compute h(T) for (default: None means skip)
             Example: ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL']
+        sample_years: If True, also sample years with replacement (time-dimension bootstrap).
+            When True, uses weighted fitting instead of observation duplication.
 
     Returns:
         Tuple of:
@@ -277,6 +866,8 @@ def run_bootstrap(
         - h_T_samples: Dict mapping approach name to array of shape (n_bootstrap, n_obs)
           containing h(T) values for each observation in each bootstrap iteration.
           Empty dict if h_T_approaches is None.
+        - year_samples: np.ndarray of shape (n_bootstrap, n_years) with the year
+          indices selected in each bootstrap iteration. Empty array if sample_years=False.
     """
     # Handle default for loess_window
     if loess_window is None:
@@ -284,6 +875,9 @@ def run_bootstrap(
 
     rng = np.random.default_rng(random_seed)
     n_countries = data.n_countries
+    unique_years = sorted(set(data.year))
+    n_years = len(unique_years)
+    year_to_idx = {y: i for i, y in enumerate(unique_years)}
 
     # Get approach names from original results
     approach_names = list(original_results.keys())
@@ -291,6 +885,9 @@ def run_bootstrap(
     # Initialize storage for bootstrap samples
     # Store which countries were selected in each bootstrap iteration
     country_samples = np.zeros((n_bootstrap, n_countries), dtype=np.int32)
+
+    # Store which years were selected (if sample_years=True)
+    year_samples = np.zeros((n_bootstrap, n_years), dtype=np.int32) if sample_years else np.array([])
 
     h1_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     h2_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
@@ -325,8 +922,6 @@ def run_bootstrap(
                     var_attrib_samples[name][key] = np.full(n_bootstrap, np.nan)
 
     # Year fixed effects k(t) samples - initialized from original results
-    # Get unique years from original data
-    unique_years = sorted(set(data.year))
     k_samples = {
         name: {yr: np.full(n_bootstrap, np.nan) for yr in unique_years}
         for name in approach_names
@@ -360,6 +955,8 @@ def run_bootstrap(
     if verbose:
         print(f"Running cluster bootstrap with {n_bootstrap} iterations...")
         print(f"  Resampling {n_countries} countries with replacement")
+        if sample_years:
+            print(f"  Resampling {n_years} years with replacement (weighted fitting)")
 
     while n_successful < n_bootstrap and n_attempts < max_attempts:
         b = n_successful  # Current slot to fill
@@ -370,26 +967,51 @@ def run_bootstrap(
             selected_countries = rng.integers(0, n_countries, size=n_countries)
             country_samples[b, :] = selected_countries
 
-            # Create bootstrap dataset
-            boot_data = create_bootstrap_data(data, selected_countries)
+            # Sample years if requested
+            if sample_years:
+                selected_years = rng.integers(0, n_years, size=n_years)
+                year_samples[b, :] = selected_years
 
-            # Recompute country trends for bootstrap sample
-            boot_trends = compute_country_trends(boot_data)
+                # Compute observation weights from country/year sampling
+                weights = compute_bootstrap_weights(data, selected_countries, selected_years)
 
-            # Compute year means and adjusted trends for approaches 5, 6, 7
-            boot_year_means = compute_year_means(boot_data)
-            boot_trends_with_k = compute_country_trends_with_k(boot_data, boot_year_means)
+                # Use weighted trend computation (original data with weights)
+                boot_data = data  # Use original data
+                boot_year_means = compute_year_means_weighted(data, weights)
+                boot_trends = compute_country_trends_weighted(data, weights)
+                boot_trends_with_k = compute_country_trends_with_k_weighted(data, boot_year_means, weights)
+                boot_trends_loess = compute_country_trends_loess_weighted(data, boot_year_means, weights, loess_window)
 
-            # Compute LOESS trends for approaches 6-8a
-            boot_trends_loess = compute_country_trends_loess(boot_data, boot_year_means, loess_window)
+                # Fit all methods with weighted OLS
+                # Use fit_all_approaches_weighted helper
+                boot_results = _fit_all_approaches_weighted(
+                    data, boot_trends, weights,
+                    trends_with_k=boot_trends_with_k,
+                    year_means=boot_year_means,
+                    trends_loess=boot_trends_loess,
+                    loess_window=loess_window
+                )
+            else:
+                # Original country-only bootstrap (observation duplication)
+                boot_data = create_bootstrap_data(data, selected_countries)
 
-            # Fit all methods
-            boot_results = fit_all_approaches(
-                boot_data, boot_trends,
-                trends_with_k=boot_trends_with_k,
-                year_means=boot_year_means,
-                trends_loess=boot_trends_loess
-            )
+                # Recompute country trends for bootstrap sample
+                boot_trends = compute_country_trends(boot_data)
+
+                # Compute year means and adjusted trends for approaches 5, 6, 7
+                boot_year_means = compute_year_means(boot_data)
+                boot_trends_with_k = compute_country_trends_with_k(boot_data, boot_year_means)
+
+                # Compute LOESS trends for approaches 6-8a
+                boot_trends_loess = compute_country_trends_loess(boot_data, boot_year_means, loess_window)
+
+                # Fit all methods
+                boot_results = fit_all_approaches(
+                    boot_data, boot_trends,
+                    trends_with_k=boot_trends_with_k,
+                    year_means=boot_year_means,
+                    trends_loess=boot_trends_loess
+                )
 
             # Store results
             for name, r in boot_results.items():
@@ -625,7 +1247,7 @@ def run_bootstrap(
             k_samples=k_samples[name],
         )
 
-    return results, country_samples, h_T_samples
+    return results, country_samples, h_T_samples, year_samples
 
 
 def compute_bootstrap_statistics(

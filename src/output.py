@@ -1956,6 +1956,50 @@ def save_bootstrap_country_samples_csv(
     print(f"  Saved bootstrap_country_samples.csv ({n_bootstrap} x {n_countries})")
 
 
+def save_bootstrap_year_samples_csv(
+    year_samples: np.ndarray,
+    data: "AnalysisData",
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Save bootstrap year resampling indices to CSV.
+
+    Creates: bootstrap_year_samples.csv with shape (n_bootstrap, n_years).
+    Each row is one bootstrap iteration, each column is a "slot" in the resampled
+    year set, and the value is the original year index (0 to n_years-1).
+
+    This is only created when sample_years=True (time-dimension bootstrap).
+
+    Args:
+        year_samples: Array of shape (n_bootstrap, n_years) with year indices.
+            Empty array if sample_years=False.
+        data: AnalysisData to get year values for column headers
+        output_dir: Directory to save the CSV
+        input_file: Optional input file path for annotation
+    """
+    if year_samples.size == 0:
+        return  # No year sampling, skip
+
+    n_bootstrap, n_years = year_samples.shape
+    unique_years = sorted(set(data.year))
+
+    # Create column headers using actual year values
+    col_names = [str(yr) for yr in unique_years]
+
+    df = pd.DataFrame(year_samples, columns=col_names)
+    df.insert(0, 'iteration', range(n_bootstrap))
+
+    csv_path = output_dir / 'bootstrap_year_samples.csv'
+    with open(csv_path, 'w') as f:
+        if input_file:
+            f.write(f"# Input data: {Path(input_file).name}\n")
+            f.write(f"# Time-dimension bootstrap: each row is a bootstrap iteration\n")
+            f.write(f"# Each column is a 'slot' in the resampled year set\n")
+            f.write(f"# Values are year indices (0 to {n_years-1}), mapping to years {unique_years[0]}-{unique_years[-1]}\n")
+        df.to_csv(f, index=False)
+    print(f"  Saved bootstrap_year_samples.csv ({n_bootstrap} x {n_years})")
+
+
 def _get_T_loess_at_base_year(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,

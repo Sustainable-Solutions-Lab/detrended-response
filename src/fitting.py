@@ -756,6 +756,56 @@ def fit_ols(y: np.ndarray, X: np.ndarray) -> tuple:
     return beta, residuals, sigma_squared, cov_matrix
 
 
+def fit_ols_weighted(y: np.ndarray, X: np.ndarray, weights: np.ndarray) -> tuple:
+    """Fit weighted OLS regression: minimize sum(w_i * (y_i - X_i @ beta)^2).
+
+    The weighted least squares solution is:
+        beta = (X'WX)^(-1) X'Wy
+
+    where W = diag(weights).
+
+    Args:
+        y: Target values, shape (n,)
+        X: Design matrix, shape (n, p)
+        weights: Observation weights, shape (n,). Higher weight = more influence.
+
+    Returns:
+        Tuple of (beta, residuals, sigma_squared, cov_matrix)
+        - beta: Coefficients, shape (p,)
+        - residuals: y - X @ beta, shape (n,)
+        - sigma_squared: Weighted residual variance
+        - cov_matrix: Covariance matrix of beta, shape (p, p)
+    """
+    # Weighted normal equations: (X'WX) beta = X'Wy
+    W = weights
+    XtW = X.T * W  # Shape (p, n) - broadcasting weights across rows
+    XtWX = XtW @ X  # Shape (p, p)
+    XtWy = XtW @ y  # Shape (p,)
+
+    # Solve for beta
+    beta = linalg.solve(XtWX, XtWy)
+
+    # Compute residuals
+    y_pred = X @ beta
+    residuals = y - y_pred
+
+    # Degrees of freedom: effective sample size - parameters
+    # For WLS, use sum of weights as effective sample size
+    n_eff = np.sum(weights)
+    p = X.shape[1]
+    df = n_eff - p
+
+    # Weighted residual variance: sum(w_i * e_i^2) / df
+    sse_weighted = np.sum(weights * residuals ** 2)
+    sigma_squared = sse_weighted / df if df > 0 else np.nan
+
+    # Covariance matrix of beta: sigma^2 * (X'WX)^(-1)
+    XtWX_inv = linalg.inv(XtWX)
+    cov_matrix = sigma_squared * XtWX_inv
+
+    return beta, residuals, sigma_squared, cov_matrix
+
+
 def compute_fit_stats(y: np.ndarray, residuals: np.ndarray, n_params: int) -> tuple:
     """Compute R-squared, adjusted R-squared, and RMSE."""
     n_obs = len(y)

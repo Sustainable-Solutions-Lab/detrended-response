@@ -546,3 +546,374 @@ def compute_detrended_temp_squared_loess(
     This is the coefficient adjustment for h2 in the LOESS-detrended model.
     """
     return data.temp ** 2 - trends_loess.T_loess ** 2
+
+
+# ==============================================================================
+# Weighted Trend Functions (for time-dimension bootstrap)
+# ==============================================================================
+
+def fit_linear_trend_weighted(
+    t: np.ndarray, y: np.ndarray, weights: np.ndarray
+) -> tuple:
+    """Fit weighted linear trend y = a + b*t using weighted least squares.
+
+    Args:
+        t: Time values
+        y: Values to fit
+        weights: Observation weights (higher = more influence)
+
+    Returns (intercept, slope). Returns (0, 0) if all weights are zero.
+    """
+    total_weight = np.sum(weights)
+    if total_weight < 1e-10:
+        # No effective observations, return zeros
+        return 0.0, 0.0
+
+    # Weighted design matrix
+    X = np.column_stack([np.ones(len(t)), t])
+    W = weights
+
+    # Weighted normal equations: (X'WX) beta = X'Wy
+    XtW = X.T * W
+    XtWX = XtW @ X
+    XtWy = XtW @ y
+
+    # Use lstsq for numerical stability
+    coeffs, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
+    return coeffs[0], coeffs[1]
+
+
+def fit_quadratic_trend_weighted(
+    t: np.ndarray, y: np.ndarray, weights: np.ndarray
+) -> tuple:
+    """Fit weighted quadratic trend y = a + b*t + c*t² using weighted least squares.
+
+    Args:
+        t: Time values
+        y: Values to fit
+        weights: Observation weights (higher = more influence)
+
+    Returns (constant, linear_coef, quadratic_coef). Returns (0, 0, 0) if all weights are zero.
+    """
+    total_weight = np.sum(weights)
+    if total_weight < 1e-10:
+        # No effective observations, return zeros
+        return 0.0, 0.0, 0.0
+
+    # Weighted design matrix
+    X = np.column_stack([np.ones(len(t)), t, t * t])
+    W = weights
+
+    # Weighted normal equations: (X'WX) beta = X'Wy
+    XtW = X.T * W
+    XtWX = XtW @ X
+    XtWy = XtW @ y
+
+    # Use lstsq for numerical stability
+    coeffs, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
+    return coeffs[0], coeffs[1], coeffs[2]
+
+
+def compute_year_means_weighted(
+    data: AnalysisData, weights: np.ndarray
+) -> Dict[int, float]:
+    """Compute weighted mean dy_i[t] for each year t.
+
+    Returns k[t] = weighted_mean_i(growth_pcGDP_i[t]) for each year t.
+    For years with zero total weight, returns 0.0.
+
+    Args:
+        data: AnalysisData object
+        weights: Observation weights, shape (n_obs,)
+
+    Returns:
+        Dictionary mapping year -> weighted mean growth rate (includes ALL years)
+    """
+    from collections import defaultdict
+
+    weighted_sums = defaultdict(float)
+    weight_sums = defaultdict(float)
+
+    # Collect all unique years from data
+    unique_years = set(data.year)
+
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        w = weights[i]
+        weighted_sums[yr] += w * data.growth_pcGDP[i]
+        weight_sums[yr] += w
+
+    # Return dict for ALL years - zero for years with no weight
+    result = {}
+    for yr in unique_years:
+        if weight_sums[yr] > 0:
+            result[yr] = weighted_sums[yr] / weight_sums[yr]
+        else:
+            result[yr] = 0.0
+    return result
+
+
+def compute_country_trends_weighted(
+    data: AnalysisData, weights: np.ndarray
+) -> CountryTrends:
+    """Compute weighted polynomial trends for each country.
+
+    Same as compute_country_trends but using weighted least squares.
+
+    Args:
+        data: AnalysisData object with observation arrays
+        weights: Observation weights, shape (n_obs,)
+
+    Returns:
+        CountryTrends object with trend coefficients per country
+    """
+    T0 = {}
+    T1 = {}
+    T0_quad = {}
+    T1_quad = {}
+    T2_quad = {}
+    y0 = {}
+    y1 = {}
+    y2 = {}
+    y0_lin = {}
+    y1_lin = {}
+
+    for country_idx in range(data.n_countries):
+        # Get observations for this country
+        mask = data.country_idx == country_idx
+        t_country = data.time[mask]
+        temp_country = data.temp[mask]
+        growth_country = data.growth_pcGDP[mask]
+        w_country = weights[mask]
+
+        # Fit weighted linear temperature trend
+        T0[country_idx], T1[country_idx] = fit_linear_trend_weighted(
+            t_country, temp_country, w_country
+        )
+
+        # Fit weighted quadratic temperature trend
+        T0_quad[country_idx], T1_quad[country_idx], T2_quad[country_idx] = fit_quadratic_trend_weighted(
+            t_country, temp_country, w_country
+        )
+
+        # Fit weighted quadratic GDP growth trend
+        y0[country_idx], y1[country_idx], y2[country_idx] = fit_quadratic_trend_weighted(
+            t_country, growth_country, w_country
+        )
+
+        # Fit weighted linear GDP growth trend
+        y0_lin[country_idx], y1_lin[country_idx] = fit_linear_trend_weighted(
+            t_country, growth_country, w_country
+        )
+
+    return CountryTrends(
+        T0=T0, T1=T1,
+        T0_quad=T0_quad, T1_quad=T1_quad, T2_quad=T2_quad,
+        y0=y0, y1=y1, y2=y2, y0_lin=y0_lin, y1_lin=y1_lin
+    )
+
+
+def compute_country_trends_with_k_weighted(
+    data: AnalysisData, year_means: Dict[int, float], weights: np.ndarray
+) -> CountryTrends:
+    """Compute weighted country trends on dy_i[t] - k[t] instead of dy_i[t].
+
+    Same as compute_country_trends_with_k but using weighted least squares.
+
+    Args:
+        data: AnalysisData object with observation arrays
+        year_means: Dictionary of year -> mean growth rate k[t]
+        weights: Observation weights, shape (n_obs,)
+
+    Returns:
+        CountryTrends object with trend coefficients per country
+    """
+    T0 = {}
+    T1 = {}
+    T0_quad = {}
+    T1_quad = {}
+    T2_quad = {}
+    y0 = {}
+    y1 = {}
+    y2 = {}
+    y0_lin = {}
+    y1_lin = {}
+
+    for country_idx in range(data.n_countries):
+        # Get observations for this country
+        mask = data.country_idx == country_idx
+        t_country = data.time[mask]
+        temp_country = data.temp[mask]
+        growth_country = data.growth_pcGDP[mask]
+        year_country = data.year[mask]
+        w_country = weights[mask]
+
+        # Subtract year means from growth to get dy - k[t]
+        growth_adjusted = np.array([
+            growth_country[j] - year_means[year_country[j]]
+            for j in range(len(growth_country))
+        ])
+
+        # Fit weighted linear temperature trend (unchanged)
+        T0[country_idx], T1[country_idx] = fit_linear_trend_weighted(
+            t_country, temp_country, w_country
+        )
+
+        # Fit weighted quadratic temperature trend (unchanged)
+        T0_quad[country_idx], T1_quad[country_idx], T2_quad[country_idx] = fit_quadratic_trend_weighted(
+            t_country, temp_country, w_country
+        )
+
+        # Fit weighted quadratic GDP growth trend to adjusted growth (dy - k[t])
+        y0[country_idx], y1[country_idx], y2[country_idx] = fit_quadratic_trend_weighted(
+            t_country, growth_adjusted, w_country
+        )
+
+        # Fit weighted linear GDP growth trend to adjusted growth (dy - k[t])
+        y0_lin[country_idx], y1_lin[country_idx] = fit_linear_trend_weighted(
+            t_country, growth_adjusted, w_country
+        )
+
+    return CountryTrends(
+        T0=T0, T1=T1,
+        T0_quad=T0_quad, T1_quad=T1_quad, T2_quad=T2_quad,
+        y0=y0, y1=y1, y2=y2, y0_lin=y0_lin, y1_lin=y1_lin
+    )
+
+
+def fit_loess_continuous_weighted(
+    t: np.ndarray, y: np.ndarray, obs_weights: np.ndarray,
+    bandwidth: float, degree: int = 1
+) -> np.ndarray:
+    """LOESS with observation weights and continuous bandwidth using tricube weights.
+
+    The total weight for each point is obs_weights[j] * tricube_weight(distance[j]).
+
+    Args:
+        t: Time values
+        y: Values to smooth
+        obs_weights: Observation weights (from bootstrap sampling)
+        bandwidth: Half-width of window in t-units (e.g., years)
+        degree: Local polynomial degree (1=linear, 2=quadratic)
+
+    Returns:
+        Smoothed values at each input time point
+    """
+    n = len(t)
+    y_smooth = np.zeros(n)
+
+    for i in range(n):
+        # Distance from point i to all points
+        d = np.abs(t - t[i])
+
+        # Tricube weights with continuous bandwidth
+        u = d / bandwidth
+        tricube_w = np.where(u < 1, (1 - u**3)**3, 0)
+
+        # Combined weight: observation weight * tricube weight
+        w = obs_weights * tricube_w
+
+        # Need at least degree+1 points with non-zero weight
+        if np.sum(w > 0) <= degree:
+            y_smooth[i] = y[i]
+            continue
+
+        # Weighted local polynomial regression
+        X = np.column_stack([np.power(t - t[i], p) for p in range(degree + 1)])
+        XtW = X.T * w
+        XtWX = XtW @ X
+        XtWy = XtW @ y
+
+        # Use lstsq for numerical stability
+        try:
+            beta, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
+            y_smooth[i] = beta[0]  # Intercept = smoothed value at t[i]
+        except:
+            y_smooth[i] = y[i]
+
+    return y_smooth
+
+
+def fit_loess_trend_weighted(
+    t: np.ndarray, y: np.ndarray, weights: np.ndarray,
+    window_years: float = DEFAULT_LOESS_WINDOW_YEARS
+) -> np.ndarray:
+    """Fit weighted LOESS trend using observation weights and tricube kernel.
+
+    Args:
+        t: Time values
+        y: Values to smooth
+        weights: Observation weights (from bootstrap sampling)
+        window_years: Bandwidth in years
+
+    Returns:
+        Smoothed values
+    """
+    n = len(t)
+    if n < MIN_LOESS_POINTS:
+        return y.copy()
+
+    bandwidth = window_years
+
+    # Sort data by t
+    sort_idx = np.argsort(t)
+    t_sorted = t[sort_idx]
+    y_sorted = y[sort_idx]
+    w_sorted = weights[sort_idx]
+
+    # Apply weighted LOESS
+    smoothed = fit_loess_continuous_weighted(t_sorted, y_sorted, w_sorted, bandwidth, degree=1)
+
+    # Reorder to match original input order
+    result = np.zeros(n)
+    result[sort_idx] = smoothed
+
+    return result
+
+
+def compute_country_trends_loess_weighted(
+    data: AnalysisData, year_means: Dict[int, float], weights: np.ndarray,
+    window_years: float = DEFAULT_LOESS_WINDOW_YEARS
+) -> CountryTrendsLoess:
+    """Compute weighted LOESS-smoothed trends for temperature and GDP growth.
+
+    Same as compute_country_trends_loess but using observation weights.
+
+    Args:
+        data: AnalysisData object with observation arrays
+        year_means: Dictionary of year -> mean growth rate k[t]
+        weights: Observation weights, shape (n_obs,)
+        window_years: Window size for LOESS smoothing
+
+    Returns:
+        CountryTrendsLoess object with smoothed values at each observation
+    """
+    T_loess = np.zeros(data.n_obs)
+    y_loess = np.zeros(data.n_obs)
+
+    for country_idx in range(data.n_countries):
+        # Get observations for this country
+        mask = data.country_idx == country_idx
+        t_country = data.time[mask]
+        temp_country = data.temp[mask]
+        growth_country = data.growth_pcGDP[mask]
+        year_country = data.year[mask]
+        w_country = weights[mask]
+
+        # Subtract year means from growth to get dy - k[t]
+        growth_adjusted = np.array([
+            growth_country[j] - year_means[year_country[j]]
+            for j in range(len(growth_country))
+        ])
+
+        # Fit weighted LOESS to temperature
+        T_loess_country = fit_loess_trend_weighted(t_country, temp_country, w_country, window_years)
+
+        # Fit weighted LOESS to adjusted growth (dy - k[t])
+        y_loess_country = fit_loess_trend_weighted(t_country, growth_adjusted, w_country, window_years)
+
+        # Store results at observation level
+        T_loess[mask] = T_loess_country
+        y_loess[mask] = y_loess_country
+
+    return CountryTrendsLoess(T_loess=T_loess, y_loess=y_loess)

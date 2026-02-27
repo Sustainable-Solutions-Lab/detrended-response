@@ -31,6 +31,7 @@ from src.output import (
     save_bootstrap_k_samples_csv,
     save_bootstrap_var_attrib_csv,
     save_bootstrap_country_samples_csv,
+    save_bootstrap_year_samples_csv,
     save_bootstrap_h_values,
     save_bootstrap_h_baselines,
     save_bootstrap_summary_txt,
@@ -109,6 +110,12 @@ def main():
         help="Mean weighting distance in years for LOESS. Window = 44/7 * this value. "
              "If specified, adds '_mwXX' suffix to output directory.",
     )
+    parser.add_argument(
+        "--sample-years",
+        action="store_true",
+        help="Also sample years with replacement (time-dimension bootstrap). "
+             "Uses weighted fitting instead of observation duplication.",
+    )
 
     args = parser.parse_args()
     verbose = not args.quiet
@@ -176,10 +183,11 @@ def main():
     print("      Done.")
 
     # Run bootstrap
-    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, seed={args.random_seed})...")
+    bootstrap_type = "country+year" if args.sample_years else "country-only"
+    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed})...")
     # Specify methods for h(T) computation
     h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL', 'Approach PJ', 'Approach DJ', 'Approach PP', 'Approach DP']
-    bootstrap_results, country_samples, h_T_samples = run_bootstrap(
+    bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
         trends=trends,
         original_results=original_results,
@@ -188,6 +196,7 @@ def main():
         verbose=verbose,
         loess_window=loess_window,
         h_T_approaches=h_T_approaches,
+        sample_years=args.sample_years,
     )
     print("      Done.")
 
@@ -210,6 +219,8 @@ def main():
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_var_attrib_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_country_samples_csv(country_samples, data, output_dir, input_file=input_file)
+    if args.sample_years:
+        save_bootstrap_year_samples_csv(year_samples, data, output_dir, input_file=input_file)
     if h_T_samples:
         save_bootstrap_h_values(
             h_T_samples, data, output_dir,
@@ -240,9 +251,11 @@ def main():
         'year_min': data.year_range[0],
         'year_max': data.year_range[1],
         'n_countries': data.n_countries,
+        'n_years': data.n_years,
         'n_obs': data.n_obs,
         'n_bootstrap': args.n_bootstrap,
         'random_seed': args.random_seed,
+        'sample_years': args.sample_years,
     }
     metadata_path = output_dir / 'run_metadata.json'
     with open(metadata_path, 'w') as f:
