@@ -777,6 +777,20 @@ detrended-response/
 └── README.md
 ```
 
+## Recent Changes
+
+### Time-Dimension Bootstrap (February 2026)
+
+Added support for sampling years with replacement in addition to countries:
+
+- **New CLI flag**: `--sample-years` enables combined country + year bootstrap
+- **Weighted fitting**: All approach functions now accept optional observation weights
+- **Weighted detrending**: Year means, country trends, and LOESS smoothing support weights
+- **Numerical stability**: SVD-based least squares handles rank-deficient matrices when some years have zero weight
+- **New outputs**: `bootstrap_year_samples.csv` records which years were sampled in each iteration
+
+This captures uncertainty from both cross-country and inter-annual variation in the data.
+
 ## References
 
 - Burke, M., Hsiang, S. M., & Miguel, E. (2015). Global non-linear effect of temperature on economic production. *Nature*, 527(7577), 235-239.

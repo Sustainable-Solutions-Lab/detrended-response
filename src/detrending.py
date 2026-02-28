@@ -620,22 +620,19 @@ def compute_year_means_weighted(
     """Compute weighted mean dy_i[t] for each year t.
 
     Returns k[t] = weighted_mean_i(growth_pcGDP_i[t]) for each year t.
-    For years with zero total weight, returns 0.0.
+    Years with zero total weight (unsampled in bootstrap) are excluded from result.
 
     Args:
         data: AnalysisData object
         weights: Observation weights, shape (n_obs,)
 
     Returns:
-        Dictionary mapping year -> weighted mean growth rate (includes ALL years)
+        Dictionary mapping year -> weighted mean growth rate (only sampled years)
     """
     from collections import defaultdict
 
     weighted_sums = defaultdict(float)
     weight_sums = defaultdict(float)
-
-    # Collect all unique years from data
-    unique_years = set(data.year)
 
     for i in range(data.n_obs):
         yr = data.year[i]
@@ -643,13 +640,12 @@ def compute_year_means_weighted(
         weighted_sums[yr] += w * data.growth_pcGDP[i]
         weight_sums[yr] += w
 
-    # Return dict for ALL years - zero for years with no weight
+    # Return dict for only years with positive weight (sampled years)
+    # Unsampled years are excluded, so k_samples will remain NaN for them
     result = {}
-    for yr in unique_years:
+    for yr in weighted_sums.keys():
         if weight_sums[yr] > 0:
             result[yr] = weighted_sums[yr] / weight_sums[yr]
-        else:
-            result[yr] = 0.0
     return result
 
 
