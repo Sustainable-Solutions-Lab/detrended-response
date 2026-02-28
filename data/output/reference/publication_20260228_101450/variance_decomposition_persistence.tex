@@ -1,0 +1,31 @@
+\begin{table}[htbp]
+\centering
+\caption{Variance decomposition: persistence climate response}
+\label{tab:variance_decomp_persistence}
+
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Metric & Joint & Polynomial & LOESS \\
+\midrule
+Trend method & Joint & Polynomial & LOESS \\
+\midrule
+Response fn $\Delta R^2$ & — & — & — \\
+Total $R^2$ & 0.187 & 0.187 & 0.187 \\
+\midrule
+$\mathrm{Var}\!\big(h(T)\big)/\mathrm{Var}(\Delta y)$ & 0.001 & 0.0009 & 0.0009 \\
+$\mathrm{Var}(j)/\mathrm{Var}(\Delta y)$ & 0.159 & 0.104 & 0.087 \\
+$\mathrm{Var}(k)/\mathrm{Var}(\Delta y)$ & 0.120 & 0.082 & 0.082 \\
+$\mathrm{Var}(\varepsilon)/\mathrm{Var}(\Delta y)$ & 0.813 & 0.813 & 0.813 \\
+\midrule
+$2\,\mathrm{Cov}\!\big(h(T),j\big)/\mathrm{Var}(\Delta y)$ & 0.0003 & 0.0002 & 0.00003 \\
+$2\,\mathrm{Cov}\!\big(h(T),k\big)/\mathrm{Var}(\Delta y)$ & -0.0009 & -0.0005 & -0.0006 \\
+$2\,\mathrm{Cov}(j,k)/\mathrm{Var}(\Delta y)$ & -0.093 & -0.000006 & 0.000010 \\
+$2\,\mathrm{Cov}\!\big(h(T),\varepsilon\big)/\mathrm{Var}(\Delta y)$ & -8e-18 & 0.000004 & -0.00003 \\
+$2\,\mathrm{Cov}(j,\varepsilon)/\mathrm{Var}(\Delta y)$ & 1e-16 & 0.000007 & 0.017 \\
+$2\,\mathrm{Cov}(k,\varepsilon)/\mathrm{Var}(\Delta y)$ & 2e-18 & 0.0005 & 0.0006 \\
+\midrule
+Sum & 1.000 & 1.000 & 1.000 \\
+\bottomrule
+\end{tabular}
+\end{table}

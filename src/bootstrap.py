@@ -832,6 +832,7 @@ def run_bootstrap(
     loess_window: int = None,
     h_T_approaches: list = None,
     sample_years: bool = False,
+    skip_slow: bool = False,
 ) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray], np.ndarray]:
     """Run bootstrap analysis for all methods.
 
@@ -857,6 +858,7 @@ def run_bootstrap(
             Example: ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL']
         sample_years: If True, also sample years with replacement (time-dimension bootstrap).
             When True, uses weighted fitting instead of observation duplication.
+        skip_slow: If True, skip slow approaches (PJ, DJ) during bootstrap to improve speed.
 
     Returns:
         Tuple of:
@@ -988,7 +990,8 @@ def run_bootstrap(
                     trends_with_k=boot_trends_with_k,
                     year_means=boot_year_means,
                     trends_loess=boot_trends_loess,
-                    weights=weights
+                    weights=weights,
+                    skip_slow=skip_slow
                 )
             else:
                 # Original country-only bootstrap (observation duplication)
@@ -1009,7 +1012,8 @@ def run_bootstrap(
                     boot_data, boot_trends,
                     trends_with_k=boot_trends_with_k,
                     year_means=boot_year_means,
-                    trends_loess=boot_trends_loess
+                    trends_loess=boot_trends_loess,
+                    skip_slow=skip_slow
                 )
 
             # Store results

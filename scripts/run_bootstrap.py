@@ -116,6 +116,12 @@ def main():
         help="Also sample years with replacement (time-dimension bootstrap). "
              "Uses weighted fitting instead of observation duplication.",
     )
+    parser.add_argument(
+        "--skip-slow",
+        action="store_true",
+        help="Skip slow approaches (PJ, DJ) during bootstrap to improve speed. "
+             "These approaches require optimization and take ~45s each per iteration.",
+    )
 
     args = parser.parse_args()
     verbose = not args.quiet
@@ -184,9 +190,12 @@ def main():
 
     # Run bootstrap
     bootstrap_type = "country+year" if args.sample_years else "country-only"
-    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed})...")
+    skip_info = " (skipping PJ/DJ)" if args.skip_slow else ""
+    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed}){skip_info}...")
     # Specify methods for h(T) computation
-    h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL', 'Approach PJ', 'Approach DJ', 'Approach PP', 'Approach DP']
+    h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL', 'Approach PP', 'Approach DP']
+    if not args.skip_slow:
+        h_T_approaches.extend(['Approach PJ', 'Approach DJ'])
     bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -197,6 +206,7 @@ def main():
         loess_window=loess_window,
         h_T_approaches=h_T_approaches,
         sample_years=args.sample_years,
+        skip_slow=args.skip_slow,
     )
     print("      Done.")
 

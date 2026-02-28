@@ -732,9 +732,13 @@ def fit_ols(y: np.ndarray, X: np.ndarray) -> tuple:
     """Fit OLS regression y = X @ beta.
 
     Returns (beta, residuals, sigma_squared, cov_matrix).
+
+    Uses normal equations (X'X)^-1 X'y for speed (~20x faster than lstsq).
     """
-    # Solve least squares
-    beta, residuals_sum, rank, s = linalg.lstsq(X, y)
+    # Solve using normal equations (much faster than lstsq for large matrices)
+    XtX = X.T @ X
+    Xty = X.T @ y
+    beta = np.linalg.solve(XtX, Xty)
 
     # Compute residuals
     y_pred = X @ beta
@@ -749,8 +753,8 @@ def fit_ols(y: np.ndarray, X: np.ndarray) -> tuple:
     sse = np.sum(residuals ** 2)
     sigma_squared = sse / df
 
-    # Covariance matrix of beta
-    XtX_inv = linalg.inv(X.T @ X)
+    # Covariance matrix of beta (reuse XtX)
+    XtX_inv = linalg.inv(XtX)
     cov_matrix = sigma_squared * XtX_inv
 
     return beta, residuals, sigma_squared, cov_matrix
@@ -790,28 +794,31 @@ def fit_ols_weighted(y: np.ndarray, X: np.ndarray, weights: np.ndarray) -> tuple
     X_weighted = X_clean * sqrt_W[:, np.newaxis]  # Scale each row by sqrt(w_i)
     y_weighted = y_clean * sqrt_W
 
-    # Solve weighted least squares using SVD (handles rank-deficient matrices)
-    beta, _, rank, _ = np.linalg.lstsq(X_weighted, y_weighted, rcond=None)
+    # Solve weighted least squares using normal equations (much faster than lstsq)
+    # beta = (X'WX)^+ X'Wy (using pseudoinverse to handle rank-deficient matrices)
+    XtW = X_clean.T * weights  # Shape (p, n)
+    XtWX = XtW @ X_clean  # Shape (p, p)
+    XtWy = XtW @ y_clean  # Shape (p,)
+
+    # Use pseudoinverse to handle rank-deficient matrices (e.g., zero-weight years)
+    XtWX_pinv = np.linalg.pinv(XtWX)
+    beta = XtWX_pinv @ XtWy
 
     # Compute residuals (use cleaned versions to avoid NaN propagation)
     y_pred = X_clean @ beta
     residuals = y_clean - y_pred
 
-    # Degrees of freedom: effective sample size - rank (actual parameters estimated)
+    # Degrees of freedom: effective sample size - rank of X'WX
     # For WLS, use sum of weights as effective sample size
     n_eff = np.sum(weights)
-    p = X.shape[1]
-    df = n_eff - rank  # Use rank instead of p for rank-deficient matrices
+    rank = np.linalg.matrix_rank(XtWX)
+    df = n_eff - rank
 
     # Weighted residual variance: sum(w_i * e_i^2) / df
     sse_weighted = np.sum(weights * residuals ** 2)
     sigma_squared = sse_weighted / df if df > 0 else np.nan
 
     # Covariance matrix of beta: sigma^2 * (X'WX)^+
-    # Use pseudoinverse for rank-deficient matrices
-    XtW = X.T * weights  # Shape (p, n)
-    XtWX = XtW @ X  # Shape (p, p)
-    XtWX_pinv = np.linalg.pinv(XtWX)
     cov_matrix = sigma_squared * XtWX_pinv
 
     return beta, residuals, sigma_squared, cov_matrix
@@ -1898,7 +1905,7 @@ def fit_ApproachPJ_piecewise_conjoined(
     - Column 0: h2_low column - (T-T_opt)² where T <= T_opt, else 0
     - Column 1: h2_high column - (T-T_opt)² where T > T_opt, else 0
     - Columns 2 to 2+3*(n_countries-1)-1: Country quadratic trends (skip country 0)
-    - Remaining columns: Year dummies (all n_years)
+    - Remaining columns: Year dummies (only years with non-zero weight)
 
     Args:
         data: AnalysisData object
@@ -1911,17 +1918,28 @@ def fit_ApproachPJ_piecewise_conjoined(
     n_obs = data.n_obs
     n_countries = data.n_countries
 
-    # Get unique years and create year index mapping
+    # Get unique years
     unique_years = sorted(set(data.year))
-    year_to_idx = {y: i for i, y in enumerate(unique_years)}
-    n_years = len(unique_years)
+
+    # When weights provided, only include years with non-zero total weight
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
 
     # Number of parameters:
     # - 2 for h2_low, h2_high
     # - 3 * (n_countries - 1) for j terms (first country is reference)
-    # - n_years for k_t terms
+    # - n_active_years for k_t terms (only years with non-zero weight)
     n_j_params = 3 * (n_countries - 1)
-    n_k_params = n_years
+    n_k_params = n_active_years
     n_total_params = 2 + n_j_params + n_k_params
 
     # Pre-compute constant parts of design matrix (country trends and year effects)
@@ -1937,11 +1955,13 @@ def fit_ApproachPJ_piecewise_conjoined(
             X_base[i, col_base + 1] = t      # j1[c]
             X_base[i, col_base + 2] = t * t  # j2[c]
 
-    # Year fixed effects (all years)
+    # Year fixed effects (only active years)
     k_col_start = 2 + n_j_params
     for i in range(n_obs):
-        yr_idx = year_to_idx[data.year[i]]
-        X_base[i, k_col_start + yr_idx] = 1.0
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X_base[i, k_col_start + yr_idx] = 1.0
 
     T = data.temp
     y = data.growth_pcGDP
@@ -1957,17 +1977,22 @@ def fit_ApproachPJ_piecewise_conjoined(
         X[:, 0] = low_col
         X[:, 1] = high_col
 
-        # Solve OLS (weighted if weights provided)
+        # Solve OLS using lstsq for numerical stability with rank-deficient matrices
+        # (can happen during bootstrap with year sampling)
         if weights is not None:
-            # Weighted least squares (use lstsq for numerical stability)
+            # Weighted least squares
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
             y_w = y * sqrt_W
-            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            XTX = X_w.T @ X_w
+            XTy = X_w.T @ y_w
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
             sse = np.sum(weights * (y - y_pred) ** 2)
         else:
-            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            XTX = X.T @ X
+            XTy = X.T @ y
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
             sse = np.sum((y - y_pred) ** 2)
         return sse
@@ -2015,10 +2040,13 @@ def fit_ApproachPJ_piecewise_conjoined(
         n_params=3  # h2_low, h2_high, T_opt are the climate parameters
     )
 
-    # Extract year fixed effects
+    # Extract year fixed effects (NaN for inactive years)
     k = {}
-    for yr_idx in range(n_years):
-        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
 
     # Fit statistics
     n_params = 3  # Climate response: h2_low, h2_high, T_opt
@@ -2040,7 +2068,8 @@ def fit_ApproachPJ_piecewise_conjoined(
             j1 = beta[col_base + 1]
             j2 = beta[col_base + 2]
             j_trend[i] = j0 + j1 * t + j2 * t * t
-        k_values[i] = k[yr]
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
 
     # Climate response values h(T)
     h_values = h2_low * low_col + h2_high * high_col
@@ -2138,17 +2167,28 @@ def fit_ApproachDJ_persistence_conjoined(
     n_obs = data.n_obs
     n_countries = data.n_countries
 
-    # Get unique years and create year index mapping
+    # Get unique years
     unique_years = sorted(set(data.year))
-    year_to_idx = {y: i for i, y in enumerate(unique_years)}
-    n_years = len(unique_years)
+
+    # When weights provided, only include years with non-zero total weight
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
 
     # Number of parameters:
     # - 2 for h1, h2
     # - 3 * (n_countries - 1) for j terms
-    # - n_years for k_t terms
+    # - n_active_years for k_t terms (only years with non-zero weight)
     n_j_params = 3 * (n_countries - 1)
-    n_k_params = n_years
+    n_k_params = n_active_years
     n_total_params = 2 + n_j_params + n_k_params
 
     # Pre-compute constant parts of design matrix (country trends and year effects)
@@ -2164,11 +2204,13 @@ def fit_ApproachDJ_persistence_conjoined(
             X_base[i, col_base + 1] = t      # j1[c]
             X_base[i, col_base + 2] = t * t  # j2[c]
 
-    # Year fixed effects (all years)
+    # Year fixed effects (only active years)
     k_col_start = 2 + n_j_params
     for i in range(n_obs):
-        yr_idx = year_to_idx[data.year[i]]
-        X_base[i, k_col_start + yr_idx] = 1.0
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X_base[i, k_col_start + yr_idx] = 1.0
 
     T = data.temp
     y = data.growth_pcGDP
@@ -2193,17 +2235,22 @@ def fit_ApproachDJ_persistence_conjoined(
         X[:, 0] = X1
         X[:, 1] = X2
 
-        # Solve OLS (weighted if weights provided)
+        # Solve OLS using lstsq for numerical stability with rank-deficient matrices
+        # (can happen during bootstrap with year sampling)
         if weights is not None:
-            # Weighted least squares (use lstsq for numerical stability)
+            # Weighted least squares
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
             y_w = y * sqrt_W
-            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            XTX = X_w.T @ X_w
+            XTy = X_w.T @ y_w
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
             sse = np.sum(weights * (y - y_pred) ** 2)
         else:
-            beta_ols, _, _, _ = linalg.lstsq(X, y)
+            XTX = X.T @ X
+            XTy = X.T @ y
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
             sse = np.sum((y - y_pred) ** 2)
         return sse
@@ -2255,10 +2302,13 @@ def fit_ApproachDJ_persistence_conjoined(
         n_params=3
     )
 
-    # Extract year fixed effects
+    # Extract year fixed effects (NaN for inactive years)
     k = {}
-    for yr_idx in range(n_years):
-        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
 
     # Fit statistics
     n_params = 3  # Climate response: h1, h2, h4
@@ -2283,7 +2333,8 @@ def fit_ApproachDJ_persistence_conjoined(
             j1 = beta[col_base + 1]
             j2 = beta[col_base + 2]
             j_trend[i] = j0 + j1 * t + j2 * t * t
-        k_values[i] = k[yr]
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
 
     # Climate response values (modified h_conv)
     h_conv_values = h1 * X1 + h2 * X2
@@ -2357,17 +2408,29 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
     n_obs = data.n_obs
     n_countries = data.n_countries
 
-    # Get unique years and create year index mapping
+    # Get unique years
     unique_years = sorted(set(data.year))
-    year_to_idx = {y: i for i, y in enumerate(unique_years)}
-    n_years = len(unique_years)
+
+    # When weights provided, only include years with non-zero total weight
+    # (avoids singular design matrix from zero-weight year columns)
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
 
     # Number of parameters:
     # - 2 for h1, h2
     # - 3 * (n_countries - 1) for j terms (first country is reference, j[0] = 0)
-    # - n_years for k_t terms (all years)
+    # - n_active_years for k_t terms (only years with non-zero weight)
     n_j_params = 3 * (n_countries - 1)
-    n_k_params = n_years
+    n_k_params = n_active_years
     n_params = 2 + n_j_params + n_k_params
 
     X = np.zeros((n_obs, n_params))
@@ -2387,11 +2450,13 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
             X[i, col_base + 1] = t      # j1[c]
             X[i, col_base + 2] = t * t  # j2[c]
 
-    # Year fixed effects (all years)
+    # Year fixed effects (only active years)
     k_col_start = 2 + n_j_params
     for i in range(n_obs):
-        yr_idx = year_to_idx[data.year[i]]
-        X[i, k_col_start + yr_idx] = 1.0
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X[i, k_col_start + yr_idx] = 1.0
 
     # Fit OLS (weighted if weights provided)
     y = data.growth_pcGDP
@@ -2406,10 +2471,13 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
     h1_se = np.sqrt(max(cov[0, 0], 0))
     h2_se = np.sqrt(max(cov[1, 1], 0))
 
-    # Year fixed effects (store by actual year for consistency with other approaches)
+    # Year fixed effects (store by actual year, NaN for inactive years)
     k = {}
-    for yr_idx in range(n_years):
-        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
 
     # Fit statistics
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
@@ -2437,7 +2505,8 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
             j2 = beta[col_base + 2]
             j_trend[i] = j0 + j1 * t + j2 * t * t
         # else j_trend[i] = 0 (country 0 is reference)
-        k_values[i] = k[yr]
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
     rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
@@ -2502,16 +2571,27 @@ def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitR
     n_obs = data.n_obs
     n_countries = data.n_countries
 
-    # Get unique years and create year index mapping
+    # Get unique years
     unique_years = sorted(set(data.year))
-    year_to_idx = {y: i for i, y in enumerate(unique_years)}
-    n_years = len(unique_years)
+
+    # When weights provided, only include years with non-zero total weight
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
 
     # Number of parameters (no h1, h2):
     # - 3 * (n_countries - 1) for j terms (first country is reference, j[0] = 0)
-    # - n_years for k_t terms (all years)
+    # - n_active_years for k_t terms (only years with non-zero weight)
     n_j_params = 3 * (n_countries - 1)
-    n_k_params = n_years
+    n_k_params = n_active_years
     n_params = n_j_params + n_k_params
 
     X = np.zeros((n_obs, n_params))
@@ -2526,11 +2606,13 @@ def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitR
             X[i, col_base + 1] = t      # j1[c]
             X[i, col_base + 2] = t * t  # j2[c]
 
-    # Year fixed effects (all years)
+    # Year fixed effects (only active years)
     k_col_start = n_j_params
     for i in range(n_obs):
-        yr_idx = year_to_idx[data.year[i]]
-        X[i, k_col_start + yr_idx] = 1.0
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X[i, k_col_start + yr_idx] = 1.0
 
     # Fit OLS (weighted if weights provided)
     y = data.growth_pcGDP
@@ -2545,10 +2627,13 @@ def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitR
     h1_se = 0.0
     h2_se = 0.0
 
-    # Year fixed effects (store by actual year)
+    # Year fixed effects (store by actual year, NaN for inactive years)
     k = {}
-    for yr_idx in range(n_years):
-        k[unique_years[yr_idx]] = beta[k_col_start + yr_idx]
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
 
     # Fit statistics
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
@@ -2572,7 +2657,8 @@ def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitR
             j1 = beta[col_base + 1]
             j2 = beta[col_base + 2]
             j_trend[i] = j0 + j1 * t + j2 * t * t
-        k_values[i] = k[yr]
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
 
     # Variance decomposition (no h components)
     components = {'j': j_trend, 'k': k_values}
@@ -3190,7 +3276,8 @@ def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
     trends_loess: CountryTrendsLoess = None,
-    weights: np.ndarray = None
+    weights: np.ndarray = None,
+    skip_slow: bool = False
 ) -> dict:
     """Fit all approaches and return results.
 
@@ -3214,6 +3301,7 @@ def fit_all_approaches(
         year_means: Pre-computed k[t] for approaches 1-4
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
         weights: Optional observation weights for weighted least squares (bootstrap)
+        skip_slow: If True, skip slow approaches (PJ, DJ) during bootstrap
     """
     results = {}
     timings = {}
@@ -3230,8 +3318,9 @@ def fit_all_approaches(
     # Conjoined approaches
     timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data, weights)
     timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
-    timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
-    timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
+    if not skip_slow:
+        timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
+        timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:

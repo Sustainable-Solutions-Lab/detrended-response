@@ -437,9 +437,11 @@ def fit_loess_continuous(
 
         # Weighted local polynomial regression
         X = np.column_stack([np.power(t - t[i], p) for p in range(degree + 1)])
-        W = np.diag(w)
-        XtW = X.T @ W
-        beta = np.linalg.solve(XtW @ X, XtW @ y)
+        XtW = X.T * w  # More efficient than X.T @ diag(w)
+        XtWX = XtW @ X
+        XtWy = XtW @ y
+        # Use lstsq for numerical stability with potentially singular matrices
+        beta, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
         y_smooth[i] = beta[0]  # Intercept = smoothed value at t[i]
 
     return y_smooth
@@ -559,7 +561,7 @@ def fit_linear_trend_weighted(
 
     Args:
         t: Time values
-        y: Values to fit
+        y: Values to fit (may contain NaN for zero-weight observations)
         weights: Observation weights (higher = more influence)
 
     Returns (intercept, slope). Returns (0, 0) if all weights are zero.
@@ -569,6 +571,9 @@ def fit_linear_trend_weighted(
         # No effective observations, return zeros
         return 0.0, 0.0
 
+    # Replace NaN with 0 for zero-weight observations to avoid NaN propagation
+    y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+
     # Weighted design matrix
     X = np.column_stack([np.ones(len(t)), t])
     W = weights
@@ -576,7 +581,7 @@ def fit_linear_trend_weighted(
     # Weighted normal equations: (X'WX) beta = X'Wy
     XtW = X.T * W
     XtWX = XtW @ X
-    XtWy = XtW @ y
+    XtWy = XtW @ y_clean
 
     # Use lstsq for numerical stability
     coeffs, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
@@ -590,7 +595,7 @@ def fit_quadratic_trend_weighted(
 
     Args:
         t: Time values
-        y: Values to fit
+        y: Values to fit (may contain NaN for zero-weight observations)
         weights: Observation weights (higher = more influence)
 
     Returns (constant, linear_coef, quadratic_coef). Returns (0, 0, 0) if all weights are zero.
@@ -600,6 +605,9 @@ def fit_quadratic_trend_weighted(
         # No effective observations, return zeros
         return 0.0, 0.0, 0.0
 
+    # Replace NaN with 0 for zero-weight observations to avoid NaN propagation
+    y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+
     # Weighted design matrix
     X = np.column_stack([np.ones(len(t)), t, t * t])
     W = weights
@@ -607,7 +615,7 @@ def fit_quadratic_trend_weighted(
     # Weighted normal equations: (X'WX) beta = X'Wy
     XtW = X.T * W
     XtWX = XtW @ X
-    XtWy = XtW @ y
+    XtWy = XtW @ y_clean
 
     # Use lstsq for numerical stability
     coeffs, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
@@ -792,7 +800,7 @@ def fit_loess_continuous_weighted(
 
     Args:
         t: Time values
-        y: Values to smooth
+        y: Values to smooth (may contain NaN for zero-weight observations)
         obs_weights: Observation weights (from bootstrap sampling)
         bandwidth: Half-width of window in t-units (e.g., years)
         degree: Local polynomial degree (1=linear, 2=quadratic)
@@ -802,6 +810,9 @@ def fit_loess_continuous_weighted(
     """
     n = len(t)
     y_smooth = np.zeros(n)
+
+    # Replace NaN with 0 for zero-weight observations to avoid NaN propagation
+    y_clean = np.where(np.isnan(y) & (obs_weights == 0), 0, y)
 
     for i in range(n):
         # Distance from point i to all points
@@ -816,21 +827,21 @@ def fit_loess_continuous_weighted(
 
         # Need at least degree+1 points with non-zero weight
         if np.sum(w > 0) <= degree:
-            y_smooth[i] = y[i]
+            y_smooth[i] = y_clean[i]
             continue
 
         # Weighted local polynomial regression
         X = np.column_stack([np.power(t - t[i], p) for p in range(degree + 1)])
         XtW = X.T * w
         XtWX = XtW @ X
-        XtWy = XtW @ y
+        XtWy = XtW @ y_clean
 
         # Use lstsq for numerical stability
         try:
             beta, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
             y_smooth[i] = beta[0]  # Intercept = smoothed value at t[i]
         except:
-            y_smooth[i] = y[i]
+            y_smooth[i] = y_clean[i]
 
     return y_smooth
 
