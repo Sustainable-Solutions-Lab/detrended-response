@@ -779,17 +779,23 @@ def fit_ols_weighted(y: np.ndarray, X: np.ndarray, weights: np.ndarray) -> tuple
         - sigma_squared: Weighted residual variance
         - cov_matrix: Covariance matrix of beta, shape (p, p)
     """
+    # Replace NaN values with 0 for zero-weight observations
+    # This is safe because 0-weight observations don't contribute to the fit
+    # NaN can occur when year_means[yr] is NaN for unsampled years in bootstrap
+    y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+    X_clean = np.where(np.isnan(X) & (weights[:, np.newaxis] == 0), 0, X)
+
     # Transform to standard OLS by weighting: sqrt(W) @ X, sqrt(W) @ y
     sqrt_W = np.sqrt(weights)
-    X_weighted = X * sqrt_W[:, np.newaxis]  # Scale each row by sqrt(w_i)
-    y_weighted = y * sqrt_W
+    X_weighted = X_clean * sqrt_W[:, np.newaxis]  # Scale each row by sqrt(w_i)
+    y_weighted = y_clean * sqrt_W
 
     # Solve weighted least squares using SVD (handles rank-deficient matrices)
     beta, _, rank, _ = np.linalg.lstsq(X_weighted, y_weighted, rcond=None)
 
-    # Compute residuals
-    y_pred = X @ beta
-    residuals = y - y_pred
+    # Compute residuals (use cleaned versions to avoid NaN propagation)
+    y_pred = X_clean @ beta
+    residuals = y_clean - y_pred
 
     # Degrees of freedom: effective sample size - rank (actual parameters estimated)
     # For WLS, use sum of weights as effective sample size

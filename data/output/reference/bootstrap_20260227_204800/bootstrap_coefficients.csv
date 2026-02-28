@@ -1,0 +1,74 @@
+# Input data: Maddison_CRU_dataset.csv
+iteration,approach,approach_name,h1,h2,T_opt,r_squared,total_r_squared,f1,h4
+-1,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.00807102877765846,-0.00027720242122732303,14.558005557678227,0.1863929345279196,0.1863929345279196,,
+0,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.011692118544920768,-0.00047439785556543663,12.323114878949955,-0.02853647901818257,-0.02853647901818257,,
+1,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.009680925303560859,-0.00034732862960154575,13.936261624425812,0.006829053314121869,0.006829053314121869,,
+2,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.00802402597408091,-0.0003907191434487353,10.26827851747391,-0.777104534289839,-0.777104534289839,,
+3,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.007119764932991013,-0.000465072392846331,7.654469543350773,-1.0576724791361904,-1.0576724791361904,,
+4,Approach QJ,Approach QJ: Quadratic (Joint OLS),0.006288329081395015,-0.00021736875324075185,14.464657379780409,-0.2371371732749743,-0.2371371732749743,,
+-1,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,0.1856673502562166,0.1856673502562166,,
+0,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,0.05445118492907164,0.05445118492907164,,
+1,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,0.03768857666977299,0.03768857666977299,,
+2,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,-0.06517675848895843,-0.06517675848895843,,
+3,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,0.04977026106455773,0.04977026106455773,,
+4,Approach NJ,Approach NJ: No Climate Response (Joint),0.0,0.0,,0.0035431138030237452,0.0035431138030237452,,
+-1,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-0.0001275514172264331,22.785920261186966,0.1866131871306227,0.1866131871306227,,-0.0012598938141906142
+0,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-0.0006332502139526977,11.164469905382614,-0.5410520062848083,-0.5410520062848083,,-0.00038531094501354293
+1,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-0.00016037897290130938,22.73854026879895,-0.09959552504416247,-0.09959552504416247,,-0.0016136287915612733
+2,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-0.00012081545656313112,12.826419512476829,-0.7939694393383032,-0.7939694393383032,,-0.0005727852796955383
+3,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-0.00010391703005558552,16.33845134110615,-0.7002681522052421,-0.7002681522052421,,-0.0011026986191990688
+4,Approach PJ,Approach PJ: Piecewise (Joint OLS),0.0,-5.301083061712732e-05,22.676761571299004,-0.18275402441466193,-0.18275402441466193,,-0.002188762451571077
+-1,Approach DJ,Approach DJ: Decay (Joint OLS),0.009328599900383072,-0.00026689505946243385,17.4761569569183,0.1867068171237245,0.1867068171237245,,0.5969776484457612
+0,Approach DJ,Approach DJ: Decay (Joint OLS),0.014586504223061406,-0.0005846627308643513,12.474289409124019,0.05059974079404328,0.05059974079404328,,0.40701708306884915
+1,Approach DJ,Approach DJ: Decay (Joint OLS),0.01187804445719644,-0.00035208278776744756,16.86825495292594,0.037285814234551906,0.037285814234551906,,0.46443490998241244
+2,Approach DJ,Approach DJ: Decay (Joint OLS),0.009438737055186391,-0.0004050976072417756,11.64995409310458,-0.06487628411608481,-0.06487628411608481,,0.3850975230632465
+3,Approach DJ,Approach DJ: Decay (Joint OLS),0.007119764929147136,-0.0004650723854451662,7.65446966103149,0.01932468738711246,0.01932468738711246,,6.344214761312794e-09
+4,Approach DJ,Approach DJ: Decay (Joint OLS),0.0022666846581178807,2.2137784945173877e-05,-51.1949290259057,0.003212480556887609,0.003212480556887609,,0.9999999746818349
+-1,Approach QP,Approach QP: Quadratic (Polynomial Detrending),0.006627829238296417,-0.00021482203994184818,15.426325064436021,0.0006939727110314431,0.18623247489284067,,
+0,Approach QP,Approach QP: Quadratic (Polynomial Detrending),,,,,,,
+1,Approach QP,Approach QP: Quadratic (Polynomial Detrending),,,,,,,
+2,Approach QP,Approach QP: Quadratic (Polynomial Detrending),,,,,,,
+3,Approach QP,Approach QP: Quadratic (Polynomial Detrending),,,,,,,
+4,Approach QP,Approach QP: Quadratic (Polynomial Detrending),,,,,,,
+-1,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,0.1856673502562165,0.1856673502562165,,
+0,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,,,,
+1,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,,,,
+2,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,,,,
+3,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,,,,
+4,Approach NP,Approach NP: No Climate Response (Precomputed k),0.0,0.0,,,,,
+-1,Approach QL,Approach QL: Quadratic (LOESS Detrending),0.007911756899983486,-0.0002574614600677053,15.364934421452654,0.0009430819651525812,0.18643533269182488,,
+0,Approach QL,Approach QL: Quadratic (LOESS Detrending),,,,,,,
+1,Approach QL,Approach QL: Quadratic (LOESS Detrending),,,,,,,
+2,Approach QL,Approach QL: Quadratic (LOESS Detrending),,,,,,,
+3,Approach QL,Approach QL: Quadratic (LOESS Detrending),,,,,,,
+4,Approach QL,Approach QL: Quadratic (LOESS Detrending),,,,,,,
+-1,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,0.1856673502562165,0.1856673502562165,,
+0,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,,,,
+1,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,,,,
+2,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,,,,
+3,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,,,,
+4,Approach NL,Approach NL: No Climate Response (LOESS Precomputed k),0.0,0.0,,,,,
+-1,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,-0.00018979588635545684,16.83484610158724,0.0010394377821192347,0.1865137983795735,,-0.00038536937652763214
+0,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,,15.0,,,,
+1,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,,15.0,,,,
+2,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,,15.0,,,,
+3,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,,15.0,,,,
+4,Approach PL,Approach PL: Piecewise (LOESS Detrending),0.0,,15.0,,,,
+-1,Approach DL,Approach DL: Decay (LOESS Detrending),0.00800607964618813,-0.000214008984457487,18.70500826515193,0.0010444550622001891,0.1865178841145564,,0.6348542105342111
+0,Approach DL,Approach DL: Decay (LOESS Detrending),,,,,,,0.019098300562505256
+1,Approach DL,Approach DL: Decay (LOESS Detrending),,,,,,,0.019098300562505256
+2,Approach DL,Approach DL: Decay (LOESS Detrending),,,,,,,0.019098300562505256
+3,Approach DL,Approach DL: Decay (LOESS Detrending),,,,,,,0.019098300562505256
+4,Approach DL,Approach DL: Decay (LOESS Detrending),,,,,,,0.019098300562505256
+-1,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,-0.00015463383765671712,17.93858282263268,0.0007514246172262151,0.18627925985584504,,-0.0003472649125135612
+0,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,,15.0,,,,
+1,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,,15.0,,,,
+2,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,,15.0,,,,
+3,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,,15.0,,,,
+4,Approach PP,Approach PP: Piecewise (Polynomial Detrending),0.0,,15.0,,,,
+-1,Approach DP,Approach DP: Decay (Polynomial Detrending),0.008172234837047916,-0.00022147225611224587,18.449793623148196,0.0011071128925220775,0.1865689084315495,,0.6192221423268826
+0,Approach DP,Approach DP: Decay (Polynomial Detrending),,,,,,,0.019098300562505256
+1,Approach DP,Approach DP: Decay (Polynomial Detrending),,,,,,,0.019098300562505256
+2,Approach DP,Approach DP: Decay (Polynomial Detrending),,,,,,,0.019098300562505256
+3,Approach DP,Approach DP: Decay (Polynomial Detrending),,,,,,,0.019098300562505256
+4,Approach DP,Approach DP: Decay (Polynomial Detrending),,,,,,,0.019098300562505256

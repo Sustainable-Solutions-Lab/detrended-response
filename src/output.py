@@ -2382,7 +2382,9 @@ def plot_year_effects_bootstrap(
     for name in available_approaches:
         result = results[name]
         if result.k_point is not None:
-            all_k_values.extend([result.k_point[yr] for yr in unique_years if yr in result.k_point])
+            # Filter out NaN values from k_point
+            k_point_vals = [result.k_point[yr] for yr in unique_years if yr in result.k_point]
+            all_k_values.extend([v for v in k_point_vals if not np.isnan(v)])
         if result.k_samples is not None:
             for yr in unique_years:
                 if yr in result.k_samples:
@@ -2390,6 +2392,8 @@ def plot_year_effects_bootstrap(
                     if len(valid) > 0:
                         all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
 
+    # Filter any remaining NaN values and compute range
+    all_k_values = [v for v in all_k_values if not np.isnan(v)]
     if all_k_values:
         y_min = min(all_k_values)
         y_max = max(all_k_values)
@@ -2605,7 +2609,9 @@ def plot_combined_temp_response_and_year_effects(
     for name in year_approaches[:2]:
         result = results[name]
         if result.k_point is not None:
-            all_k_values.extend([result.k_point[yr] for yr in unique_years if yr in result.k_point])
+            # Filter out NaN values from k_point
+            k_point_vals = [result.k_point[yr] for yr in unique_years if yr in result.k_point]
+            all_k_values.extend([v for v in k_point_vals if not np.isnan(v)])
         if result.k_samples is not None:
             for yr in unique_years:
                 if yr in result.k_samples:
@@ -2613,6 +2619,8 @@ def plot_combined_temp_response_and_year_effects(
                     if len(valid) > 0:
                         all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
 
+    # Filter any remaining NaN values and compute range
+    all_k_values = [v for v in all_k_values if not np.isnan(v)]
     if all_k_values:
         y_min_year = min(all_k_values)
         y_max_year = max(all_k_values)
@@ -3035,7 +3043,9 @@ def plot_year_effects_2panel(
     for name in valid_approaches[:2]:
         result = results[name]
         if result.k_point is not None:
-            all_k_values.extend([result.k_point[yr] for yr in unique_years if yr in result.k_point])
+            # Filter out NaN values from k_point
+            k_point_vals = [result.k_point[yr] for yr in unique_years if yr in result.k_point]
+            all_k_values.extend([v for v in k_point_vals if not np.isnan(v)])
         if result.k_samples is not None:
             for yr in unique_years:
                 if yr in result.k_samples:
@@ -3043,6 +3053,8 @@ def plot_year_effects_2panel(
                     if len(valid) > 0:
                         all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
 
+    # Filter any remaining NaN values and compute range
+    all_k_values = [v for v in all_k_values if not np.isnan(v)]
     if all_k_values:
         y_min = min(all_k_values)
         y_max = max(all_k_values)
@@ -5990,11 +6002,18 @@ def plot_h2_histogram_4x3(
                        label=f'Point: {point_est:.5f}')
 
         # Plot histogram on top
-        n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
-                          edgecolor=color, linewidth=0.5)
+        # Use warnings filter to suppress divide-by-zero when all values are identical
+        import warnings
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='invalid value encountered in divide')
+            n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
+                              edgecolor=color, linewidth=0.5)
 
         # Extend y-axis upper bound with ~10% padding
-        y_max = np.max(n) * 1.1
+        # Handle edge cases where max(n) might be NaN or zero
+        y_max = np.nanmax(n) * 1.1 if len(n) > 0 and np.any(~np.isnan(n)) else 1.0
+        if np.isnan(y_max) or y_max <= 0:
+            y_max = 1.0
         ax.set_ylim(0, y_max)
 
         ax.set_xlabel(x_label, fontsize=10)
