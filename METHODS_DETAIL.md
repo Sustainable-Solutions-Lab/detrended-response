@@ -192,3 +192,147 @@ g(t) = j(t) + [h(T(t)) - h(T)]
 ```
 
 Re-referencing and absorbing the reference country's j into k recovers exact equivalence.
+
+---
+
+# Persistence Decay Model: Bootstrap Methodology
+
+This section documents how the persistence decay (Approach D) climate response is bootstrapped when using year-level resampling (`sample_years=True`).
+
+## The Persistence Decay Model
+
+The decay model generalizes the standard quadratic climate response `h(T) = h₁T + h₂T²` by allowing past temperature effects to persist with exponential decay:
+
+```
+h_conv(T(t)) = h(T(t)) - h₄ · Σ_{k=1}^{n} (1-h₄)^{k-1} · h(T(t-k))
+```
+
+where h₄ ∈ [0, 1] is the persistence decay parameter:
+- h₄ = 0: Full persistence (all past effects accumulate indefinitely)
+- h₄ = 1: No persistence (only current year temperature matters)
+
+### Efficient Accumulator Representation
+
+Rather than computing the infinite sum directly, the model uses recursive accumulators:
+
+```
+A_T(t) = T(t) + (1-h₄) · A_T(t-1)
+A_T²(t) = T²(t) + (1-h₄) · A_T²(t-1)
+```
+
+The modified regressors become:
+```
+X₁(t) = T(t) - h₄ · A_T(t-1)
+X₂(t) = T²(t) - h₄ · A_T²(t-1)
+```
+
+For the detrended approaches (DL, DP), the regressors subtract the corresponding trend accumulators:
+```
+X₁(t) = [T(t) - h₄·A_T(t-1) - c_T(t)] - [T_trend(t) - h₄·A_T_trend(t-1) - c_T_trend(t)]
+```
+
+where c_T(t) is a pre-first-year correction term accounting for the assumption that temperature was constant before the first observation.
+
+### Three Variants
+
+| Approach | Trend Method | Year Effects | h₄ Optimization |
+|----------|-------------|--------------|-----------------|
+| DJ | Joint OLS (estimated in design matrix) | Joint OLS | 1D search over h₄, inner OLS for all other params |
+| DL | LOESS (pre-computed) | Pre-computed year means | 1D search over h₄, inner 2-column OLS for h₁, h₂ |
+| DP | Polynomial (pre-computed) | Pre-computed year means | 1D search over h₄, inner 2-column OLS for h₁, h₂ |
+
+## Bootstrap with Year Sampling
+
+The cluster bootstrap resamples both countries and years with replacement. Rather than creating duplicate data, it uses a weighting scheme on the original data:
+
+```
+weight(i) = country_count(c_i) × year_count(yr_i)
+```
+
+where `country_count(c)` = number of times country c was drawn, and `year_count(yr)` = number of times year yr was drawn. Observations from unsampled years (year_count = 0) get weight 0.
+
+### Why Accumulators Must Use ALL Years
+
+The persistence accumulators iterate through **all** years chronologically for each country, including years with zero bootstrap weight. This is essential because:
+
+1. **Physical continuity**: The accumulator A_T(t) represents the exponentially weighted temperature history. Skipping a year would break the decay chain: year t+1's accumulator depends on year t's value regardless of whether year t was sampled.
+
+2. **Regressor correctness**: The modified regressors X₁(t) and X₂(t) at a sampled year depend on A_T(t-1), which may have been accumulated through unsampled years. Omitting those years would produce incorrect regressor values at sampled years.
+
+3. **Separation of concerns**: The accumulators describe the physical temperature history (always the same), while the bootstrap weights describe which observations inform the statistical inference.
+
+### SSE Uses Only Sampled Years
+
+The h₄ optimization minimizes a weighted sum of squared errors:
+
+```
+SSE(h₄) = Σᵢ wᵢ · (yᵢ - ŷᵢ)²
+```
+
+Observations with weight 0 contribute nothing to the SSE. The inner OLS is also weighted:
+
+```
+β = argmin Σᵢ wᵢ · (yᵢ - Xᵢ·β)²
+```
+
+This is equivalent to transforming to `√w · y = √w · X · β` and solving standard OLS on the transformed system.
+
+## LOESS Weighting Interaction with Bootstrap Weights
+
+The LOESS trend fitting combines two weighting systems:
+
+1. **Bootstrap observation weights** (from country × year sampling): control which observations are "in" the bootstrap sample
+2. **Tricube proximity weights** (standard LOESS kernel): control local smoothing based on distance from evaluation point
+
+At each evaluation point t₀, the combined weight for observation j is:
+
+```
+w_combined(j) = w_bootstrap(j) × tricube(|t_j - t₀| / bandwidth)
+```
+
+where `tricube(u) = (1 - u³)³` for u < 1, and 0 otherwise.
+
+**Consequences**:
+- **Unsampled years** (w_bootstrap = 0): contribute zero combined weight, so they do not influence the LOESS fit at any evaluation point
+- **Years sampled multiple times** (w_bootstrap > 1): have proportionally more influence, equivalent to having multiple copies of that observation
+- **LOESS evaluates at all years**: including unsampled ones, by interpolating from nearby sampled years using the kernel-weighted local polynomial. With a ~42-year bandwidth and ~62 years of data, there are always sufficient sampled years within the window for a stable fit
+- **Result**: T_trend is estimated using only bootstrap-sampled data but is defined (finite) at all time points, which is exactly what the accumulators require
+
+This satisfies the design requirement: **trends are fitted on the bootstrap sample but evaluated for all years**, providing a complete T_trend time series for the accumulator chain.
+
+## NaN Handling Strategy
+
+When `compute_year_means_weighted` encounters a year with zero total weight (unsampled year), it returns NaN for that year's mean. This propagates into the dependent variable:
+
+```
+y(i) = Δy(i) - k(yr) - j_trend(i)
+```
+
+For observations in unsampled years, k(yr) = NaN, so y(i) = NaN.
+
+### The Problem
+
+In IEEE 754 floating point arithmetic, `NaN × 0 = NaN`. When computing the weighted OLS inside the SSE function:
+
+```python
+y_w = y * sqrt(weights)    # NaN * 0 = NaN for unsampled years
+```
+
+This NaN propagates through `lstsq`, producing NaN coefficients and NaN SSE values. The h₄ optimizer cannot evaluate the objective function and converges to a fixed point determined by the algorithm's internal logic rather than the data.
+
+### The Solution
+
+Before the weighted OLS computation, replace NaN with 0 for zero-weight observations:
+
+```python
+y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+```
+
+This is mathematically safe because zero-weight observations contribute nothing to the weighted OLS objective. The replacement value (0) is irrelevant — any finite value would give the same result since it is multiplied by weight 0.
+
+This pattern is used consistently across all weighted fitting functions:
+- `fit_ols_weighted` (src/fitting.py)
+- `fit_linear_trend_weighted` (src/detrending.py)
+- `fit_quadratic_trend_weighted` (src/detrending.py)
+- `fit_loess_continuous_weighted` (src/detrending.py)
+- `compute_sse_for_h4` closures in DL and DP fitting functions (src/fitting.py)

@@ -1746,13 +1746,16 @@ def fit_ApproachDL_persistence_decay(
 
         # Solve OLS: min ||y - X @ [h1, h2]||^2 (weighted if weights provided)
         if weights is not None:
+            # Zero out NaN values where weights are 0 (unsampled years in bootstrap)
+            # NaN * 0 = NaN (IEEE 754), which would poison lstsq
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
             # Weighted least squares (use lstsq for numerical stability)
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
-            y_w = y * sqrt_W
+            y_w = y_clean * sqrt_W
             beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
             y_pred = X @ beta_ols
-            sse = np.sum(weights * (y - y_pred) ** 2)
+            sse = np.sum(weights * (y_clean - y_pred) ** 2)
         else:
             beta_ols, _, _, _ = linalg.lstsq(X, y)
             y_pred = X @ beta_ols
@@ -3127,13 +3130,16 @@ def fit_ApproachDP_persistence_linear_detrend(
 
         # Solve OLS: min ||y - X @ [h1, h2]||^2 (weighted if weights provided)
         if weights is not None:
+            # Zero out NaN values where weights are 0 (unsampled years in bootstrap)
+            # NaN * 0 = NaN (IEEE 754), which would poison lstsq
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
             # Weighted least squares (use lstsq for numerical stability)
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
-            y_w = y * sqrt_W
+            y_w = y_clean * sqrt_W
             beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
             y_pred = X @ beta_ols
-            sse = np.sum(weights * (y - y_pred) ** 2)
+            sse = np.sum(weights * (y_clean - y_pred) ** 2)
         else:
             beta_ols, _, _, _ = linalg.lstsq(X, y)
             y_pred = X @ beta_ols
