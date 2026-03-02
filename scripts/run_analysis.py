@@ -42,7 +42,7 @@ from src.fitting import fit_all_approaches
 from src.output import save_all_outputs, create_output_dir
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Detrended response analysis of climate-economy relationship"
     )
@@ -95,7 +95,7 @@ def main():
              "If specified, adds '_mwXX' suffix to output directory.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Compute LOESS window from mean weight distance if specified
     if args.mean_weight_distance is not None:
@@ -266,6 +266,8 @@ def main():
     print(f"  Output/plots:     {t_output:7.3f}s")
     print(f"  Total:            {total_time:7.3f}s")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

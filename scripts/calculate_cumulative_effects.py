@@ -1145,7 +1145,7 @@ def process_representative_countries(
     return pd.concat(results, ignore_index=True)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Calculate cumulative climate effects from bootstrap h(T) values"
     )
@@ -1181,7 +1181,7 @@ def main():
              "Overrides --loess-window if specified.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Resolve input directory: explicit --input-dir > --reference-dir > default
     if args.input_dir is not None:
@@ -1328,6 +1328,8 @@ def main():
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

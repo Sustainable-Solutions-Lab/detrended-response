@@ -41,7 +41,7 @@ from src.output import (
 )
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Bootstrap uncertainty analysis for detrended response"
     )
@@ -123,7 +123,7 @@ def main():
              "These approaches require optimization and take ~45s each per iteration.",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     verbose = not args.quiet
 
     # Compute LOESS window from mean weight distance if specified
@@ -345,6 +345,8 @@ def main():
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

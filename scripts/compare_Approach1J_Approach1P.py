@@ -169,7 +169,7 @@ def make_scatter_panel(ax, x, y, label, panel_letter):
     ax.set_aspect('equal')
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Compare ApproachQJ vs ApproachQP parameters via scatter plots."
     )
@@ -183,7 +183,7 @@ def main():
         default="data/output/ApproachQJ_vs_ApproachQP",
         help="Output directory (default: data/output/ApproachQJ_vs_ApproachQP)"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -374,6 +374,8 @@ def main():
     # Also print to console
     print("\n--- LaTeX Table ---")
     print(latex_table)
+
+    return output_dir
 
 
 if __name__ == "__main__":

@@ -344,7 +344,7 @@ def plot_combined_uncertainty_bars(
     plt.close(fig)
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Generate bar charts showing bootstrap uncertainty ranges"
     )
@@ -361,7 +361,7 @@ def main():
         help="Output directory for figures (default: same as bootstrap directory)",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Find bootstrap directory
     if args.bootstrap_dir:
@@ -402,6 +402,8 @@ def main():
     print("\n" + "=" * 70)
     print(f"Figures saved to: {output_dir}")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

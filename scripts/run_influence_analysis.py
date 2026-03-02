@@ -70,7 +70,7 @@ def parse_int_list(value: str) -> tuple:
     return tuple(int(x) for x in items)
 
 
-def main():
+def main(argv=None):
     # Find most recent bootstrap directory for default
     default_bootstrap_dir = find_most_recent_dir("data/output/reference/bootstrap_*")
 
@@ -134,7 +134,7 @@ Examples:
         help="Number of top/bottom countries to report in summary (default: 10)",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     print("=" * 70)
     print("Country Influence Analysis")
@@ -219,6 +219,8 @@ Examples:
     print("\n" + "=" * 70)
     print(f"Influence analysis complete. Results saved to: {output_dir}")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

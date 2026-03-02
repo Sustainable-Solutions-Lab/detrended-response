@@ -168,7 +168,7 @@ def create_publication_output_dir(base_dir: str = None) -> Path:
     return output_dir
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Generate publication-quality tables and figures from analysis outputs"
     )
@@ -203,7 +203,7 @@ def main():
         help="Path to input data CSV for temperature histogram (default: data/input/Maddison_CRU_dataset.csv)",
     )
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Resolve directories: explicit args > --reference-dir > default
     if args.analysis_dir is not None:
@@ -300,6 +300,8 @@ def main():
     print("\n" + "=" * 70)
     print(f"Publication outputs saved to: {output_dir}")
     print("=" * 70)
+
+    return output_dir
 
 
 if __name__ == "__main__":

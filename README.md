@@ -387,6 +387,61 @@ python scripts/create_Maddison_CRU_dataset.py
 
 ## Usage
 
+### Full Pipeline
+
+The simplest way to run the complete analysis is with the pipeline orchestrator, which runs all 7 steps in sequence and automatically passes output directories between dependent steps:
+
+```bash
+python scripts/main.py
+```
+
+This creates a single output directory with all results organized into subdirectories:
+
+```
+data/output/pipeline_YYYYMMDD_HHMMSS/
+    analysis/        # Step 1: Point estimates for all approaches
+    bootstrap/       # Step 2: Bootstrap uncertainty analysis
+    publication/     # Steps 3-4: Publication tables, figures, and uncertainty bars
+    comparison/      # Step 5: Approach QJ vs QP parameter comparison
+    cumulative/      # Step 6: Cumulative climate effects
+    influence/       # Step 7: Country influence analysis
+```
+
+**Pipeline options:**
+
+| Argument | Default | Description |
+|---|---|---|
+| `--output-dir` | `data/output/pipeline_YYYYMMDD_HHMMSS` | Parent output directory |
+| `--use-csv` | `data/input/Maddison_CRU_dataset.csv` | Input CSV file |
+| `--year-min` | None | Minimum year to include |
+| `--year-max` | None | Maximum year to include |
+| `--loess-window` | 42.45 | LOESS window size in years |
+| `--mean-weight-distance` | None | Alternative LOESS parameterization |
+| `--n-bootstrap` | 1000 | Number of bootstrap iterations |
+| `--random-seed` | 42 | Random seed for reproducibility |
+| `--sample-years` | False | Enable time-dimension bootstrap |
+| `--skip-slow` | False | Skip slow approaches (PJ, DJ) in bootstrap |
+| `--quiet` | False | Suppress bootstrap progress messages |
+
+**Examples:**
+```bash
+# Full production run
+python scripts/main.py
+
+# Quick test run
+python scripts/main.py --n-bootstrap 5 --sample-years
+
+# Skip slow joint-optimization approaches in bootstrap
+python scripts/main.py --skip-slow
+
+# Custom LOESS parameterization
+python scripts/main.py --mean-weight-distance 10
+```
+
+### Individual Scripts
+
+Each pipeline step can also be run standalone. This is useful for re-running a single step or for development.
+
 Run the analysis with default settings:
 ```bash
 python scripts/run_analysis.py
@@ -765,12 +820,16 @@ detrended-response/
 │   ├── influence.py             # Country influence analysis
 │   └── output.py                # Results tables and plots
 ├── scripts/
-│   ├── run_analysis.py              # Main entry point
-│   ├── run_bootstrap.py             # Bootstrap uncertainty analysis
-│   ├── run_influence_analysis.py    # Country influence on bootstrap coefficients
-│   ├── compare_method0_5c.py        # Scatter plots comparing Method 0 vs 5c parameters
-│   ├── sweep_h4_method5.py          # Sweep h₄ persistence decay parameter for method5
-│   └── create_Maddison_CRU_dataset.py  # Create merged GDP/climate dataset
+│   ├── main.py                         # Pipeline orchestrator (runs all steps)
+│   ├── run_analysis.py                 # Step 1: Point estimates for all approaches
+│   ├── run_bootstrap.py                # Step 2: Bootstrap uncertainty analysis
+│   ├── make_tables_and_figures.py      # Step 3: Publication tables and figures
+│   ├── plot_uncertainty_bars.py        # Step 4: Uncertainty bar charts
+│   ├── compare_Approach1J_Approach1P.py # Step 5: Approach QJ vs QP comparison
+│   ├── calculate_cumulative_effects.py # Step 6: Cumulative climate effects
+│   ├── run_influence_analysis.py       # Step 7: Country influence analysis
+│   ├── sweep_h4_method5.py            # Sweep h₄ persistence decay parameter
+│   └── create_Maddison_CRU_dataset.py # Create merged GDP/climate dataset
 ├── .gitignore
 ├── requirements.txt
 ├── DIAGNOSTICS.md               # Detailed diagnostics documentation
