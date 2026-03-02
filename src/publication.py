@@ -53,8 +53,8 @@ def reconstruct_bootstrap_results(
     approaches = coefficients_df['approach'].unique()
 
     for approach in approaches:
-        # Get samples for this approach
-        mask = coefficients_df['approach'] == approach
+        # Get bootstrap samples for this approach (exclude iteration -1 which is the point estimate)
+        mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] >= 0)
         samples = coefficients_df[mask].sort_values('iteration')
 
         # Get summary row for point estimates
