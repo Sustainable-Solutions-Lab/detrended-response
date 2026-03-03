@@ -2079,12 +2079,12 @@ def save_bootstrap_h_values(
                 elif name in ['Approach DJ', 'Approach DP', 'Approach DL']:
                     # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
                     # The correction term accounts for assumed constant temperature before first year
-                    # We assume pre-history temperature was T_loess_1961 (not actual T at first year)
-                    # This makes the baseline consistent with using T_loess_1961 in cumulative effects
+                    # We assume pre-history temperature was T_loess at base year (not actual T at first year)
+                    # This makes the baseline consistent with using T_loess_base in cumulative effects
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    # Build array with T_loess at base year (1961) for each country's pre-history
-                    T_loess_base = _get_T_loess_at_base_year(data, trends_loess, base_year=1961)
+                    # Build array with T_loess at base year for each country's pre-history
+                    T_loess_base = _get_T_loess_at_base_year(data, trends_loess, base_year=data.year_range[0])
                     correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_loess_base)
                     X1 = temp_arr - h4 * A_T_lag - correction_T
                     X2 = temp_arr**2 - h4 * A_T2_lag - correction_T2
@@ -2129,14 +2129,14 @@ def save_bootstrap_h_baselines(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
     output_dir: Path,
+    base_year: int,
     input_file: str = None,
     original_results: Dict[str, FitResult] = None,
-    base_year: int = 1961,
 ) -> None:
     """Save h(T_loess_base_year) baseline values for cumulative effects calculation.
 
-    For each country, computes h(T_loess_1961) where T_loess_1961 is the LOESS-smoothed
-    temperature at the base year. This provides a stable baseline that isn't affected
+    For each country, computes h(T_loess_base) where T_loess_base is the LOESS-smoothed
+    temperature at the first year. This provides a stable baseline that isn't affected
     by inter-annual temperature variability.
 
     Creates: bootstrap_h_baselines.csv with columns:
@@ -2162,7 +2162,7 @@ def save_bootstrap_h_baselines(
         output_dir: Output directory
         input_file: Input data filename for header comment
         original_results: Dict of FitResult for point estimates (iteration=-1)
-        base_year: Base year for cumulative effects (default: 1961)
+        base_year: First year of the data (e.g., data.year_range[0])
     """
     output_path = output_dir / 'bootstrap_h_baselines.csv'
 
