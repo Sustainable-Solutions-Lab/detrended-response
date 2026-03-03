@@ -119,24 +119,27 @@ def reconstruct_bootstrap_results(
             k_mask = k_samples_df['approach'] == approach
             k_data = k_samples_df[k_mask]
             if len(k_data) > 0:
-                # Get unique years
-                years = sorted(k_data['year'].unique())
-                n_bootstrap = int(summary_row['n_bootstrap'])
+                # Separate point estimates (iteration -1) from bootstrap samples
+                k_point_data = k_data[k_data['iteration'] == -1]
+                k_bootstrap_data = k_data[k_data['iteration'] >= 0]
 
-                # Build k_samples dict: year -> array of shape (n_bootstrap,)
+                years = sorted(k_bootstrap_data['year'].unique())
+
+                # Build k_samples dict from bootstrap iterations only
                 k_samples = {}
                 for year in years:
-                    year_data = k_data[k_data['year'] == year].sort_values('iteration')
+                    year_data = k_bootstrap_data[k_bootstrap_data['year'] == year].sort_values('iteration')
                     k_samples[year] = year_data['k_value'].values
 
-                # Compute k_point as median of each year's samples
+                # Use stored point estimates if available, else fall back to median
                 k_point = {}
-                for year in years:
-                    valid = k_samples[year][~np.isnan(k_samples[year])]
-                    if len(valid) > 0:
-                        k_point[year] = np.median(valid)
-                    else:
-                        k_point[year] = np.nan
+                if len(k_point_data) > 0:
+                    for _, row in k_point_data.iterrows():
+                        k_point[int(row['year'])] = row['k_value']
+                else:
+                    for year in years:
+                        valid = k_samples[year][~np.isnan(k_samples[year])]
+                        k_point[year] = np.median(valid) if len(valid) > 0 else np.nan
 
         # Create BootstrapResult
         result = BootstrapResult(

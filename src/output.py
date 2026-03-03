@@ -1545,6 +1545,17 @@ def save_bootstrap_k_samples_csv(
         # Use the approach/method key directly
         approach_key = name
 
+        # Add point estimates as iteration -1
+        if result.k_point is not None:
+            for year in sorted(result.k_point.keys()):
+                rows.append({
+                    'iteration': -1,
+                    'approach': approach_key,
+                    'approach_name': result.approach,
+                    'year': year,
+                    'k_value': result.k_point[year],
+                })
+
         for year in sorted(result.k_samples.keys()):
             k_array = result.k_samples[year]
             for i in range(result.n_bootstrap):

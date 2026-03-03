@@ -1178,13 +1178,18 @@ def run_bootstrap(
         for b in range(n_bootstrap):
             # Extract k values for this bootstrap iteration
             k_vals = np.array([k_samples[approach_name][yr][b] for yr in unique_years])
-            if np.any(np.isnan(k_vals)):
+            valid_mask = ~np.isnan(k_vals)
+            n_valid = np.sum(valid_mask)
+            if n_valid < 3:  # Need at least 3 points for quadratic fit
                 continue
-            # Fit quadratic: k(t) = a0 + a1*t + a2*t^2 and subtract
-            coeffs, _, _, _ = np.linalg.lstsq(X_quad, k_vals, rcond=None)
-            k_fitted = X_quad @ coeffs
-            for i, yr in enumerate(unique_years):
-                k_samples[approach_name][yr][b] = k_vals[i] - k_fitted[i]
+            # Fit quadratic on valid (non-NaN) years only
+            X_valid = X_quad[valid_mask]
+            k_valid = k_vals[valid_mask]
+            coeffs, _, _, _ = np.linalg.lstsq(X_valid, k_valid, rcond=None)
+            k_fitted = X_valid @ coeffs
+            valid_years = np.array(unique_years)[valid_mask]
+            for j, yr in enumerate(valid_years):
+                k_samples[approach_name][yr][b] = k_valid[j] - k_fitted[j]
 
     # Also detrend k_point for Approach QJ and Approach NJ to match the detrended samples
     k_point_detrended = {}
