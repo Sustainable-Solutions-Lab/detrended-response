@@ -13,7 +13,7 @@ import numpy as np
 
 # Default window size in years for LOESS smoothing
 # 42.45 years chosen to match Total R² of quadratic polynomial detrending (method1h0)
-# with 140 countries (those having data in both 1961 and 2022)
+# with 140 countries (those having data in both the first and last years)
 DEFAULT_LOESS_WINDOW_YEARS = 42.447947771790915
 
 # Minimum number of points required for LOESS fitting

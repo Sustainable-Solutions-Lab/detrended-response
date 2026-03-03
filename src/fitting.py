@@ -345,11 +345,11 @@ class FitResultApproach4:
 
     Model: h_conv(T(t)) = h(T(t)) - h4 * sum_{k=1}^{n} (1-h4)^{k-1} * h(T(t-k))
 
-    where h(T) = h1*T + h2*T^2 and n = t - 1961.
+    where h(T) = h1*T + h2*T^2 and n = t - first_year.
 
     Using accumulators for efficient computation:
-    - A_T(t) = T(t) + (1-h4) * A_T(t-1), with A_T(1961) = T(1961)
-    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1), with A_T2(1961) = T^2(1961)
+    - A_T(t) = T(t) + (1-h4) * A_T(t-1), with A_T(first_year) = T(first_year)
+    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1), with A_T2(first_year) = T^2(first_year)
 
     Modified regressors:
     - X1(t) = T(t) - h4 * A_T(t-1)

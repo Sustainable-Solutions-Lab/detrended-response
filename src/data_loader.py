@@ -227,9 +227,17 @@ def load_data(maddison_path: str, cru_path: str,
 
 def load_data_from_csv(csv_path: str,
                        year_min: int = None, year_max: int = None) -> AnalysisData:
-    """Load pre-processed data from CSV file (e.g., df_base_withPop.csv).
+    """Load data from CSV file with auto-detection of format.
 
-    Expected columns: iso_id, year, pcGDP, growth_pcGDP, temp, time, Pop
+    Supports two formats:
+    1. Pre-processed format (e.g., df_base_withPop.csv):
+       Expected columns: iso_id, year, pcGDP, growth_pcGDP, temp, time, Pop
+
+    2. ESM historical format (e.g., ACCESS-ESM1-5_historical.csv):
+       Expected columns: model, region, year, area, lai, tas, pr, gpp, pct_growth_gpp
+       Auto-detected by presence of 'region' column. Rows with region='global'
+       are filtered out. Columns are renamed: region→iso_id, tas→temp, gpp→pcGDP.
+       Growth is computed as log-difference if growth_pcGDP is not present.
 
     Args:
         csv_path: Path to the CSV file
@@ -240,6 +248,18 @@ def load_data_from_csv(csv_path: str,
         AnalysisData object containing all arrays and mappings
     """
     df = pd.read_csv(csv_path)
+
+    # Auto-detect ESM format
+    if 'region' in df.columns:
+        df = df[df['region'] != 'global'].copy()
+        df = df.rename(columns={'region': 'iso_id', 'tas': 'temp', 'gpp': 'pcGDP'})
+        df = df.drop(columns=[c for c in ['model', 'area', 'lai', 'pr', 'pct_growth_gpp'] if c in df.columns])
+
+    # Compute growth if missing (ESM data or any CSV without pre-computed growth)
+    if 'growth_pcGDP' not in df.columns:
+        df = df.sort_values(['iso_id', 'year']).copy()
+        df['growth_pcGDP'] = np.log(df['pcGDP']).groupby(df['iso_id']).diff()
+        df = df.dropna(subset=['growth_pcGDP'])
 
     # Filter by year range if specified
     if year_min is not None:

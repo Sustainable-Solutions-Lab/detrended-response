@@ -241,7 +241,8 @@ def main(argv=None):
         save_bootstrap_h_baselines(
             bootstrap_results, data, trends_loess, output_dir,
             input_file=input_file,
-            original_results=original_results
+            original_results=original_results,
+            base_year=data.year_range[0],
         )
     save_bootstrap_summary_txt(bootstrap_results, all_stats, output_dir, input_file=input_file)
     save_bootstrap_summary_table(bootstrap_results, all_stats, output_dir, input_file=input_file)
