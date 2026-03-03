@@ -246,24 +246,12 @@ def permute_climate_countries(df: pd.DataFrame, seed: int = None) -> pd.DataFram
     return df
 
 
-def compute_time_variables(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute time-related variables.
-
-    time = year - 1960
-    time2 = time^2
-    """
-    df = df.copy()
-    df['time'] = df['year'] - 1960
-    df['time2'] = df['time'] ** 2
-    return df
-
-
 def validate_output(df: pd.DataFrame, reference_path: str = None) -> bool:
     """Validate the output DataFrame.
 
     Returns True if validation passes, False otherwise.
     """
-    required_columns = ['iso_id', 'year', 'pcGDP', 'growth_pcGDP', 'temp', 'precp', 'time', 'time2', 'Pop']
+    required_columns = ['iso_id', 'year', 'pcGDP', 'growth_pcGDP', 'temp', 'precp', 'Pop']
 
     print("\n=== Validation Results ===")
 
@@ -279,20 +267,6 @@ def validate_output(df: pd.DataFrame, reference_path: str = None) -> bool:
     print(f"Year range: {year_min} - {year_max}")
     if year_min < 1961 or year_max > 2022:
         print(f"WARNING: Year range outside expected 1961-2022")
-
-    # Verify time = year - 1960
-    time_check = (df['time'] == df['year'] - 1960).all()
-    if not time_check:
-        print("FAIL: time != year - 1960")
-        return False
-    print("PASS: time = year - 1960")
-
-    # Verify time2 = time^2
-    time2_check = (df['time2'] == df['time'] ** 2).all()
-    if not time2_check:
-        print("FAIL: time2 != time^2")
-        return False
-    print("PASS: time2 = time^2")
 
     # Check for NaN values in key columns
     nan_counts = df[required_columns].isna().sum()
@@ -410,15 +384,12 @@ def main():
     df = pd.merge(df, df_cru, on=['iso_id', 'year'], how='inner')
     print(f"  After climate merge: {len(df)} observations for {df['iso_id'].nunique()} countries")
 
-    print("Computing time variables...")
-    df = compute_time_variables(df)
-
     # Filter to years 1961-2022 (as specified in output format)
     df = df[(df['year'] >= 1961) & (df['year'] <= 2022)].copy()
     print(f"  After year filter (1961-2022): {len(df)} observations for {df['iso_id'].nunique()} countries")
 
     # Select and order columns
-    output_columns = ['iso_id', 'year', 'pcGDP', 'growth_pcGDP', 'temp', 'precp', 'time', 'time2', 'Pop']
+    output_columns = ['iso_id', 'year', 'pcGDP', 'growth_pcGDP', 'temp', 'precp', 'Pop']
     df = df[output_columns]
 
     # Sort by iso_id and year
