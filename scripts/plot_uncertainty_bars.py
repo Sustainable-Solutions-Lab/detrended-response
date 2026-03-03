@@ -67,9 +67,9 @@ def plot_uncertainty_range_bars(
     # Row 2: ApproachP (h2, T_opt, h4)
     # Row 3: ApproachD (h2, T_opt, h4)
     approach_groups = [
-        ('ApproachQ', 'Quadratic', ['ApproachQJ', 'ApproachQP', 'ApproachQL']),
-        ('ApproachP', 'Piecewise', ['ApproachPJ', 'ApproachPP', 'ApproachPL']),
-        ('ApproachD', 'Persistence', ['ApproachDJ', 'ApproachDP', 'ApproachDL']),
+        ('Approach Q', 'Quadratic', ['Approach QJ', 'Approach QP', 'Approach QL']),
+        ('Approach P', 'Piecewise', ['Approach PJ', 'Approach PP', 'Approach PL']),
+        ('Approach D', 'Persistence', ['Approach DJ', 'Approach DP', 'Approach DL']),
     ]
 
     # Variables for each column
@@ -111,7 +111,7 @@ def plot_uncertainty_range_bars(
         for col_idx, var in enumerate(variables):
             ax = axes[row_idx, col_idx]
 
-            # ApproachQ doesn't have h4, so leave that cell blank
+            # Approach Q doesn't have h4, so leave that cell blank
             if row_idx == 0 and col_idx == 2:
                 ax.axis('off')
                 continue
@@ -189,9 +189,9 @@ def plot_combined_uncertainty_bars(
     """
     # Define approach groups: rows are approach types, columns are variables
     approach_groups = [
-        ('ApproachQ', 'Quadratic', ['ApproachQJ', 'ApproachQP', 'ApproachQL']),
-        ('ApproachP', 'Piecewise', ['ApproachPJ', 'ApproachPP', 'ApproachPL']),
-        ('ApproachD', 'Persistence', ['ApproachDJ', 'ApproachDP', 'ApproachDL']),
+        ('Approach Q', 'Quadratic', ['Approach QJ', 'Approach QP', 'Approach QL']),
+        ('Approach P', 'Piecewise', ['Approach PJ', 'Approach PP', 'Approach PL']),
+        ('Approach D', 'Persistence', ['Approach DJ', 'Approach DP', 'Approach DL']),
     ]
 
     # Variables for each column
@@ -229,7 +229,7 @@ def plot_combined_uncertainty_bars(
         for col_idx, var in enumerate(variables):
             ax = axes[row_idx, col_idx]
 
-            # ApproachQ doesn't have h4, so leave that cell blank
+            # Approach Q doesn't have h4, so leave that cell blank
             if row_idx == 0 and col_idx == 2:
                 ax.axis('off')
                 continue
