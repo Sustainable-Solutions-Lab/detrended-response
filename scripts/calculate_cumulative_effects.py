@@ -2,7 +2,7 @@
 """Calculate cumulative climate effects from bootstrap h(T) values.
 
 This script processes bootstrap_h_values.csv to compute cumulative climate effects
-from 1961-2022, select representative countries, and create a box-and-whisker
+select representative countries, and create a box-and-whisker
 visualization.
 
 Usage:
@@ -222,8 +222,9 @@ def plot_cumulative_effects_boxplot(
     cluster_width = 0.8
     box_width = cluster_width / (n_approaches + 1)  # Extra space between clusters
 
-    # Filter to year 2022 for final values
-    df_2022 = df[df['year'] == 2022].copy()
+    # Filter to last year for final values
+    last_year = int(df['year'].max())
+    df_2022 = df[df['year'] == last_year].copy()
 
     # Create box plots
     for i, country_key in enumerate(country_keys):
@@ -283,7 +284,8 @@ def plot_cumulative_effects_boxplot(
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
     ax.set_xlabel('Representative Country (Percentile)')
-    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022)')
+    first_year = int(df['year'].min())
+    ax.set_title(f'Cumulative Climate Effect on GDP Growth ({first_year}-{last_year})')
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
 
     # Legend for approaches
@@ -355,8 +357,9 @@ def plot_cumulative_effects_by_approach_grouped(
     box_width = cluster_width / (n_countries + 1)  # Extra space between clusters
     group_gap = 0.6  # Extra space between method groups (J, P, L)
 
-    # Filter to year 2022 for final values
-    df_2022 = df[df['year'] == 2022].copy()
+    # Filter to last year for final values
+    last_year = int(df['year'].max())
+    df_2022 = df[df['year'] == last_year].copy()
 
     # Compute x-positions with gaps between groups
     # Groups: [0,1,2] = J methods, [3,4,5] = P methods, [6,7,8] = L methods
@@ -439,7 +442,8 @@ def plot_cumulative_effects_by_approach_grouped(
 
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
-    ax.set_title('Cumulative Climate Effect on GDP Growth (1961-2022) by Approach', pad=25)
+    first_year = int(df['year'].min())
+    ax.set_title(f'Cumulative Climate Effect on GDP Growth ({first_year}-{last_year}) by Approach', pad=25)
     ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
 
     # Add group labels above the plot
@@ -787,7 +791,7 @@ def plot_cumulative_effects_ApproachDL(
 
     Layout:
         Top row: Cumulative effects by year (all countries) for each approach
-        Bottom row: Box-and-whisker plot for representative countries (2022) for each approach
+        Bottom row: Box-and-whisker plot for representative countries (last year) for each approach
         Columns: J, P, L methods
 
     Args:
@@ -888,8 +892,9 @@ def plot_cumulative_effects_ApproachDL(
             ax_top.legend(loc='upper left', fontsize=7)
 
         # ==================== BOTTOM ROW: Box-and-whisker for representative countries ====================
-        # Filter to year 2022 and this approach
-        df_2022 = df_representative[(df_representative['year'] == 2022) & (df_representative['approach'] == approach)].copy()
+        # Filter to last year and this approach
+        last_year = int(df_representative['year'].max())
+        df_2022 = df_representative[(df_representative['year'] == last_year) & (df_representative['approach'] == approach)].copy()
 
         box_width = 0.7
 
@@ -952,7 +957,7 @@ def plot_cumulative_effects_ApproachDL(
         ax_bottom.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
 
         if col_idx == 0:
-            ax_bottom.set_ylabel('Cumulative Effect (2022)')
+            ax_bottom.set_ylabel(f'Cumulative Effect ({last_year})')
 
     # ==================== Y-axis scaling ====================
     margin_frac = 0.125  # 12.5% margin (between 10% and 15%)
@@ -1068,8 +1073,9 @@ def select_representative_countries_from_file(
     for iso3, group in df.groupby('iso3'):
         h_T_baseline = baselines_dict.get(iso3)
         processed = process_group(group, 'Approach QJ', loess_window, h_T_baseline=h_T_baseline)
-        # Get 2022 value
-        row_2022 = processed[processed['year'] == 2022]
+        # Get last year value
+        last_year = int(processed['year'].max())
+        row_2022 = processed[processed['year'] == last_year]
         if len(row_2022) > 0:
             results.append({
                 'iso3': iso3,
@@ -1080,7 +1086,7 @@ def select_representative_countries_from_file(
 
     # Diagnostic: print distribution statistics
     values = df_results['h_T_delta_cum'].values
-    print(f"      Cumulative effect distribution (2022):")
+    print(f"      Cumulative effect distribution ({last_year}):")
     print(f"        Min: {np.min(values):.4f} ({inv_log_transform(np.min(values)):.1f}%)")
     print(f"        P5:  {np.percentile(values, 5):.4f} ({inv_log_transform(np.percentile(values, 5)):.1f}%)")
     print(f"        P25: {np.percentile(values, 25):.4f} ({inv_log_transform(np.percentile(values, 25)):.1f}%)")
