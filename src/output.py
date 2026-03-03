@@ -122,12 +122,8 @@ def is_piecewise_result(result) -> bool:
     """
     # Check approach name first (works for both FitResult and BootstrapResult)
     approach = getattr(result, 'approach', '')
-    if 'piecewise' in approach.lower() or approach in ('Approach PL', 'Approach PJ', 'Approach PP'):
+    if 'piecewise' in approach.lower() or approach.startswith(('Approach PL', 'Approach PJ', 'Approach PP')):
         return True
-    # Also check for Approach PL/Approach PJ/Approach PP in approach name string (e.g., "2L: Piecewise LOESS", "2J: Piecewise Conjoined", "2P: Piecewise Linear Detrend")
-    if approach.startswith('3:') or approach.startswith('5:') or approach.startswith('7:'):
-        return True
-    # Fallback to h1==0 check for backward compatibility
     return hasattr(result, 'T_opt') and hasattr(result, 'h4') and getattr(result, 'h1', None) == 0.0
 
 
@@ -142,7 +138,7 @@ def is_persistence_result(result) -> bool:
     Persistence results have h4 as the decay rate parameter.
     """
     approach = getattr(result, 'approach', '')
-    if 'persistence' in approach.lower() or approach in ('Approach DL', 'Approach DJ', 'Approach DP'):
+    if 'decay' in approach.lower() or approach.startswith(('Approach DL', 'Approach DJ', 'Approach DP')):
         return True
     return False
 
