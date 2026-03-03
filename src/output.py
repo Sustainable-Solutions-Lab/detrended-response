@@ -8,10 +8,9 @@ from datetime import datetime
 from typing import Dict
 from .data_loader import AnalysisData
 from .detrending import CountryTrends, CountryTrendsLoess, compute_year_means, compute_country_trends_loess
-from .fitting import (
-    FitResult,
+from .fitting import FitResult
+from .persistence import (
     compute_persistence_accumulators,
-    compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
 )
 from .bootstrap import _get_T_loess_at_base_year
@@ -305,9 +304,6 @@ def save_summary_table(
             'Total_R_squared': result.total_r_squared,
             'Adj_R_squared': result.adj_r_squared,
             'RMSE': result.rmse,
-            'RMS_Imbalance': result.rms_imbalance,
-            'RMS_h_T': result.rms_h,
-            'Imbalance_Ratio': result.imbalance_ratio,
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
@@ -450,12 +446,6 @@ def save_summary_table(
             f.write(f"  Total R² = {result.total_r_squared:.4f}\n")
             f.write(f"  Adjusted R² = {result.adj_r_squared:.4f}\n")
             f.write(f"  RMSE = {result.rmse:.6f}\n")
-            if result.rms_imbalance is not None:
-                f.write(f"  RMS Imbalance = {result.rms_imbalance:.6f}\n")
-            if result.rms_h is not None:
-                f.write(f"  RMS h(T) = {result.rms_h:.6f}\n")
-            if result.imbalance_ratio is not None:
-                f.write(f"  Imbalance Ratio = {result.imbalance_ratio:.4f}\n")
             f.write(f"  Observations: {result.n_obs}\n")
             f.write(f"  Parameters: {result.n_params}\n")
             # Key variance ratios

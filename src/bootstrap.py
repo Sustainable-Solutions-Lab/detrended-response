@@ -51,11 +51,13 @@ from .detrending import (
 from .fitting import (
     fit_all_approaches,
     FitResult,
+    fit_ols_weighted,
+)
+from .persistence import (
     compute_persistence_accumulators,
     compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
     compute_T_linear_at_first_year,
-    fit_ols_weighted,
 )
 
 

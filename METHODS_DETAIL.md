@@ -1,338 +1,560 @@
-# Methods Detail: Approach 0 vs 5c Parameter Comparison
+# Supplementary Methods: Explicit Detrending in Temperature–Growth Regressions
 
-This document provides a detailed mathematical derivation of the analysis performed by `scripts/compare_method0_5c.py`, which demonstrates the equivalence between Approach 0 (conjoined OLS) and Approach 5c (precomputed k) under specific identification constraints.
+This document describes the statistical methods implemented in this repository at a level suitable for a **Supplementary Methods** section in an academic paper.
 
-## Overview
-
-The script compares four sets of parameters between Approach 0 and Approach 5c:
-- **k(t)**: Year fixed effects
-- **j₀,ᵢ**: Country intercepts
-- **j₁,ᵢ**: Country linear trend coefficients
-- **j₂,ᵢ**: Country quadratic trend coefficients
-
-The key insight is that both approaches estimate the same underlying model, but with different computational strategies. When properly re-referenced, the parameters should be nearly identical.
-
-## Model Specification
-
-### Approach 0: Conjoined OLS
-
-Approach 0 fits the full model jointly:
-
-```
-Δyᵢ(t) = h₁·Tᵢ(t) + h₂·Tᵢ(t)² + jᵢ(t) + k(t) + εᵢ(t)
-```
-
-where:
-- `Δyᵢ(t)` = GDP growth rate for country i at time t
-- `h₁, h₂` = climate response coefficients (shared across countries)
-- `jᵢ(t) = j₀,ᵢ + j₁,ᵢ·t + j₂,ᵢ·t²` = country-specific quadratic trend
-- `k(t)` = year fixed effects (shared across countries)
-- `εᵢ(t)` = residual
-
-**Identification constraint**: Country 0 has j₀,₀ = j₁,₀ = j₂,₀ = 0.
-
-### Approach 5c: Precomputed k
-
-Approach 5c first computes year means k(t), then fits country trends to the residuals:
-
-1. Compute `k_mean(t) = mean_i[Δyᵢ(t)]`
-2. Fit country trends `gᵢ(t) = g₀,ᵢ + g₁,ᵢ·t + g₂,ᵢ·t²` to `Δyᵢ(t) - k_mean(t)`
-3. Fit climate response `h₁, h₂` to the detrended residuals
-
-## Step-by-Step Analysis
-
-### Step 1: Load Data and Compute Trends
-
-```python
-data = load_data_from_csv(args.data_file)
-trends = compute_country_trends(data)
-year_means = compute_year_means(data)
-trends_with_k = compute_country_trends_with_k(data, year_means)
-```
-
-- `trends`: Contains T₀,ᵢ (mean temperature) and T₁,ᵢ (temperature trend) for each country
-- `year_means`: k_mean(t) = mean GDP growth across countries for each year
-- `trends_with_k`: Contains g₀,ᵢ, g₁,ᵢ, g₂,ᵢ (GDP growth trends fitted to Δy - k_mean)
-
-### Step 2: Fit Both Approaches
-
-```python
-result0 = fit_method0_no_detrending(data)
-result5c = fit_method1_precomputed_k_combined(data, trends_with_k, year_means)
-```
-
-Both approaches yield h₁ and h₂ estimates. Approach 0 also directly provides k(t) and implicitly defines jᵢ(t) through its residuals.
-
-### Step 3: Extract Approach 0 j Coefficients
-
-For each country, compute the residual after removing climate response and year effects:
-
-```
-rᵢ(t) = Δyᵢ(t) - h₁·Tᵢ(t) - h₂·Tᵢ(t)² - k(t)
-```
-
-Then fit a quadratic trend to get j₀,ᵢ, j₁,ᵢ, j₂,ᵢ:
-
-```python
-for c in range(data.n_countries):
-    r_c = dy_c - h1 * T_c - h2 * T_c**2 - k_c
-    j0[c], j1[c], j2[c] = fit_quadratic_trend(t_c, r_c)
-```
-
-### Step 4: Predict j Coefficients from Approach 5c Trends
-
-The key mathematical relationship derives j coefficients from the pre-computed GDP trends (g) and temperature trends (T₀, T₁):
-
-**Raw (un-referenced) j coefficients:**
-
-```
-j₀,ᵢ = g₀,ᵢ - (h₁·T₀,ᵢ + h₂·T₀,ᵢ²)
-j₁,ᵢ = g₁,ᵢ - (h₁·T₁,ᵢ + 2·h₂·T₀,ᵢ·T₁,ᵢ)
-j₂,ᵢ = g₂,ᵢ - h₂·T₁,ᵢ²
-```
-
-**Derivation:**
-
-The GDP growth trend for country i can be written as:
-```
-gᵢ(t) = g₀,ᵢ + g₁,ᵢ·t + g₂,ᵢ·t²
-```
-
-The temperature for country i evolves approximately linearly:
-```
-Tᵢ(t) ≈ T₀,ᵢ + T₁,ᵢ·t
-```
-
-The climate response at this temperature is:
-```
-h(Tᵢ(t)) = h₁·Tᵢ(t) + h₂·Tᵢ(t)²
-         = h₁·(T₀,ᵢ + T₁,ᵢ·t) + h₂·(T₀,ᵢ + T₁,ᵢ·t)²
-         = h₁·T₀,ᵢ + h₁·T₁,ᵢ·t + h₂·T₀,ᵢ² + 2·h₂·T₀,ᵢ·T₁,ᵢ·t + h₂·T₁,ᵢ²·t²
-```
-
-Collecting terms by power of t:
-```
-h(Tᵢ(t)) = [h₁·T₀,ᵢ + h₂·T₀,ᵢ²] + [h₁·T₁,ᵢ + 2·h₂·T₀,ᵢ·T₁,ᵢ]·t + [h₂·T₁,ᵢ²]·t²
-```
-
-Since gᵢ(t) = jᵢ(t) + h(Tᵢ(t)), we get:
-```
-jᵢ(t) = gᵢ(t) - h(Tᵢ(t))
-```
-
-Matching coefficients gives the formulas above.
-
-### Step 5: Re-reference to Match Approach 0's Identification
-
-Approach 0 uses the constraint that country 0 has zero j coefficients. We apply the same constraint to the predicted j values:
-
-```python
-j0_ref = j0_raw[0]
-j1_ref = j1_raw[0]
-j2_ref = j2_raw[0]
-
-j0_pred[c] = j0_raw[c] - j0_ref
-j1_pred[c] = j1_raw[c] - j1_ref
-j2_pred[c] = j2_raw[c] - j2_ref
-```
-
-The subtracted quadratic `j₀,ref + j₁,ref·t + j₂,ref·t²` must be absorbed somewhere. It gets absorbed into k(t).
-
-### Step 6: Adjust k to Absorb the Reference Quadratic
-
-Approach 5c's adjusted k becomes:
-
-```
-k'(t) = k_mean(t) + j₀,ref + j₁,ref·t + j₂,ref·t²
-```
-
-```python
-k5c_values = [
-    year_means[yr] + j0_ref + j1_ref * t + j2_ref * t**2
-    for yr, t in zip(unique_years, t_years)
-]
-```
-
-## Expected Results
-
-If both approaches estimate the same underlying model correctly, the scatter plots should show:
-
-1. **k(t)**: Points fall on the 1:1 line (R² ≈ 1.0)
-2. **j₀,ᵢ**: Points fall on the 1:1 line (R² ≈ 1.0)
-3. **j₁,ᵢ**: Points fall on the 1:1 line (R² ≈ 1.0)
-4. **j₂,ᵢ**: Points fall on the 1:1 line (R² ≈ 1.0)
-
-Small deviations arise from:
-- Numerical precision
-- The linear approximation T(t) ≈ T₀ + T₁·t (actual temperature may have higher-order terms)
-- Different estimation procedures (joint vs sequential)
-
-## Output Files
-
-The script generates:
-
-| File | Description |
-|------|-------------|
-| `method0_vs_5c_scatter.pdf` | 2×2 scatter plot with 1:1 reference lines, best-fit regression, R², and correlation |
-| `method0_vs_5c_scatter_data.csv` | Raw data for all scatter panels |
-
-## Mathematical Summary
-
-The key identity connecting the two approaches:
-
-```
-Approach 0:  Δy = h(T) + j(t) + k(t)
-Approach 5c: Δy = h(T) + g(t) + k_mean(t)
-```
-
-where:
-```
-g(t) = j(t) + [h(T(t)) - h(T)]
-     = j(t) + [linearized climate trend absorbed into country trend]
-```
-
-Re-referencing and absorbing the reference country's j into k recovers exact equivalence.
+The code implements a family of closely related estimators (“approaches”) for a country–year panel regression of per‑capita GDP growth on annual mean temperature. The central theme is **making the detrending implicit in country‑specific time trends explicit**, and testing how sensitive estimated temperature response functions are to the detrending choice.
 
 ---
 
-# Persistence Decay Model: Bootstrap Methodology
+## 1. Data and variables
 
-This section documents how the persistence decay (Approach D) climate response is bootstrapped when using year-level resampling (`sample_years=True`).
+### 1.1 Panel structure and notation
 
-## The Persistence Decay Model
+- Countries are indexed by **i = 1,…,N**.
+- Years are indexed by **t** (calendar year).
+- The data form an unbalanced panel (countries may be missing interior years), but the analysis typically restricts to countries that appear in both the first and last year of the sample window to stabilize the country set.
 
-The decay model generalizes the standard quadratic climate response `h(T) = h₁T + h₂T²` by allowing past temperature effects to persist with exponential decay:
 
-```
-h_conv(T(t)) = h(T(t)) - h₄ · Σ_{k=1}^{n} (1-h₄)^{k-1} · h(T(t-k))
-```
+In the bundled default input file (`data/input/Maddison_CRU_dataset.csv`), the sample spans **1961–2022** and includes **157 countries** (9404 country–year observations), though the code supports alternative year windows and datasets.
 
-where h₄ ∈ [0, 1] is the persistence decay parameter:
-- h₄ = 0: Full persistence (all past effects accumulate indefinitely)
-- h₄ = 1: No persistence (only current year temperature matters)
+### 1.2 Dependent variable: per‑capita GDP growth
 
-### Efficient Accumulator Representation
-
-Rather than computing the infinite sum directly, the model uses recursive accumulators:
+Let `pcGDPᵢ,t` denote per‑capita GDP (level). The dependent variable is the one‑year log difference:
 
 ```
-A_T(t) = T(t) + (1-h₄) · A_T(t-1)
-A_T²(t) = T²(t) + (1-h₄) · A_T²(t-1)
+Δyᵢ,t = log(pcGDPᵢ,t) − log(pcGDPᵢ,t−1).
 ```
 
-The modified regressors become:
-```
-X₁(t) = T(t) - h₄ · A_T(t-1)
-X₂(t) = T²(t) - h₄ · A_T²(t-1)
-```
+This is approximately the annual percentage growth rate in per‑capita GDP.
 
-For the detrended approaches (DL, DP), the regressors subtract the corresponding trend accumulators:
-```
-X₁(t) = [T(t) - h₄·A_T(t-1) - c_T(t)] - [T_trend(t) - h₄·A_T_trend(t-1) - c_T_trend(t)]
-```
+### 1.3 Temperature
 
-where c_T(t) is a pre-first-year correction term accounting for the assumption that temperature was constant before the first observation.
+Let `Tᵢ,t` be annual mean near‑surface temperature in °C for country *i* in year *t*.
 
-### Three Variants
+This repository’s estimation routines use **temperature only** (even if the input dataset includes additional climate variables).
 
-| Approach | Trend Method | Year Effects | h₄ Optimization |
-|----------|-------------|--------------|-----------------|
-| DJ | Joint OLS (estimated in design matrix) | Joint OLS | 1D search over h₄, inner OLS for all other params |
-| DL | LOESS (pre-computed) | Pre-computed year means | 1D search over h₄, inner 2-column OLS for h₁, h₂ |
-| DP | Polynomial (pre-computed) | Pre-computed year means | 1D search over h₄, inner 2-column OLS for h₁, h₂ |
+### 1.4 Centered time index
 
-## Bootstrap with Year Sampling
-
-The cluster bootstrap resamples both countries and years with replacement. Rather than creating duplicate data, it uses a weighting scheme on the original data:
+For numerical stability in polynomial trend estimation, time is centered:
 
 ```
-weight(i) = country_count(c_i) × year_count(yr_i)
+τᵢ,t = t − t̄,
 ```
 
-where `country_count(c)` = number of times country c was drawn, and `year_count(yr)` = number of times year yr was drawn. Observations from unsampled years (year_count = 0) get weight 0.
+where `t̄` is the midpoint of the sample’s first and last year (computed from the loaded dataset). The code stores `τ` as `data.time`.
 
-### Why Accumulators Must Use ALL Years
+---
 
-The persistence accumulators iterate through **all** years chronologically for each country, including years with zero bootstrap weight. This is essential because:
+## 2. Baseline regression structure
 
-1. **Physical continuity**: The accumulator A_T(t) represents the exponentially weighted temperature history. Skipping a year would break the decay chain: year t+1's accumulator depends on year t's value regardless of whether year t was sampled.
+Across approaches, the starting point is an additive decomposition of growth into:
 
-2. **Regressor correctness**: The modified regressors X₁(t) and X₂(t) at a sampled year depend on A_T(t-1), which may have been accumulated through unsampled years. Omitting those years would produce incorrect regressor values at sampled years.
+1. a **climate response** component,
+2. a **country‑specific smooth component** (trend), and
+3. a **global year effect** component.
 
-3. **Separation of concerns**: The accumulators describe the physical temperature history (always the same), while the bootstrap weights describe which observations inform the statistical inference.
-
-### SSE Uses Only Sampled Years
-
-The h₄ optimization minimizes a weighted sum of squared errors:
+A generic baseline specification is:
 
 ```
-SSE(h₄) = Σᵢ wᵢ · (yᵢ - ŷᵢ)²
+Δyᵢ,t = climate_responseᵢ,t + jᵢ(t) + k(t) + εᵢ,t.        (M1)
 ```
 
-Observations with weight 0 contribute nothing to the SSE. The inner OLS is also weighted:
+- `jᵢ(t)` is a country‑specific smooth function of time (typically a quadratic polynomial in τ, or a LOESS smoother).
+- `k(t)` is a year effect shared across countries (a year fixed effect).
+- `εᵢ,t` is a residual.
+
+What differs across approaches is **(i)** how the climate response is parameterized, and **(ii)** whether `jᵢ(t)` and `k(t)` are estimated **jointly** with the climate response or **pre‑computed** via explicit detrending.
+
+---
+
+## 3. Climate response parameterizations
+
+### 3.1 Quadratic temperature response
+
+The baseline response function is quadratic in temperature:
 
 ```
-β = argmin Σᵢ wᵢ · (yᵢ - Xᵢ·β)²
+h(T) = h₁·T + h₂·T².                                     (M2)
 ```
 
-This is equivalent to transforming to `√w · y = √w · X · β` and solving standard OLS on the transformed system.
-
-## LOESS Weighting Interaction with Bootstrap Weights
-
-The LOESS trend fitting combines two weighting systems:
-
-1. **Bootstrap observation weights** (from country × year sampling): control which observations are "in" the bootstrap sample
-2. **Tricube proximity weights** (standard LOESS kernel): control local smoothing based on distance from evaluation point
-
-At each evaluation point t₀, the combined weight for observation j is:
+For `h₂ < 0`, this implies an “optimal” temperature:
 
 ```
-w_combined(j) = w_bootstrap(j) × tricube(|t_j - t₀| / bandwidth)
+T_opt = −h₁ / (2 h₂).
 ```
 
-where `tricube(u) = (1 - u³)³` for u < 1, and 0 otherwise.
+(Analytic standard errors for `T_opt` are not computed in the point‑estimate step; uncertainty is obtained via bootstrap.)
 
-**Consequences**:
-- **Unsampled years** (w_bootstrap = 0): contribute zero combined weight, so they do not influence the LOESS fit at any evaluation point
-- **Years sampled multiple times** (w_bootstrap > 1): have proportionally more influence, equivalent to having multiple copies of that observation
-- **LOESS evaluates at all years**: including unsampled ones, by interpolating from nearby sampled years using the kernel-weighted local polynomial. With a ~42-year bandwidth and ~62 years of data, there are always sufficient sampled years within the window for a stable fit
-- **Result**: T_trend is estimated using only bootstrap-sampled data but is defined (finite) at all time points, which is exactly what the accumulators require
+### 3.2 Piecewise quadratic response
 
-This satisfies the design requirement: **trends are fitted on the bootstrap sample but evaluated for all years**, providing a complete T_trend time series for the accumulator chain.
-
-## NaN Handling Strategy
-
-When `compute_year_means_weighted` encounters a year with zero total weight (unsampled year), it returns NaN for that year's mean. This propagates into the dependent variable:
+The piecewise response allows different curvature below vs above a common optimum:
 
 ```
-y(i) = Δy(i) - k(yr) - j_trend(i)
+h(T; T_opt) =
+  h₂_low · (T − T_opt)²          if T ≤ T_opt,
+  h₂_high · (T − T_opt)²         if T > T_opt.           (M3)
 ```
 
-For observations in unsampled years, k(yr) = NaN, so y(i) = NaN.
+By construction, `h(T_opt)=0`. (This is a convenient normalization; the model is identified through differences in growth, not levels.)
 
-### The Problem
+`T_opt` is estimated by outer optimization (Section 5.4).
 
-In IEEE 754 floating point arithmetic, `NaN × 0 = NaN`. When computing the weighted OLS inside the SSE function:
+### 3.3 Persistence / decay (“converging”) response
 
-```python
-y_w = y * sqrt(weights)    # NaN * 0 = NaN for unsampled years
+The persistence specification treats temperature effects as accumulating but decaying over time. Let `h(Tᵢ,t)` be the instantaneous quadratic response (M2). Define the **net annual contribution** as:
+
+```
+h_conv(t) = h(Tᵢ,t) − h₄ · Σ_{k=1}^{∞} (1 − h₄)^{k−1} · h(Tᵢ,t−k),   (M4)
 ```
 
-This NaN propagates through `lstsq`, producing NaN coefficients and NaN SSE values. The h₄ optimizer cannot evaluate the objective function and converges to a fixed point determined by the algorithm's internal logic rather than the data.
+where `h₄ ∈ [0,1]` controls the decay rate:
+- `h₄ = 0` implies no persistence (reduces to the instantaneous quadratic response).
+- larger `h₄` implies faster decay of past effects (stronger “convergence”).
 
-### The Solution
+The code implements (M4) efficiently via recursive accumulators (Section 5.5).
 
-Before the weighted OLS computation, replace NaN with 0 for zero-weight observations:
+---
 
-```python
-y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+## 4. Detrending components
+
+Several approaches estimate the climate response using an explicit detrending workflow. This requires defining:
+1. a year effect `k(t)`,
+2. a country‑specific growth trend `jᵢ(t)`, and
+3. a country‑specific temperature trend `T_trendᵢ,t`.
+
+### 4.1 Year effect `k(t)`
+
+For explicit detrending approaches, the year effect is computed as the (unweighted) cross‑country mean of growth in each year:
+
+
+For **joint (conjoined) approaches** (QJ, PJ, DJ, NJ), `k(t)` is instead estimated as a set of **year dummy coefficients** in the joint regression. Because the model does not include a global intercept and imposes reference‑country constraints on `jᵢ(t)`, all years can be represented with dummies under that normalization.
+
+```
+k(t) = mean_i [ Δyᵢ,t ].                                 (M5)
 ```
 
-This is mathematically safe because zero-weight observations contribute nothing to the weighted OLS objective. The replacement value (0) is irrelevant — any finite value would give the same result since it is multiplied by weight 0.
+In the time‑dimension bootstrap (Section 6.2), a **weighted** version is used:
 
-This pattern is used consistently across all weighted fitting functions:
-- `fit_ols_weighted` (src/fitting.py)
-- `fit_linear_trend_weighted` (src/detrending.py)
-- `fit_quadratic_trend_weighted` (src/detrending.py)
-- `fit_loess_continuous_weighted` (src/detrending.py)
-- `compute_sse_for_h4` closures in DL and DP fitting functions (src/fitting.py)
+```
+k_w(t) = (Σ_i wᵢ,t Δyᵢ,t) / (Σ_i wᵢ,t),
+```
+
+with `k_w(t) = NaN` if the total weight in year *t* is zero.
+
+### 4.2 Polynomial (parametric) trends
+
+For the *polynomial detrending* approaches:
+
+- **Temperature trend** (per country):
+  fit a linear regression
+  ```
+  Tᵢ,t ≈ T₀,ᵢ + T₁,ᵢ · τᵢ,t,
+  ```
+  then define `T_trendᵢ,t = T₀,ᵢ + T₁,ᵢ τᵢ,t`.
+
+- **Growth trend** (per country):
+  compute residual growth after removing `k(t)`:
+  ```
+  gᵢ,t = Δyᵢ,t − k(t),
+  ```
+  then fit a quadratic regression
+  ```
+  gᵢ,t ≈ y₀,ᵢ + y₁,ᵢ · τᵢ,t + y₂,ᵢ · τᵢ,t²,
+  ```
+  and define `jᵢ(t) = y₀,ᵢ + y₁,ᵢ τ + y₂,ᵢ τ²`.
+
+Weighted least squares analogues are used under year resampling.
+
+### 4.3 LOESS (nonparametric) trends
+
+For the *LOESS detrending* approaches, both the temperature trend and the growth trend are estimated with **local regression smoothing**.
+
+For each country *i* and each target time point τ₀, LOESS solves a weighted local polynomial regression using tricube weights:
+
+- Distance: `d = |τ − τ₀|`
+- Normalized distance: `u = d / bandwidth`
+- Tricube kernel:
+  ```
+  w(u) = (1 − u³)³    for u < 1, else 0.
+  ```
+
+A local polynomial (degree 1 by default) is fit using weights `w(u)`, and the fitted intercept at τ₀ is the smoothed value.
+
+The bandwidth is specified in **years** via `--loess-window`. This choice controls the smoothness of `T_trendᵢ,t` and `jᵢ(t)`.
+
+In the code:
+- `T_trendᵢ,t` is `T_loessᵢ,t`,
+- `jᵢ(t)` is `y_loessᵢ,t` applied to the series `Δyᵢ,t − k(t)`.
+
+---
+
+## 5. Estimation approaches
+
+The code reports results using short approach names. For each, we describe the estimating equations and how parameters are obtained.
+
+
+### 5.0 Approach summary
+
+| Response family | Joint estimation | Explicit polynomial detrending | Explicit LOESS detrending |
+|---|---:|---:|---:|
+| Quadratic `h(T)=h₁T+h₂T²` | QJ | QP | QL |
+| Piecewise quadratic | PJ | PP | PL |
+| Persistence / decay | DJ | DP | DL |
+| Null (no climate response) | NJ | NP | NL |
+
+### 5.1 Quadratic, joint OLS: **Approach QJ**
+
+**Model.** A joint fixed‑effects OLS regression:
+
+```
+Δyᵢ,t = h₁ Tᵢ,t + h₂ Tᵢ,t²
+        + (j₀,ᵢ + j₁,ᵢ τᵢ,t + j₂,ᵢ τᵢ,t²)
+        + k(t) + εᵢ,t.                                   (M6)
+```
+
+**Identification.** To avoid perfect multicollinearity, one country is treated as a reference country and its trend coefficients are set to zero:
+
+```
+j₀,ref = j₁,ref = j₂,ref = 0.
+```
+
+Year effects are represented by year dummy variables. The full parameter vector is estimated by OLS (or WLS in the year‑sampling bootstrap).
+
+**Interpretation.** This is the “standard” conjoined estimation that simultaneously allocates variation among temperature, country trends, and year effects.
+
+### 5.2 Quadratic, explicit polynomial detrending: **Approach QP**
+
+This approach estimates `k(t)`, `jᵢ(t)`, and `T_trendᵢ,t` first, then estimates the climate response using detrended quantities.
+
+**Step 1: compute year means** `k(t)` via (M5).
+
+**Step 2: compute trends**
+- compute `jᵢ(t)` as the quadratic trend in `(Δyᵢ,t − k(t))`,
+- compute `T_trendᵢ,t` as the linear trend in temperature.
+
+**Step 3: detrended regression.** Define the residual growth:
+
+```
+yᵢ,t = Δyᵢ,t − k(t) − jᵢ(t).                              (M7)
+```
+
+Define detrended temperature regressors:
+
+```
+X₁ᵢ,t = Tᵢ,t − T_trendᵢ,t
+X₂ᵢ,t = Tᵢ,t² − T_trendᵢ,t².                              (M8)
+```
+
+Estimate by OLS (or WLS):
+
+```
+yᵢ,t = h₁ X₁ᵢ,t + h₂ X₂ᵢ,t + εᵢ,t.                         (M9)
+```
+
+Note that the right‑hand side equals:
+
+```
+h₁ (T − T_trend) + h₂ (T² − T_trend²) = h(T) − h(T_trend),
+```
+
+so this formulation estimates the climate response as a **difference between actual temperature and the smooth temperature trajectory**.
+
+### 5.3 Quadratic, explicit LOESS detrending: **Approach QL**
+
+Approach QL is identical in structure to QP, except that:
+
+- `T_trendᵢ,t` is obtained via LOESS smoothing,
+- `jᵢ(t)` is obtained via LOESS smoothing of `(Δyᵢ,t − k(t))`.
+
+The regression is the same as (M9), with LOESS‑based trends.
+
+### 5.4 Piecewise response: **Approaches PJ / PP / PL**
+
+All piecewise approaches use response (M3), but differ in whether detrending is joint, polynomial, or LOESS.
+
+#### Approach PJ (piecewise, joint)
+
+Estimate:
+
+```
+Δyᵢ,t = h(Tᵢ,t; T_opt) + (country quadratic trend) + k(t) + εᵢ,t.     (M10)
+```
+
+`T_opt` is estimated by outer 1‑D optimization. For any candidate `T_opt`, the model is linear in `(h₂_low, h₂_high, j coefficients, year effects)`, so these are estimated by OLS/WLS, SSE is computed, and the optimizer updates `T_opt`.
+
+#### Approach PP (piecewise, polynomial detrending)
+
+Compute `k(t)`, `jᵢ(t)`, and `T_trendᵢ,t` as in QP. Define:
+
+```
+yᵢ,t = Δyᵢ,t − k(t) − jᵢ(t).                                         (M11)
+```
+
+Define the piecewise quadratic basis functions:
+
+- For any temperature series `Z`:
+  ```
+  low(Z)  = (Z − T_opt)²  if Z ≤ T_opt, else 0
+  high(Z) = (Z − T_opt)²  if Z > T_opt, else 0.
+  ```
+
+Then define detrended regressors:
+
+```
+X_low  = low(T)  − low(T_trend)
+X_high = high(T) − high(T_trend).                                    (M12)
+```
+
+Estimate:
+
+```
+y = h₂_low · X_low + h₂_high · X_high + ε.                            (M13)
+```
+
+Again, the regression is linear in coefficients conditional on `T_opt`, enabling outer optimization over `T_opt`.
+
+#### Approach PL (piecewise, LOESS detrending)
+
+Same as PP, except the trend `T_trend` and `jᵢ(t)` are LOESS‑based.
+
+**Standard errors for `T_opt`.** For piecewise approaches, the code computes an approximate standard error for `T_opt` from numerical curvature of the SSE profile at the optimum (finite‑difference second derivative), scaled by the residual variance.
+
+### 5.5 Persistence/decay response: **Approaches DJ / DP / DL**
+
+Persistence approaches use the distributed‑lag specification (M4) but implement it as a linear regression in modified regressors.
+
+#### Accumulator representation
+
+Define recursive accumulators for each country:
+
+```
+A_T(t)  = T(t)  + (1 − h₄) A_T(t−1)
+A_T2(t) = T(t)² + (1 − h₄) A_T2(t−1).                                (M14)
+```
+
+Let `A_T_lag(t) = A_T(t−1)` (and similarly for `A_T2_lag`). Then the weighted sum in (M4) can be expressed using `A_T_lag` and `A_T2_lag`.
+
+#### Pre‑history correction
+
+Because each country’s time series begins at its first observed year, a pre‑sample assumption is required. The code applies a “constant pre‑history” correction term:
+
+```
+C_T(t)  = (1 − h₄)^{Δt} · T(first_year)
+C_T2(t) = (1 − h₄)^{Δt} · T(first_year)²,                            (M15)
+```
+
+where `Δt` is years since the first observed year for that country.
+
+- In **DJ/DP**, the correction uses a smoothed baseline temperature at the first year derived from a country‑specific linear regression in temperature.
+- In **DL**, the correction uses the first observed temperature (typically the sample’s baseline year).
+
+#### Approach DJ (persistence, joint)
+
+Define modified regressors:
+
+```
+X₁ᵢ,t = Tᵢ,t   − h₄ A_T_lagᵢ,t  − C_Tᵢ,t
+X₂ᵢ,t = Tᵢ,t² − h₄ A_T2_lagᵢ,t − C_T2ᵢ,t.                             (M16)
+```
+
+Estimate jointly:
+
+```
+Δyᵢ,t = h₁ X₁ᵢ,t + h₂ X₂ᵢ,t + (country quadratic trend) + k(t) + εᵢ,t.  (M17)
+```
+
+`h₄` is estimated by outer 1‑D optimization (bounded scalar minimization of SSE). For each candidate `h₄`, the model is linear in all other parameters.
+
+#### Approach DP (persistence, polynomial detrending)
+
+Compute `k(t)`, `jᵢ(t)`, and a linear `T_trendᵢ,t` as in QP. Define residual growth:
+
+```
+yᵢ,t = Δyᵢ,t − k(t) − jᵢ(t).                                           (M18)
+```
+
+Compute accumulator and correction terms for both observed temperature `T` and trend temperature `T_trend`, and define detrended regressors:
+
+```
+X₁ = (T − h₄ A_T_lag − C_T) − (T_trend − h₄ A_Ttrend_lag − C_Ttrend)
+X₂ = (T² − h₄ A_T2_lag − C_T2) − (T_trend² − h₄ A_T2trend_lag − C_T2trend).  (M19)
+```
+
+Estimate:
+
+```
+y = h₁ X₁ + h₂ X₂ + ε.                                                 (M20)
+```
+
+As with DJ, `h₄` is estimated by outer 1‑D optimization with inner OLS/WLS for `(h₁,h₂)`.
+
+#### Approach DL (persistence, LOESS detrending)
+
+Same as DP, except `T_trend` is LOESS‑based and `jᵢ(t)` is LOESS‑based.
+
+**Standard errors for `h₄`.** For persistence approaches, the code computes an approximate standard error for `h₄` from numerical curvature of the SSE profile at the optimum (finite‑difference second derivative), scaled by residual variance.
+
+### 5.6 Null models: **Approaches NJ / NP / NL**
+
+Null approaches fit the same detrending structure but impose **no climate response**:
+
+- **NJ:** joint model with country trends and year effects only.
+- **NP:** polynomial detrending of growth (`k(t)` and quadratic `jᵢ(t)`), no temperature regression.
+- **NL:** LOESS detrending of growth, no temperature regression.
+
+These provide baseline fit diagnostics and help assess how much explanatory power is coming from non‑climate components.
+
+---
+
+## 6. Fit statistics and diagnostics
+
+For each approach, the code reports:
+
+
+### 6.0 Analytic standard errors
+
+For linear parameters estimated by ordinary least squares (OLS), the code reports classical homoskedastic standard errors based on:
+
+```
+Var(β̂) = σ̂² · (X'X)^{-1},
+σ̂² = SSE / (n − p).
+```
+
+For weighted least squares (WLS) used in the time‑dimension bootstrap, the analogue is:
+
+```
+Var(β̂) = σ̂² · (X'WX)^{+},
+```
+
+where `W` is the diagonal matrix of observation weights and `(+ )` denotes a pseudoinverse (used to handle rank deficiency when some years receive zero total weight).
+
+These are **not** heteroskedasticity‑robust or cluster‑robust standard errors. Uncertainty is therefore primarily summarized via the bootstrap distributions described in Section 7.
+
+For outer‑optimized scalar parameters (`T_opt` in piecewise models; `h₄` in persistence models), the code computes an approximate standard error from the numerical curvature of the SSE profile at the optimum (finite‑difference second derivative), scaled by the residual variance.
+
+- **RMSE** (root mean squared error)
+- **R²** (in the regression’s estimation space)
+  - For explicit detrending approaches, this is the R² of the detrended regression (e.g., (M9), (M13), (M20)).
+- **Total R²** on the original `Δy` scale (computed using the full additive reconstruction implied by the approach, so approaches can be compared on a common scale).
+
+### 6.1 Variance decomposition and attribution
+
+To characterize how variation in `Δy` is partitioned among components, the code computes a variance decomposition identity of the form:
+
+```
+Var(Δy) = Σ Var(C_m) + 2 Σ_{m<n} Cov(C_m, C_n),
+```
+
+where the components `C_m` correspond to combinations of:
+- climate terms (sometimes decomposed into “departure”, “trend”, and “cross” components for quadratic models),
+- country trend `j`,
+- year effect `k`, and
+- the residual remainder `ε`.
+
+An additional **variance attribution** summary allocates covariances symmetrically across components to produce additive “contributions” that sum to `Var(Δy)`.
+
+These diagnostics are descriptive; they do not alter parameter estimates.
+
+---
+
+## 7. Uncertainty quantification via bootstrap
+
+### 7.1 Cluster bootstrap by country
+
+The default uncertainty analysis is a **cluster bootstrap** that resamples countries with replacement (preserving within‑country time dependence):
+
+For each bootstrap iteration *b*:
+1. Sample `N` countries with replacement from the original set of `N` countries.
+2. Construct a bootstrap dataset by concatenating the sampled countries’ full time series (re‑indexing countries).
+3. Recompute trend objects (`k(t)`, `jᵢ(t)`, `T_trend`) for the bootstrap sample.
+4. Re‑fit all approaches, store coefficients and key derived quantities.
+
+Point estimates are the fit on the original dataset. Uncertainty is summarized by empirical percentiles of bootstrap draws (default: 5, 25, 50, 75, 95).
+
+### 7.2 Optional time‑dimension bootstrap (`--sample-years`)
+
+When `--sample-years` is enabled, years are also sampled with replacement:
+
+- Sample `N` countries with replacement (as above).
+- Sample `Y` years with replacement, where `Y` is the number of unique years in the dataset.
+
+Rather than physically duplicating observations, the code uses **weighted least squares** with observation weights:
+
+```
+wᵢ,t = (# times country i selected) × (# times year t selected).        (M22)
+```
+
+Trend estimation (`k(t)`, country polynomial fits, LOESS smoothing) and regression fitting are performed with these weights. Years with zero total weight effectively drop out of the fit.
+
+This bootstrap variant is designed to reflect uncertainty associated with both country sampling and common year shocks.
+
+---
+
+## 8. Cumulative climate effects
+
+The pipeline also computes cumulative impacts implied by fitted response functions using bootstrap draws.
+
+### 8.1 From growth contributions to level effects
+
+Because the dependent variable is a log difference, a sequence of annual climate contributions can be accumulated into a log‑level effect.
+
+For each country and approach, define a baseline year `t₀` (the code uses 1961). Define the annual deviation in climate contribution relative to baseline:
+
+```
+Δhᵢ,t = h_termᵢ,t − h_termᵢ,t₀.                                        (M23)
+```
+
+For quadratic approaches, `h_termᵢ,t` is typically `h(Tᵢ,t)` (or the approach‑specific net contribution for persistence models).
+
+The cumulative log effect through year *t* is:
+
+```
+Hᵢ,t = Σ_{s=t₀}^{t} Δhᵢ,s.                                             (M24)
+```
+
+A percent‑level interpretation can be obtained via:
+
+```
+pct_effectᵢ,t = (exp(Hᵢ,t) − 1) · 100.
+```
+
+### 8.2 Use of bootstrap draws
+
+The bootstrap routine optionally stores `h_termᵢ,t` for each observation under each bootstrap draw (for selected approaches). The cumulative analysis applies (M23)–(M24) to each draw, producing distributions of cumulative effects by country.
+
+---
+
+## 9. Influence analysis (which countries move the coefficients?)
+
+To identify countries that systematically shift estimated coefficients, the pipeline uses bootstrap resampling records.
+
+For each bootstrap iteration, the country resampling vector can be converted into a count vector:
+
+```
+cᵦ,j = number of times country j appears in bootstrap iteration b.
+```
+
+For a given approach and coefficient (e.g., `h₁`, `h₂`, `T_opt`, or `h₄`), the code analyzes how coefficient values co‑vary with inclusion counts across bootstrap iterations. Two regression options are supported:
+
+- **Linear:** coefficient value regressed on country counts.
+- **Logistic:** indicator of being above a percentile threshold regressed on country counts.
+
+The result is a ranked list of countries whose resampling frequency is most strongly associated with higher vs lower coefficient values.
+
+---
+
+## Appendix A. Relationship between QJ and QP (identification / re‑referencing)
+
+Approach QJ (joint OLS) and Approach QP (explicit detrending) estimate closely related objects but use different parameterizations and identification constraints.
+
+The script:
+
+- `scripts/compare_Approach1J_Approach1P.py`
+
+compares:
+- year effects `k(t)`,
+- country trend coefficients (`j₀,ᵢ`, `j₁,ᵢ`, `j₂,ᵢ`),
+
+between QJ and quantities reconstructed from QP after appropriate re‑referencing. The key point is that QP computes trends relative to a different normalization than the joint fixed‑effects regression; aligning the normalizations yields near 1:1 correspondence in practice.
+
+(For many analyses, this relationship is primarily a diagnostic that the explicit detrending workflow is algebraically consistent with the joint model up to identification choices.)

@@ -32,6 +32,13 @@ from .detrending import (
     compute_detrended_temperature_loess,
     compute_detrended_temp_squared_loess,
 )
+from .persistence import (
+    compute_persistence_accumulators,
+    compute_persistence_accumulators_at_T,
+    compute_pre_first_year_correction,
+    compute_T_linear_at_first_year,
+)
+
 
 # ==============================================================================
 # Helper Functions
@@ -51,21 +58,6 @@ def compute_T_optimal(h1: float, h2: float) -> float:
         Optimal temperature, or np.nan if h2 == 0
     """
     return -h1 / (2 * h2) if h2 != 0 else np.nan
-
-
-def compute_rms_h(h1: float, h2: float, temp: np.ndarray) -> float:
-    """Compute RMS of climate response h(T) = h1*T + h2*T².
-
-    Args:
-        h1: Linear temperature coefficient
-        h2: Quadratic temperature coefficient
-        temp: Temperature array
-
-    Returns:
-        RMS of h(T) across all observations
-    """
-    h_T = h1 * temp + h2 * temp ** 2
-    return np.sqrt(np.mean(h_T ** 2))
 
 
 def compute_variance_decomposition(components: Dict[str, np.ndarray], dy: np.ndarray, total_r_squared: float = None) -> dict:
@@ -280,212 +272,6 @@ def compute_variance_attribution(
     }
 
 
-def compute_persistence_accumulators(data: AnalysisData, h4: float) -> tuple:
-    """Compute lagged persistence accumulators for observed temperatures.
-
-    For each country, computes:
-    - A_T(t) = T(t) + (1-h4) * A_T(t-1), with A_T(first_year) = T(first_year)
-    - A_T2(t) = T^2(t) + (1-h4) * A_T2(t-1), with A_T2(first_year) = T^2(first_year)
-
-    Returns the LAGGED values A_T(t-1) and A_T2(t-1) for use in regressors.
-    For the first year of each country, returns 0 (no lagged value available).
-
-    Args:
-        data: AnalysisData object
-        h4: Persistence decay parameter [0, 1]
-
-    Returns:
-        Tuple of (A_T_lag, A_T2_lag), each of shape (n_obs,)
-    """
-    decay = 1 - h4
-    A_T_lag = np.zeros(data.n_obs)
-    A_T2_lag = np.zeros(data.n_obs)
-
-    for c in range(data.n_countries):
-        # Get observation indices for this country, sorted by year
-        country_mask = data.country_idx == c
-        country_indices = np.where(country_mask)[0]
-        # Sort by year
-        years_for_country = data.year[country_indices]
-        sorted_order = np.argsort(years_for_country)
-        sorted_indices = country_indices[sorted_order]
-
-        # Compute accumulators
-        A_T = 0.0
-        A_T2 = 0.0
-        for i, idx in enumerate(sorted_indices):
-            T_val = data.temp[idx]
-            T2_val = T_val ** 2
-
-            if i == 0:
-                # First year: no lagged value available
-                A_T_lag[idx] = 0.0
-                A_T2_lag[idx] = 0.0
-                # Initialize accumulator with first year's value
-                A_T = T_val
-                A_T2 = T2_val
-            else:
-                # Store lagged accumulator (from previous iteration)
-                A_T_lag[idx] = A_T
-                A_T2_lag[idx] = A_T2
-                # Update accumulator: A(t) = T(t) + (1-h4) * A(t-1)
-                A_T = T_val + decay * A_T
-                A_T2 = T2_val + decay * A_T2
-
-    return A_T_lag, A_T2_lag
-
-
-def compute_persistence_accumulators_at_T(
-    data: AnalysisData, h4: float, T_values: np.ndarray
-) -> tuple:
-    """Compute lagged persistence accumulators for arbitrary temperature values.
-
-    Same as compute_persistence_accumulators but using provided T_values
-    instead of data.temp. Used for computing accumulators at trend temperatures.
-
-    Args:
-        data: AnalysisData object (for country/year structure)
-        h4: Persistence decay parameter [0, 1]
-        T_values: Temperature values to use, shape (n_obs,)
-
-    Returns:
-        Tuple of (A_T_lag, A_T2_lag), each of shape (n_obs,)
-    """
-    decay = 1 - h4
-    A_T_lag = np.zeros(data.n_obs)
-    A_T2_lag = np.zeros(data.n_obs)
-
-    for c in range(data.n_countries):
-        # Get observation indices for this country, sorted by year
-        country_mask = data.country_idx == c
-        country_indices = np.where(country_mask)[0]
-        # Sort by year
-        years_for_country = data.year[country_indices]
-        sorted_order = np.argsort(years_for_country)
-        sorted_indices = country_indices[sorted_order]
-
-        # Compute accumulators
-        A_T = 0.0
-        A_T2 = 0.0
-        for i, idx in enumerate(sorted_indices):
-            T_val = T_values[idx]
-            T2_val = T_val ** 2
-
-            if i == 0:
-                # First year: no lagged value available
-                A_T_lag[idx] = 0.0
-                A_T2_lag[idx] = 0.0
-                # Initialize accumulator with first year's value
-                A_T = T_val
-                A_T2 = T2_val
-            else:
-                # Store lagged accumulator (from previous iteration)
-                A_T_lag[idx] = A_T
-                A_T2_lag[idx] = A_T2
-                # Update accumulator: A(t) = T(t) + (1-h4) * A(t-1)
-                A_T = T_val + decay * A_T
-                A_T2 = T2_val + decay * A_T2
-
-    return A_T_lag, A_T2_lag
-
-
-def compute_pre_first_year_correction(
-    data: AnalysisData, h4: float, T_values: np.ndarray = None
-) -> tuple:
-    """Compute pre-first-year correction for persistence decay model.
-
-    The persistence model assumes temperature was constant at T(first_year) before
-    the first observation. This creates a correction term:
-
-        correction(t) = (1-h4)^(t - first_year) * T(first_year)
-
-    This accounts for the accumulated effect of the assumed constant pre-history.
-
-    Args:
-        data: AnalysisData object
-        h4: Persistence decay parameter [0, 1]
-        T_values: Optional temperature values (default: data.temp)
-
-    Returns:
-        Tuple of (correction_T, correction_T2), each of shape (n_obs,)
-    """
-    if T_values is None:
-        T_values = data.temp
-
-    decay = 1 - h4
-    correction_T = np.zeros(data.n_obs)
-    correction_T2 = np.zeros(data.n_obs)
-
-    for c in range(data.n_countries):
-        # Get observation indices for this country, sorted by year
-        country_mask = data.country_idx == c
-        country_indices = np.where(country_mask)[0]
-        years_for_country = data.year[country_indices]
-        sorted_order = np.argsort(years_for_country)
-        sorted_indices = country_indices[sorted_order]
-        sorted_years = years_for_country[sorted_order]
-
-        # First year's temperature for this country
-        first_year = sorted_years[0]
-        first_idx = sorted_indices[0]
-        T_first = T_values[first_idx]
-        T2_first = T_first ** 2
-
-        # Compute correction for each year
-        for i, idx in enumerate(sorted_indices):
-            years_since_first = sorted_years[i] - first_year
-            decay_factor = decay ** years_since_first
-            correction_T[idx] = decay_factor * T_first
-            correction_T2[idx] = decay_factor * T2_first
-
-    return correction_T, correction_T2
-
-
-def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
-    """Compute linear temperature trend evaluated at each country's first year.
-
-    For each country, fits a linear OLS regression T = a + b*t to all observations,
-    then evaluates T_trend at the first year. This provides a smoothed baseline
-    temperature for the pre-history assumption in persistence decay models.
-
-    Returns an array where each observation has its country's T_linear(first_year).
-
-    Args:
-        data: AnalysisData object
-
-    Returns:
-        Array of shape (n_obs,) with T_linear(first_year) for each observation's country
-    """
-    T_linear_first = np.zeros(data.n_obs)
-
-    for c in range(data.n_countries):
-        # Get observation indices for this country
-        country_mask = data.country_idx == c
-        country_indices = np.where(country_mask)[0]
-
-        # Get time and temperature for this country
-        t_country = data.time[country_indices]
-        T_country = data.temp[country_indices]
-
-        # Fit linear OLS: T = a + b*t
-        # Using normal equations: [a, b] = (X'X)^-1 X'T
-        n_c = len(t_country)
-        X_lin = np.column_stack([np.ones(n_c), t_country])
-        coeffs, _, _, _ = linalg.lstsq(X_lin, T_country)
-        a, b = coeffs
-
-        # Find first year for this country
-        years_for_country = data.year[country_indices]
-        first_year_idx = np.argmin(years_for_country)
-        t_first = t_country[first_year_idx]
-
-        # Evaluate T_linear at first year
-        T_at_first = a + b * t_first
-
-        # Set all observations for this country to T_linear(first_year)
-        T_linear_first[country_mask] = T_at_first
-
-    return T_linear_first
 
 
 @dataclass
@@ -505,9 +291,6 @@ class FitResult:
     residuals: np.ndarray  # Residuals
     T_opt: float           # Optimal temperature = -h1 / (2*h2)
     total_r_squared: float # Variance explained in original dy
-    rms_imbalance: float = None  # RMS of h(T_trend) + j_trend + k
-    rms_h: float = None          # RMS of h(T) - climate response magnitude
-    imbalance_ratio: float = None  # rms_imbalance / rms_h
 
     # Variance decomposition (replaces old var_frac/cov_frac fields)
     var_decomp: dict = None
@@ -549,9 +332,6 @@ class FitResultApproach8:
     n_params: int          # = 3 (h2, h4, T_opt)
     residuals: np.ndarray
     total_r_squared: float
-    rms_imbalance: float = None
-    rms_h: float = None
-    imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
     # Compatibility field for plotting that expects h1
@@ -595,9 +375,6 @@ class FitResultApproach4:
     residuals: np.ndarray
     T_opt: float           # -h1/(2*h2)
     total_r_squared: float
-    rms_imbalance: float = None
-    rms_h: float = None
-    imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
 
@@ -647,9 +424,6 @@ class FitResultApproach6ab:
     T_dep_opt: float       # -h3/(2*h4) - optimal departure
     total_r_squared: float
     # Diagnostics
-    rms_imbalance: float = None
-    rms_h: float = None
-    imbalance_ratio: float = None
     var_decomp: dict = None
     var_attrib: dict = None
 
@@ -811,44 +585,6 @@ def compute_total_r_squared(residuals: np.ndarray, dy: np.ndarray) -> float:
     return 1 - ss_res / ss_tot
 
 
-def compute_rms_imbalance(
-    h1: float, h2: float,
-    T_trend: np.ndarray,
-    j_trend: np.ndarray,
-    k_values: np.ndarray
-) -> float:
-    """Compute RMS of imbalance: h(T_trend) + j_trend + k.
-
-    If detrending and climate response were perfect, this would be zero:
-        0 = h(T_trend) + j_trend + k
-
-    where:
-        h(T_trend) = h1*T_trend + h2*T_trend²
-        j_trend = country-specific GDP growth trend (after removing year means)
-        k = year mean GDP growth
-
-    Args:
-        h1: Linear temperature coefficient
-        h2: Quadratic temperature coefficient
-        T_trend: Temperature trend values at each observation
-        j_trend: GDP growth trend values at each observation (dy_i - k subtracted)
-        k_values: Year mean values at each observation
-
-    Returns:
-        RMS of the imbalance across all observations
-    """
-    # Climate response applied to temperature trend
-    h_T_trend = h1 * T_trend + h2 * T_trend ** 2
-
-    # Imbalance
-    imbalance = h_T_trend + j_trend + k_values
-
-    # RMS
-    rms = np.sqrt(np.mean(imbalance ** 2))
-
-    return rms
-
-
 def fit_ApproachQP_precomputed_k(
     data: AnalysisData, trends: CountryTrends, year_means: dict,
     weights: np.ndarray = None
@@ -912,7 +648,6 @@ def fit_ApproachQP_precomputed_k(
     # Optimal temperature
     T_opt = compute_T_optimal(h1, h2)
 
-    # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 5c: T_trend = T0 + T1*t (linear), j_trend = y0 + y1*t + y2*t²
     T_trend = np.zeros(data.n_obs)
     j_trend = np.zeros(data.n_obs)
@@ -924,11 +659,8 @@ def fit_ApproachQP_precomputed_k(
         T_trend[i] = trends.T0[c] + trends.T1[c] * t
         j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
         k_values[i] = year_means[yr]
-    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    rms_h = compute_rms_h(h1, h2, data.temp)
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     T_star_vals = data.temp - T_trend
@@ -969,9 +701,6 @@ def fit_ApproachQP_precomputed_k(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -1037,16 +766,12 @@ def fit_ApproachQL_loess(
     # Optimal temperature
     T_opt = compute_T_optimal(h1, h2)
 
-    # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 6: T_trend = T_loess, j_trend = y_loess (LOESS smoothed)
     T_trend = trends_loess.T_loess
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
-    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    rms_h = compute_rms_h(h1, h2, data.temp)
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     T_star_vals = data.temp - T_trend
@@ -1087,9 +812,6 @@ def fit_ApproachQL_loess(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -1356,21 +1078,15 @@ def fit_ApproachPL_piecewise(
     # Total R² (variance explained in original dy)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
-    # Compute RMS imbalance: h(T_trend) + j_trend + k
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
     # Climate response values using h(T) - h(T_trend) formulation
     h_values = h2_low * X1 + h2_high * X2
 
-    # For imbalance, we use h(T_trend) term
     h_of_T_trend = h2_low * low_trend + h2_high * high_trend
-    imbalance = h_of_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h(T) - h(T_trend) - climate response to temperature fluctuations
-    rms_h = np.sqrt(np.mean(h_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -1405,9 +1121,6 @@ def fit_ApproachPL_piecewise(
         n_params=n_params,
         residuals=residuals,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -1558,21 +1271,15 @@ def fit_ApproachDL_persistence_decay(
     # Optimal temperature
     T_opt = compute_T_optimal(h1, h2)
 
-    # Compute RMS imbalance
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
     # Climate response values using h_conv formulation
     h_conv_values = h1 * X1 + h2 * X2
 
-    # For imbalance, we use h(T_trend) term (no persistence correction at trend)
     h_of_T_trend = h1 * T_trend + h2 * T_trend ** 2
-    imbalance = h_of_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h_conv
-    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -1613,9 +1320,6 @@ def fit_ApproachDL_persistence_decay(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -1810,16 +1514,11 @@ def fit_ApproachPJ_piecewise_conjoined(
     # Climate response values h(T)
     h_values = h2_low * low_col + h2_high * high_col
 
-    # RMS imbalance: for conjoined approaches, imbalance is not well-defined
     # since there's no separate T_trend. Use T as T_trend (like Approach QJ).
     T_trend = T
     low_trend = np.where(T_trend <= T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
     high_trend = np.where(T_trend > T_opt_opt, (T_trend - T_opt_opt) ** 2, 0.0)
     h_of_T_trend = h2_low * low_trend + h2_high * high_trend
-    imbalance = h_of_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
-    rms_h = np.sqrt(np.mean(h_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -1852,9 +1551,6 @@ def fit_ApproachPJ_piecewise_conjoined(
         n_params=n_params,
         residuals=residuals,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2075,12 +1771,7 @@ def fit_ApproachDJ_persistence_conjoined(
     # Climate response values (modified h_conv)
     h_conv_values = h1 * X1 + h2 * X2
 
-    # For imbalance, use h(T) directly (like Approach QJ)
     h_T_full = h1 * T + h2 * T ** 2
-    imbalance = h_T_full + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
-    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -2115,9 +1806,6 @@ def fit_ApproachDJ_persistence_conjoined(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2224,7 +1912,6 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
     # Optimal temperature
     T_opt = compute_T_optimal(h1, h2)
 
-    # Compute RMS imbalance: h(T_trend) + j_trend + k
     # Approach 0: T_trend = T (raw), j_trend from fitted coefficients
     T_trend = data.temp  # No temperature detrending, use raw T
     j_trend = np.zeros(n_obs)
@@ -2243,11 +1930,8 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
         # else j_trend[i] = 0 (country 0 is reference)
         k_val = k[yr]
         k_values[i] = k_val if not np.isnan(k_val) else 0.0
-    rms_imb = compute_rms_imbalance(h1, h2, T_trend, j_trend, k_values)
 
     # Compute RMS of h(T) - climate response to actual temperature
-    rms_h = compute_rms_h(h1, h2, data.temp)
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition (approach 0: no detrending, 3 components)
     h_T = h1 * data.temp + h2 * data.temp ** 2
@@ -2282,9 +1966,6 @@ def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> 
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2421,9 +2102,6 @@ def fit_ApproachNJ_joint(data: AnalysisData, weights: np.ndarray = None) -> FitR
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=None,
-        rms_h=None,
-        imbalance_ratio=None,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2502,9 +2180,6 @@ def fit_ApproachNP_precomputed_k(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=None,
-        rms_h=None,
-        imbalance_ratio=None,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2579,9 +2254,6 @@ def fit_ApproachNL_precomputed_k_loess(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=None,
-        rms_h=None,
-        imbalance_ratio=None,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2725,7 +2397,6 @@ def fit_ApproachPP_piecewise_linear_detrend(
     # Total R² (variance explained in original dy)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
-    # Compute RMS imbalance: h(T_trend) + j_trend + k
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
     for i in range(data.n_obs):
@@ -2738,14 +2409,9 @@ def fit_ApproachPP_piecewise_linear_detrend(
     # Climate response values using h(T) - h(T_trend) formulation
     h_values = h2_low * X1 + h2_high * X2
 
-    # For imbalance, we use h(T_trend) term
     h_of_T_trend = h2_low * low_trend + h2_high * high_trend
-    imbalance = h_of_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h(T) - h(T_trend) - climate response to temperature fluctuations
-    rms_h = np.sqrt(np.mean(h_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -2780,9 +2446,6 @@ def fit_ApproachPP_piecewise_linear_detrend(
         n_params=n_params,
         residuals=residuals,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
@@ -2945,7 +2608,6 @@ def fit_ApproachDP_persistence_linear_detrend(
     # Optimal temperature
     T_opt = compute_T_optimal(h1, h2)
 
-    # Compute RMS imbalance
     j_trend = np.zeros(data.n_obs)
     k_values = np.zeros(data.n_obs)
     for i in range(data.n_obs):
@@ -2958,14 +2620,9 @@ def fit_ApproachDP_persistence_linear_detrend(
     # Climate response values using h_conv formulation
     h_conv_values = h1 * X1 + h2 * X2
 
-    # For imbalance, we use h(T_trend) term (no persistence correction at trend)
     h_of_T_trend = h1 * T_trend + h2 * T_trend ** 2
-    imbalance = h_of_T_trend + j_trend + k_values
-    rms_imb = np.sqrt(np.mean(imbalance ** 2))
 
     # Compute RMS of h_conv
-    rms_h = np.sqrt(np.mean(h_conv_values ** 2))
-    imb_ratio = rms_imb / rms_h if rms_h > 0 else np.nan
 
     # Compute variance decomposition
     components = {
@@ -3006,9 +2663,6 @@ def fit_ApproachDP_persistence_linear_detrend(
         residuals=residuals,
         T_opt=T_opt,
         total_r_squared=total_r_sq,
-        rms_imbalance=rms_imb,
-        rms_h=rms_h,
-        imbalance_ratio=imb_ratio,
         var_decomp=var_decomp,
         var_attrib=var_attrib,
     )
