@@ -289,38 +289,6 @@ def compute_growth_trend_values(
     return y_trend
 
 
-def compute_growth_trend_values_linear(data: AnalysisData, trends: CountryTrends) -> np.ndarray:
-    """Compute the linear GDP growth trend values.
-
-    This is a convenience wrapper for compute_growth_trend_values with quadratic=False.
-
-    Returns y0_lin + y1_lin*t for each observation.
-    """
-    return compute_growth_trend_values(data, trends, quadratic=False)
-
-
-def compute_detrended_temperature_quadratic(
-    data: AnalysisData, trends: CountryTrends
-) -> np.ndarray:
-    """Compute temperature departure from quadratic trend.
-
-    This is a convenience wrapper for compute_detrended_temperature with quadratic=True.
-
-    Returns T*(t) = T(t) - (T0_quad + T1_quad*t + T2_quad*t²)
-    """
-    return compute_detrended_temperature(data, trends, quadratic=True)
-
-
-def compute_detrended_temp_squared_quadratic(
-    data: AnalysisData, trends: CountryTrends
-) -> np.ndarray:
-    """Compute T² - quadratic_trend² for quadratic temperature detrending.
-
-    This is a convenience wrapper for compute_detrended_temp_squared with quadratic=True.
-    """
-    return compute_detrended_temp_squared(data, trends, quadratic=True)
-
-
 def compute_year_means(data: AnalysisData) -> Dict[int, float]:
     """Compute mean dy_i[t] for each year t (equally weighted across countries).
 
@@ -840,7 +808,7 @@ def fit_loess_continuous_weighted(
         try:
             beta, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
             y_smooth[i] = beta[0]  # Intercept = smoothed value at t[i]
-        except:
+        except np.linalg.LinAlgError:
             y_smooth[i] = y_clean[i]
 
     return y_smooth

@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
 from typing import Dict
-from scipy.special import erf
 from .data_loader import AnalysisData
 from .detrending import CountryTrends, CountryTrendsLoess, compute_year_means, compute_country_trends_loess
 from .fitting import (
@@ -15,6 +14,7 @@ from .fitting import (
     compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
 )
+from .bootstrap import _get_T_loess_at_base_year
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -1998,50 +1998,6 @@ def save_bootstrap_year_samples_csv(
             f.write(f"# Values are year indices (0 to {n_years-1}), mapping to years {unique_years[0]}-{unique_years[-1]}\n")
         df.to_csv(f, index=False)
     print(f"  Saved bootstrap_year_samples.csv ({n_bootstrap} x {n_years})")
-
-
-def _get_T_loess_at_base_year(
-    data: AnalysisData,
-    trends_loess: CountryTrendsLoess,
-    base_year: int = 1961
-) -> np.ndarray:
-    """Get T_loess at base year for each observation's country.
-
-    For Approach DL's pre-history assumption, we want to use T_loess at 1961
-    (not the actual temperature at first observation). This function creates
-    an array where each observation has its country's T_loess at base_year.
-
-    Args:
-        data: AnalysisData with country/year info
-        trends_loess: CountryTrendsLoess with T_loess values
-        base_year: Base year (default: 1961)
-
-    Returns:
-        Array of shape (n_obs,) with T_loess at base_year for each observation's country
-    """
-    T_loess = trends_loess.T_loess
-    year_arr = data.year.astype(int)
-    result = np.zeros(data.n_obs)
-
-    for c in range(data.n_countries):
-        country_mask = data.country_idx == c
-        country_indices = np.where(country_mask)[0]
-        years_for_country = year_arr[country_indices]
-
-        # Find T_loess at base_year for this country
-        base_year_mask = years_for_country == base_year
-        if base_year_mask.any():
-            base_idx = country_indices[np.where(base_year_mask)[0][0]]
-            T_loess_base = T_loess[base_idx]
-        else:
-            # If no observation at base year, use earliest year
-            earliest_idx = country_indices[np.argmin(years_for_country)]
-            T_loess_base = T_loess[earliest_idx]
-
-        # Set all observations for this country to T_loess_base
-        result[country_mask] = T_loess_base
-
-    return result
 
 
 def save_bootstrap_h_values(

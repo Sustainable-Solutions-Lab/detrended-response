@@ -378,7 +378,7 @@ def _fit_all_approaches_weighted(
             for i, ci in enumerate(np.where(valid_cols)[0]):
                 for j, cj in enumerate(np.where(valid_cols)[0]):
                     cov[ci, cj] = cov_valid[i, j]
-        except:
+        except np.linalg.LinAlgError:
             pass
 
         return beta, residuals, sigma_sq, cov
@@ -581,7 +581,7 @@ def _fit_all_approaches_weighted(
                     best_T_opt_PL = T_test
                     best_h2_PL = beta_PL_test[0]
                     best_h4_PL = beta_PL_test[1]
-            except:
+            except Exception:
                 pass
 
         results['Approach PL'] = FitResultApproach8(
@@ -627,7 +627,7 @@ def _fit_all_approaches_weighted(
                     best_h4_DL = h4_test
                     best_h1_DL = beta_DL_test[0]
                     best_h2_DL = beta_DL_test[1]
-            except:
+            except Exception:
                 pass
 
         T_opt_DL = compute_T_optimal(best_h1_DL, best_h2_DL)
@@ -668,7 +668,7 @@ def _fit_all_approaches_weighted(
                 best_T_opt_PJ = T_test
                 best_h2_PJ = beta_PJ_test[0]
                 best_h4_PJ = beta_PJ_test[1]
-        except:
+        except Exception:
             pass
 
     k_PJ = {yr: 0.0 for yr in unique_years}  # Simplified
@@ -709,7 +709,7 @@ def _fit_all_approaches_weighted(
                 best_h4_DJ = h4_test
                 best_h1_DJ = beta_DJ_test[0]
                 best_h2_DJ = beta_DJ_test[1]
-        except:
+        except Exception:
             pass
 
     T_opt_DJ = compute_T_optimal(best_h1_DJ, best_h2_DJ)
@@ -761,7 +761,7 @@ def _fit_all_approaches_weighted(
                     best_T_opt_PP = T_test
                     best_h2_PP = beta_PP_test[0]
                     best_h4_PP = beta_PP_test[1]
-            except:
+            except Exception:
                 pass
 
         results['Approach PP'] = FitResultApproach8(
@@ -801,7 +801,7 @@ def _fit_all_approaches_weighted(
                     best_h4_DP = h4_test
                     best_h1_DP = beta_DP_test[0]
                     best_h2_DP = beta_DP_test[1]
-            except:
+            except Exception:
                 pass
 
         T_opt_DP = compute_T_optimal(best_h1_DP, best_h2_DP)
