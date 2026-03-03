@@ -56,6 +56,12 @@ def main():
         help="Maximum year to include",
     )
     parser.add_argument(
+        "--start-year",
+        type=int,
+        default=None,
+        help="Exclude years before this from analysis (applied after growth computation)",
+    )
+    parser.add_argument(
         "--loess-window",
         type=float,
         default=42.447947771790915,
@@ -122,6 +128,8 @@ def main():
         shared_args += ["--year-max", str(args.year_max)]
     if args.mean_weight_distance is not None:
         shared_args += ["--mean-weight-distance", str(args.mean_weight_distance)]
+    if args.start_year is not None:
+        shared_args += ["--start-year", str(args.start_year)]
 
     # Step 1: Analysis
     print("\n" + "#" * 70)

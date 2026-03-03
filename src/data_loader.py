@@ -159,7 +159,8 @@ def compute_gdp_growth(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def load_data(maddison_path: str, cru_path: str,
-              year_min: int = 1960, year_max: int = 2022) -> AnalysisData:
+              year_min: int = 1960, year_max: int = 2022,
+              start_year: int = None) -> AnalysisData:
     """Load and merge Maddison GDP and CRU temperature data.
 
     Args:
@@ -167,6 +168,8 @@ def load_data(maddison_path: str, cru_path: str,
         cru_path: Path to CRU CSV file
         year_min: Minimum year to include
         year_max: Maximum year to include
+        start_year: If specified, drop all rows with year < start_year after
+            growth computation
 
     Returns:
         AnalysisData object containing all arrays and mappings
@@ -181,6 +184,10 @@ def load_data(maddison_path: str, cru_path: str,
     # Compute GDP growth rate BEFORE filtering by year range
     # This allows us to use year_min-1 data to compute growth for year_min
     df = compute_gdp_growth(df)
+
+    # Filter by start year (after growth computation so earlier years inform growth)
+    if start_year is not None:
+        df = df[df['year'] >= start_year]
 
     # NOW filter by year range (after growth is computed)
     df = df[(df['year'] >= year_min) & (df['year'] <= year_max)].copy()
@@ -226,7 +233,8 @@ def load_data(maddison_path: str, cru_path: str,
 
 
 def load_data_from_csv(csv_path: str,
-                       year_min: int = None, year_max: int = None) -> AnalysisData:
+                       year_min: int = None, year_max: int = None,
+                       start_year: int = None) -> AnalysisData:
     """Load data from CSV file with auto-detection of format.
 
     Supports two formats:
@@ -243,6 +251,9 @@ def load_data_from_csv(csv_path: str,
         csv_path: Path to the CSV file
         year_min: Minimum year to include (default: use all years in data)
         year_max: Maximum year to include (default: use all years in data)
+        start_year: If specified, drop all rows with year < start_year after
+            growth computation. Useful for excluding early years from analysis
+            while still using them for growth calculation.
 
     Returns:
         AnalysisData object containing all arrays and mappings
@@ -260,6 +271,10 @@ def load_data_from_csv(csv_path: str,
         df = df.sort_values(['iso_id', 'year']).copy()
         df['growth_pcGDP'] = np.log(df['pcGDP']).groupby(df['iso_id']).diff()
         df = df.dropna(subset=['growth_pcGDP'])
+
+    # Filter by start year (after growth computation so earlier years inform growth)
+    if start_year is not None:
+        df = df[df['year'] >= start_year]
 
     # Filter by year range if specified
     if year_min is not None:

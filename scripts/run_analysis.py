@@ -76,6 +76,12 @@ def main(argv=None):
         help="Maximum year to include (default: 2022 for Maddison/CRU, all years for CSV)",
     )
     parser.add_argument(
+        "--start-year",
+        type=int,
+        default=None,
+        help="Exclude years before this from analysis (applied after growth computation)",
+    )
+    parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
@@ -124,7 +130,8 @@ def main(argv=None):
         data = load_data_from_csv(
             str(csv_path),
             year_min=args.year_min,
-            year_max=args.year_max
+            year_max=args.year_max,
+            start_year=args.start_year,
         )
     else:
         # Load from Maddison/CRU files
@@ -135,7 +142,8 @@ def main(argv=None):
         print(f"      Year range: {year_min} - {year_max}")
         data = load_data(
             args.maddison, args.cru,
-            year_min=year_min, year_max=year_max
+            year_min=year_min, year_max=year_max,
+            start_year=args.start_year,
         )
     t_load = time.perf_counter() - t_start
 
