@@ -813,6 +813,12 @@ def plot_cumulative_effects_ApproachDL(
     country_keys = get_country_ordering(representatives)
     n_countries = len(country_keys)
 
+    # Collect data ranges across all panels for data-driven y-axis scaling
+    top_data_mins = []
+    top_data_maxs = []
+    bottom_iqr_mins = []
+    bottom_iqr_maxs = []
+
     for col_idx, approach in enumerate(approaches):
         ax_top = axes[0, col_idx]
         ax_bottom = axes[1, col_idx]
@@ -849,6 +855,10 @@ def plot_cumulative_effects_ApproachDL(
         p95 = df_pct['p95']
         min_val = df_pct['min']
         max_val = df_pct['max']
+
+        # Track data range for top row
+        top_data_mins.append(min_val.min())
+        top_data_maxs.append(max_val.max())
 
         # Min/max lines (thin)
         ax_top.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
@@ -895,6 +905,11 @@ def plot_cumulative_effects_ApproachDL(
             point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
             point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
 
+            # Track IQR bounds for bottom row
+            if len(bootstrap_values) > 0:
+                bottom_iqr_mins.append(np.percentile(bootstrap_values, 25))
+                bottom_iqr_maxs.append(np.percentile(bootstrap_values, 75))
+
             # Draw box - color by country
             box_color = COUNTRY_COLORS.get(country_key, 'gray')
             if len(bootstrap_values) > 0:
@@ -940,21 +955,54 @@ def plot_cumulative_effects_ApproachDL(
             ax_bottom.set_ylabel('Cumulative Effect (2022)')
 
     # ==================== Y-axis scaling ====================
-    # Top row: -3% to +6%, ticks every 1%
-    top_tick_pcts = list(range(-3, 7, 1))
+    margin_frac = 0.125  # 12.5% margin (between 10% and 15%)
+
+    # Top row: bounds 12.5% wider than entire data range, ticks every 1%
+    top_global_min = min(top_data_mins)
+    top_global_max = max(top_data_maxs)
+    top_range = top_global_max - top_global_min
+    top_margin = top_range * margin_frac
+    top_ylim_low = top_global_min - top_margin
+    top_ylim_high = top_global_max + top_margin
+
+    top_pct_low = inv_log_transform(top_ylim_low)
+    top_pct_high = inv_log_transform(top_ylim_high)
+    top_tick_start = int(np.floor(top_pct_low))
+    top_tick_end = int(np.ceil(top_pct_high))
+    top_tick_pcts = list(range(top_tick_start, top_tick_end + 1, 1))
     top_tick_positions = [log_transform(p) for p in top_tick_pcts]
     top_tick_labels = [f'{p}%' for p in top_tick_pcts]
     for ax in axes[0, :]:
-        ax.set_ylim(log_transform(-3), log_transform(6))
+        ax.set_ylim(top_ylim_low, top_ylim_high)
         ax.set_yticks(top_tick_positions)
         ax.set_yticklabels(top_tick_labels)
 
-    # Bottom row: -6% to +12%, ticks every 2%
-    bottom_tick_pcts = list(range(-6, 13, 2))
+    # Bottom row: bounds 12.5% wider than the IQR extent (whiskers may be clipped)
+    bottom_global_min = min(bottom_iqr_mins)
+    bottom_global_max = max(bottom_iqr_maxs)
+    bottom_range = bottom_global_max - bottom_global_min
+    bottom_margin = bottom_range * margin_frac
+    bottom_ylim_low = bottom_global_min - bottom_margin
+    bottom_ylim_high = bottom_global_max + bottom_margin
+
+    # Choose tick interval to yield 5-10 labels including 0
+    bottom_pct_low = inv_log_transform(bottom_ylim_low)
+    bottom_pct_high = inv_log_transform(bottom_ylim_high)
+    for interval in [1, 2, 5, 10, 15, 20, 25, 50]:
+        tick_start = int(np.floor(bottom_pct_low / interval)) * interval
+        tick_end = int(np.ceil(bottom_pct_high / interval)) * interval
+        candidate_ticks = list(range(tick_start, tick_end + 1, interval))
+        if 0 not in candidate_ticks:
+            candidate_ticks.append(0)
+            candidate_ticks.sort()
+        if 5 <= len(candidate_ticks) <= 10:
+            bottom_tick_pcts = candidate_ticks
+            break
+
     bottom_tick_positions = [log_transform(p) for p in bottom_tick_pcts]
     bottom_tick_labels = [f'{p}%' for p in bottom_tick_pcts]
     for ax in axes[1, :]:
-        ax.set_ylim(log_transform(-6), log_transform(12))
+        ax.set_ylim(bottom_ylim_low, bottom_ylim_high)
         ax.set_yticks(bottom_tick_positions)
         ax.set_yticklabels(bottom_tick_labels)
 
@@ -964,7 +1012,7 @@ def plot_cumulative_effects_ApproachDL(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_Approach3_2x3.pdf'
+    output_path = output_dir / 'cumulative_effects_Response-fn-D_2x3.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")
