@@ -1649,7 +1649,7 @@ def fit_ApproachDJ_persistence_conjoined(
 
     # Compute T_linear at first year for each country (for pre-history correction)
     # This provides a smoothed baseline instead of using noisy actual T(first_year)
-    T_linear_first = compute_T_linear_at_first_year(data)
+    T_linear_first = compute_T_linear_at_first_year(data, weights)
 
     def compute_sse_for_h4(h4_val):
         """Compute SSE for given h4 by solving full OLS."""
@@ -2504,7 +2504,7 @@ def fit_ApproachDP_persistence_linear_detrend(
         T_trend[i] = trends.T0[c] + trends.T1[c] * t
 
     # Compute T_linear at first year for pre-history correction (same as Approach DJ)
-    T_linear_first = compute_T_linear_at_first_year(data)
+    T_linear_first = compute_T_linear_at_first_year(data, weights)
 
     def compute_sse_for_h4(h4_val):
         """Compute SSE for given h4 by solving inner 2-column OLS for h1, h2."""

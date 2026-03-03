@@ -185,7 +185,7 @@ def compute_pre_first_year_correction(
     return correction_T, correction_T2
 
 
-def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
+def compute_T_linear_at_first_year(data: AnalysisData, weights: np.ndarray = None) -> np.ndarray:
     """Compute linear temperature trend evaluated at each country's first year.
 
     For each country, fits a linear OLS regression T = a + b*t to all observations,
@@ -196,6 +196,7 @@ def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
 
     Args:
         data: AnalysisData object
+        weights: Optional observation weights for weighted least squares
 
     Returns:
         Array of shape (n_obs,) with T_linear(first_year) for each observation's country
@@ -211,11 +212,23 @@ def compute_T_linear_at_first_year(data: AnalysisData) -> np.ndarray:
         t_country = data.time[country_indices]
         T_country = data.temp[country_indices]
 
-        # Fit linear OLS: T = a + b*t
-        # Using normal equations: [a, b] = (X'X)^-1 X'T
         n_c = len(t_country)
         X_lin = np.column_stack([np.ones(n_c), t_country])
-        coeffs, _, _, _ = linalg.lstsq(X_lin, T_country)
+
+        if weights is not None:
+            w_country = weights[country_indices]
+            total_weight = np.sum(w_country)
+            if total_weight < 1e-10:
+                # No effective observations for this country
+                T_linear_first[country_mask] = 0.0
+                continue
+            # Weighted normal equations: (X'WX)^-1 X'Wy
+            XtW = X_lin.T * w_country
+            XtWX = XtW @ X_lin
+            XtWy = XtW @ T_country
+            coeffs, _, _, _ = np.linalg.lstsq(XtWX, XtWy, rcond=None)
+        else:
+            coeffs, _, _, _ = linalg.lstsq(X_lin, T_country)
         a, b = coeffs
 
         # Find first year for this country
