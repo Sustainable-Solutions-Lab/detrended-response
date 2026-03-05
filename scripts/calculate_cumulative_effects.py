@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from src.axes import get_axis_bounds_and_ticks_ln_pct
 from src.detrending import DEFAULT_LOESS_WINDOW_YEARS
 from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annotation
 
@@ -273,13 +274,13 @@ def plot_cumulative_effects_boxplot(
     ax.set_xticks(range(n_clusters))
     ax.set_xticklabels(x_labels)
 
-    # Y-axis: set ticks at nice percentage values, but plot at log-transformed positions
-    # Choose tick values that span the data range nicely
-    tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
-    tick_positions = [log_transform(p) for p in tick_pcts]
-    tick_labels = [f'{p}%' for p in tick_pcts]
-    ax.set_yticks(tick_positions)
-    ax.set_yticklabels(tick_labels)
+    # Y-axis: dynamic bounds from data
+    all_vals = df_2022['h_T_delta_cum'].values
+    bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+        [all_vals.min(), all_vals.max()])
+    ax.set_ylim(bounds)
+    ax.set_yticks(ticks_vals)
+    ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
 
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
@@ -433,12 +434,13 @@ def plot_cumulative_effects_by_approach_grouped(
     ]
     group_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
-    # Y-axis: set ticks at nice percentage values, but plot at log-transformed positions
-    tick_pcts = [-75, -50, -25, 0, 25, 50, 100, 200]
-    tick_positions = [log_transform(p) for p in tick_pcts]
-    tick_labels = [f'{p}%' for p in tick_pcts]
-    ax.set_yticks(tick_positions)
-    ax.set_yticklabels(tick_labels)
+    # Y-axis: dynamic bounds from data
+    all_vals = df_2022['h_T_delta_cum'].values
+    bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+        [all_vals.min(), all_vals.max()])
+    ax.set_ylim(bounds)
+    ax.set_yticks(ticks_vals)
+    ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
 
     # Formatting
     ax.set_ylabel('Cumulative Climate Effect')
@@ -675,6 +677,9 @@ def plot_cumulative_effects_by_approach(
     row_labels = ['Quadratic (Q)', 'Piecewise (P)', 'Decay (D)']
     col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
 
+    all_data_mins = []
+    all_data_maxs = []
+
     for row_idx, row_approaches in enumerate(approach_order):
         for col_idx, approach in enumerate(row_approaches):
             ax = axes[row_idx, col_idx]
@@ -713,6 +718,9 @@ def plot_cumulative_effects_by_approach(
             p95 = df_pct['p95']
             min_val = df_pct['min']
             max_val = df_pct['max']
+
+            all_data_mins.append(min_val.min())
+            all_data_maxs.append(max_val.max())
 
             # Min/max lines (thin)
             ax.plot(df_pct['year'], min_val, color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
@@ -754,19 +762,13 @@ def plot_cumulative_effects_by_approach(
             if row_idx == 0 and col_idx == 0:
                 ax.legend(loc='lower left', fontsize=7)
 
-    # Set y-axis limits to -66.67% to 150% (symmetric in log space)
-    y_min = log_transform(-200/3)  # -66.67%
-    y_max = log_transform(150)
+    # Set y-axis from global data range across all panels
+    bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+        [min(all_data_mins), max(all_data_maxs)], padding=0.05)
     for ax in axes.flat:
-        ax.set_ylim(y_min, y_max)
-
-    # Set y-axis ticks at nice percentage values (in log-transformed positions)
-    tick_pcts = [-50, -25, 0, 25, 50, 100]
-    tick_positions = [log_transform(p) for p in tick_pcts]
-    tick_labels = [f'{p}%' for p in tick_pcts]
-    for ax in axes.flat:
-        ax.set_yticks(tick_positions)
-        ax.set_yticklabels(tick_labels)
+        ax.set_ylim(bounds)
+        ax.set_yticks(ticks_vals)
+        ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
 
     plt.tight_layout()
 
@@ -960,56 +962,21 @@ def plot_cumulative_effects_ApproachDL(
             ax_bottom.set_ylabel(f'Cumulative Effect ({last_year})')
 
     # ==================== Y-axis scaling ====================
-    margin_frac = 0.125  # 12.5% margin (between 10% and 15%)
-
-    # Top row: bounds 12.5% wider than entire data range, ticks every 1%
-    top_global_min = min(top_data_mins)
-    top_global_max = max(top_data_maxs)
-    top_range = top_global_max - top_global_min
-    top_margin = top_range * margin_frac
-    top_ylim_low = top_global_min - top_margin
-    top_ylim_high = top_global_max + top_margin
-
-    top_pct_low = inv_log_transform(top_ylim_low)
-    top_pct_high = inv_log_transform(top_ylim_high)
-    top_tick_start = int(np.floor(top_pct_low))
-    top_tick_end = int(np.ceil(top_pct_high))
-    top_tick_pcts = list(range(top_tick_start, top_tick_end + 1, 1))
-    top_tick_positions = [log_transform(p) for p in top_tick_pcts]
-    top_tick_labels = [f'{p}%' for p in top_tick_pcts]
+    # Top row
+    top_bounds, top_ticks, top_pcts = get_axis_bounds_and_ticks_ln_pct(
+        [min(top_data_mins), max(top_data_maxs)], padding=0.05)
     for ax in axes[0, :]:
-        ax.set_ylim(top_ylim_low, top_ylim_high)
-        ax.set_yticks(top_tick_positions)
-        ax.set_yticklabels(top_tick_labels)
+        ax.set_ylim(top_bounds)
+        ax.set_yticks(top_ticks)
+        ax.set_yticklabels([f'{p:g}%' for p in top_pcts])
 
-    # Bottom row: bounds 12.5% wider than the IQR extent (whiskers may be clipped)
-    bottom_global_min = min(bottom_iqr_mins)
-    bottom_global_max = max(bottom_iqr_maxs)
-    bottom_range = bottom_global_max - bottom_global_min
-    bottom_margin = bottom_range * margin_frac
-    bottom_ylim_low = bottom_global_min - bottom_margin
-    bottom_ylim_high = bottom_global_max + bottom_margin
-
-    # Choose tick interval to yield 5-10 labels including 0
-    bottom_pct_low = inv_log_transform(bottom_ylim_low)
-    bottom_pct_high = inv_log_transform(bottom_ylim_high)
-    for interval in [1, 2, 5, 10, 15, 20, 25, 50]:
-        tick_start = int(np.floor(bottom_pct_low / interval)) * interval
-        tick_end = int(np.ceil(bottom_pct_high / interval)) * interval
-        candidate_ticks = list(range(tick_start, tick_end + 1, interval))
-        if 0 not in candidate_ticks:
-            candidate_ticks.append(0)
-            candidate_ticks.sort()
-        if 5 <= len(candidate_ticks) <= 10:
-            bottom_tick_pcts = candidate_ticks
-            break
-
-    bottom_tick_positions = [log_transform(p) for p in bottom_tick_pcts]
-    bottom_tick_labels = [f'{p}%' for p in bottom_tick_pcts]
+    # Bottom row
+    bottom_bounds, bottom_ticks, bottom_pcts = get_axis_bounds_and_ticks_ln_pct(
+        [min(bottom_iqr_mins), max(bottom_iqr_maxs)], padding=0.05)
     for ax in axes[1, :]:
-        ax.set_ylim(bottom_ylim_low, bottom_ylim_high)
-        ax.set_yticks(bottom_tick_positions)
-        ax.set_yticklabels(bottom_tick_labels)
+        ax.set_ylim(bottom_bounds)
+        ax.set_yticks(bottom_ticks)
+        ax.set_yticklabels([f'{p:g}%' for p in bottom_pcts])
 
     plt.tight_layout()
 

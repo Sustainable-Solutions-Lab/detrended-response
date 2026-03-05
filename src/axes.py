@@ -1,40 +1,72 @@
-# functions to determine axes bounds and tick marks
+# Axis bounds and tick mark helpers for matplotlib plots.
+#
+# Two functions for different use cases:
+#
+#   get_axis_bounds_and_ticks(data, padding)
+#       For linear-scale axes. Returns nice round tick marks.
+#       Usage:
+#           bounds, ticks = get_axis_bounds_and_ticks([min_y, max_y], padding=0.05)
+#           ax.set_ylim(bounds)
+#           ax.set_yticks(ticks)
+#
+#   get_axis_bounds_and_ticks_ln_pct(data, padding)
+#       For axes where the data is in log-ratio space (i.e. ln(value/baseline))
+#       but labels should display as percentage change. Returns tick positions
+#       in log space and corresponding percentage labels.
+#       Usage:
+#           bounds, ticks, pcts = get_axis_bounds_and_ticks_ln_pct([min_y, max_y], padding=0.05)
+#           ax.set_ylim(bounds)
+#           ax.set_yticks(ticks)
+#           ax.set_yticklabels([f'{p:g}%' for p in pcts])
+
 import numpy as np
 from math import log10, floor
 
 
 def get_axis_bounds_and_ticks(data, padding=0.0):
-    """Calculate the bounds of an axis given the data and padding."""
+    """Calculate axis bounds and evenly-spaced 'nice' tick positions for linear data.
+
+    Snaps the bounds to round numbers, anchors ticks at zero when the range
+    crosses zero, and chooses a tick spacing that yields ~5-8 ticks.
+
+    Args:
+        data: iterable of numeric values (often just [min_val, max_val])
+        padding: fractional padding added to each side of the data range
+            (e.g. 0.05 adds 5% on each side). Padding is not applied to a
+            bound that has been snapped to zero.
+
+    Returns:
+        bounds: [min, max] suitable for ax.set_ylim / ax.set_xlim
+        ticks_vals: array of tick positions within (and slightly beyond) bounds
+    """
     if not data:
         return (0, 1)  # default bounds if no data
 
     min_val = min(data)
     max_val = max(data)
 
-    if abs(min_val) < 1e-6 * max_val or (min_val > 0 and max_val > 0 and min_val <=0.5 * max_val):
-        min_val = 0  # set to zero if very close to zero or if min_val is positive and small compared to max_val
+    # Snap bound to zero when data is close to or entirely on one side of zero
+    if abs(min_val) < 1e-6 * max_val or (min_val > 0 and max_val > 0 and min_val <= 0.5 * max_val):
+        min_val = 0
     if abs(max_val) < 1e-6 * abs(min_val) or (min_val < 0 and max_val < 0 and max_val >= 0.5 * min_val):
-        max_val = 0  # set to zero if very close to zero
+        max_val = 0
 
     range_val = max_val - min_val
 
-    # Add padding to the bounds
     padding_amount = range_val * padding
     if min_val != 0:
         min_val -= padding_amount
     if max_val != 0:
         max_val += padding_amount
 
+    # Express range as mantissa × 10^power (mantissa in [1, 10))
     range_val = max_val - min_val
-    range_power = floor(log10(range_val))   
-    range_mantissa = range_val / 10**range_power  # range mantissa should be between 1 and 10
+    range_power = floor(log10(range_val))
+    range_mantissa = range_val / 10**range_power
 
-    #examples:
-    # if min_val = -0.2 and max_val = 0.8, range_val = 1, range_power = 0, range_mantissa = 1
-    # if min_val = -0.2 and max_val = 1.3, range_val = 1.5, range_power = 0, range_mantissa = 1.5
-    # if min_val = -37 and max_val = 42, range_val = 79, range_power = 1, range_mantissa = 7.9
-    # if min_val = -312 and max_val = 421, range_val = 733, range_power = 2, range_mantissa = 7.33
-
+    # Select a tick pattern (normalized to [0, range_scale]) based on mantissa.
+    # The pattern's step size (ticks[1]) is scaled by 10^power to get the
+    # actual tick spacing.
     if range_mantissa == 1.0:
         ticks = np.arange(0,1.2,0.2)
         range_scale = 1
@@ -92,17 +124,21 @@ def get_axis_bounds_and_ticks(data, padding=0.0):
     return [min_val, max_val], ticks_vals
 
 
+# Candidate multipliers and their "niceness" weights for round_pct_nice().
+# Each entry is (multiplier, weight). Lower weight = "nicer" number, meaning the
+# algorithm will stretch further from the raw value to land on it.
+# E.g. 10, 50, 100 are very nice (low weight); 20, 30, 40 are ordinary (weight 1.0).
 _MULT_WEIGHTS = [
-    (1.0, 1/8),   # 10, 100, 1000 — powers of 10, very nice
-    (1.5, 0.5),   # 15, 150, 1500
+    (1.0, 1/9),   # 10, 100, 1000 — powers of 10, very nice
+    (1.5, 2/3),   # 15, 150, 1500
     (2.0, 1.0),   # 20, 200
-    (2.5, 0.5),   # 25, 250
+    (2.5, 2/3),   # 25, 250
     (3.0, 1.0),   # 30, 300
     (4.0, 1.0),   # 40, 400
-    (5.0, 0.2),   # 50, 500 — half-powers of 10, very nice
+    (5.0, 1/3),   # 50, 500 — half-powers of 10, very nice
     (6.0, 1.0),
     (7.0, 1.0),
-    (7.5, 0.5),   # 75, 750
+    (7.5, 2/3),   # 75, 750
     (8.0, 1.0),
     (9.0, 1.0),
 ]
@@ -111,14 +147,22 @@ _MULT_WEIGHTS = [
 def round_pct_nice(pct, pct_range=None):
     """Round a percentage-change value to a 'nice' number for axis labels.
 
-    Uses weighted distance to prefer 'nicer' numbers (powers of 10, multiples
-    of 5, 25, 75) over plain 1-significant-digit rounding.
-    For pct <= -90: round remainder from -100 to nearest of {1,2,5,10}×10^k.
+    Finds the nearest "nice" number (powers of 10, multiples of 5/25/50/75)
+    using a weighted-distance metric where nicer numbers have lower weights,
+    so the algorithm prefers them even if they're slightly further away.
+
+    Special handling for pct <= -90: rounds the remainder from -100 to the
+    nearest of {1, 2, 5, 10} × 10^k (e.g. -95 → -95, -93 → -95).
 
     Args:
-        pct: the percentage value to round
-        pct_range: optional (min_pct, max_pct) tuple; candidates outside this
-            range don't get niceness bonuses (weight clamped to 1.0)
+        pct: the percentage value to round (e.g. 23.7 or -48.2)
+        pct_range: optional (min_pct, max_pct) tuple defining the visible axis
+            range. Candidates outside this range lose their niceness bonus
+            (weight clamped to 1.0) so the algorithm won't stretch to reach
+            a "nice" number that would fall outside the plot.
+
+    Returns:
+        The nearest nice percentage value (float).
     """
     if pct == 0:
         return 0
@@ -159,16 +203,25 @@ def round_pct_nice(pct, pct_range=None):
 
 
 def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
-    """Calculate axis bounds and ticks for data in log-ratio space, with percentage-change labels.
+    """Calculate axis bounds and ticks for log-ratio data with percentage-change labels.
+
+    For data stored as ln(value / baseline), this function computes ~6 evenly
+    spaced tick positions anchored at zero, rounds each to a "nice" percentage
+    via round_pct_nice(), then converts back to log space. The result is tick
+    marks at human-friendly percentages (e.g. -25%, 0%, 25%, 50%) positioned
+    correctly on the log-ratio axis.
 
     Args:
-        data: values in log-ratio space (log(n/d))
-        padding: fractional padding to add to bounds
+        data: iterable of values in log-ratio space, i.e. ln(value/baseline).
+            Often just [min_val, max_val].
+        padding: fractional padding added to each side of the data range
+            (e.g. 0.05 adds 5% on each side)
 
     Returns:
-        bounds: [min_val, max_val] in log space
-        ticks_vals: tick positions in log space
-        pct_labels: percentage-change value at each tick, e.g. -50.0 means -50%
+        bounds: [min, max] in log space, suitable for ax.set_ylim
+        ticks_vals: array of tick positions in log space, suitable for ax.set_yticks
+        pct_labels: list of percentage-change values at each tick (e.g. [-25, 0, 25]).
+            Use with ax.set_yticklabels([f'{p:g}%' for p in pct_labels]).
     """
     min_log = min(data)
     max_log = max(data)
