@@ -14,6 +14,7 @@ from .persistence import (
     compute_pre_first_year_correction,
 )
 from .bootstrap import _get_T_loess_at_base_year
+from .axes import get_axis_bounds_and_ticks
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -2991,30 +2992,23 @@ def plot_year_effects_2panel(
     unique_years = sorted(set(data.year))
     years_array = np.array(unique_years)
 
-    # First pass: compute y-axis range
-    all_k_values = []
+    # First pass: collect IQR extremes for y-axis range
+    iqr_extremes = []
     for name in valid_approaches[:2]:
         result = results[name]
-        if result.k_point is not None:
-            # Filter out NaN values from k_point
-            k_point_vals = [result.k_point[yr] for yr in unique_years if yr in result.k_point]
-            all_k_values.extend([v for v in k_point_vals if not np.isnan(v)])
         if result.k_samples is not None:
             for yr in unique_years:
                 if yr in result.k_samples:
                     valid = result.k_samples[yr][~np.isnan(result.k_samples[yr])]
                     if len(valid) > 0:
-                        all_k_values.extend([np.percentile(valid, 5), np.percentile(valid, 95)])
+                        iqr_extremes.extend([np.percentile(valid, 25), np.percentile(valid, 75)])
 
-    # Filter any remaining NaN values and compute range
-    all_k_values = [v for v in all_k_values if not np.isnan(v)]
-    if all_k_values:
-        y_min = min(all_k_values)
-        y_max = max(all_k_values)
-        y_margin = (y_max - y_min) * 0.1
-        y_range = (y_min - y_margin, y_max + y_margin)
+    if iqr_extremes:
+        (y_min, y_max), y_ticks = get_axis_bounds_and_ticks(iqr_extremes)
+        y_range = (y_min, y_max)
     else:
         y_range = (-0.05, 0.05)
+        y_ticks = np.arange(-0.05, 0.06, 0.01)
 
     # Plot panels
     for col, name in enumerate(valid_approaches[:2]):
@@ -3075,6 +3069,7 @@ def plot_year_effects_2panel(
         else:
             ax.set_title(r'$k_{mean}(t)$', fontsize=10)
         ax.set_ylim(y_range)
+        ax.set_yticks(y_ticks)
         ax.grid(True, alpha=0.3)
         ax.set_xlabel('Year')
         ax.set_ylabel('k(t)')
@@ -5631,9 +5626,28 @@ def plot_temperature_response_3x3(
         mask_recent = data.year == max_year
         temp_recent = data.temp[mask_recent]
 
-    # Fixed y-axis range for publication consistency
-    y_min, y_max = -0.15, 0.00
-    y_ticks = np.arange(-0.15, 0.01, 0.03)
+    # Pre-compute uncertainty bands and point estimates for all approaches
+    precomputed = {}
+    iqr_extremes = []
+    for row in range(3):
+        for col in range(3):
+            name = APPROACH_ORDER_3X3[row][col]
+            if name not in results:
+                continue
+            result = results[name]
+            h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
+                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            )
+            h_point, T_opt = _compute_point_estimate_response(result, T, name, None)
+            precomputed[name] = (h_p5, h_p25, h_p50, h_p75, h_p95, h_point, T_opt)
+            iqr_extremes.extend([np.nanmin(h_p25), np.nanmax(h_p75)])
+
+    # Compute y-axis bounds from IQR extremes across all approaches
+    if iqr_extremes:
+        (y_min, y_max), y_ticks = get_axis_bounds_and_ticks(iqr_extremes)
+    else:
+        y_min, y_max = -0.15, 0.00
+        y_ticks = np.arange(-0.15, 0.01, 0.03)
 
     # Plot each panel
     for row in range(3):
@@ -5641,7 +5655,7 @@ def plot_temperature_response_3x3(
             name = APPROACH_ORDER_3X3[row][col]
             ax = axes[row, col]
 
-            if name not in results:
+            if name not in precomputed:
                 ax.text(0.5, 0.5, f'{name}\n(not available)',
                         ha='center', va='center', transform=ax.transAxes,
                         fontsize=10, color='gray')
@@ -5655,11 +5669,8 @@ def plot_temperature_response_3x3(
             result = results[name]
             color = get_color(name, 'steelblue')
 
-            # Compute uncertainty bands
-            h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
-                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
-            )
-            h_point, T_opt = _compute_point_estimate_response(result, T, name, None)
+            # Retrieve pre-computed bands and point estimate
+            h_p5, h_p25, h_p50, h_p75, h_p95, h_point, T_opt = precomputed[name]
 
             # Add temperature histogram on secondary y-axis
             if temp_recent is not None:
@@ -5729,18 +5740,41 @@ def plot_temperature_derivative_3x3(
     # Temperature array for derivative plots
     T = np.linspace(T_range[0], T_range[1], 200)
 
+    # Pre-compute uncertainty bands and point estimates for all approaches
+    precomputed = {}
+    iqr_extremes = []
+    for row in range(3):
+        for col in range(3):
+            name = APPROACH_ORDER_3X3[row][col]
+            if name not in results:
+                continue
+            result = results[name]
+            dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
+                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
+            )
+            dh_point = _compute_derivative_point_estimate(result, T, name, None)
+            precomputed[name] = (dh_p5, dh_p25, dh_p50, dh_p75, dh_p95, dh_point)
+            iqr_extremes.extend([np.nanmin(dh_p25), np.nanmax(dh_p75)])
+
+    # Compute y-axis bounds from IQR extremes across all approaches
+    if iqr_extremes:
+        (y_min, y_max), y_ticks = get_axis_bounds_and_ticks(iqr_extremes)
+    else:
+        y_min, y_max = -0.025, 0.015
+        y_ticks = np.arange(-0.025, 0.016, 0.005)
+
     # Plot each panel
     for row in range(3):
         for col in range(3):
             name = APPROACH_ORDER_3X3[row][col]
             ax = axes[row, col]
 
-            if name not in results:
+            if name not in precomputed:
                 ax.text(0.5, 0.5, f'{name}\n(not available)',
                         ha='center', va='center', transform=ax.transAxes,
                         fontsize=10, color='gray')
                 ax.set_xlim(T_range)
-                ax.set_ylim(-0.025, 0.015)
+                ax.set_ylim(y_min, y_max)
                 ax.set_xlabel('Temperature (°C)', fontsize=10)
                 ax.set_ylabel('dh/dT', fontsize=10)
                 ax.grid(True, alpha=0.3)
@@ -5749,11 +5783,8 @@ def plot_temperature_derivative_3x3(
             result = results[name]
             color = get_color(name, 'steelblue')
 
-            # Compute uncertainty bands
-            dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
-                result, T, percentiles=(5, 25, 50, 75, 95), approach_key=name
-            )
-            dh_point = _compute_derivative_point_estimate(result, T, name, None)
+            # Retrieve pre-computed bands and point estimate
+            dh_p5, dh_p25, dh_p50, dh_p75, dh_p95, dh_point = precomputed[name]
 
             # Plot 90% CI band
             ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color, label='90% CI')
@@ -5769,7 +5800,8 @@ def plot_temperature_derivative_3x3(
             ax.set_ylabel('dh/dT', fontsize=10)
             ax.set_title(result.approach, fontsize=11)
             ax.set_xlim(T_range)
-            ax.set_ylim(-0.025, 0.015)
+            ax.set_ylim(y_min, y_max)
+            ax.set_yticks(y_ticks)
             ax.grid(True, alpha=0.3)
             ax.legend(fontsize=7, loc='upper right')
 
@@ -5859,9 +5891,9 @@ def plot_T_optimal_histogram_3x3(
             n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
                               edgecolor=color, linewidth=0.5)
 
-            # Extend y-axis upper bound with ~10% padding
-            y_max = np.max(n) * 1.1
-            ax.set_ylim(0, y_max)
+            (y_lo, y_hi), y_ticks = get_axis_bounds_and_ticks([0, np.max(n)], 0.1)
+            ax.set_ylim(y_lo, y_hi)
+            ax.set_yticks(y_ticks)
 
             ax.set_xlabel('Optimal Temperature (°C)', fontsize=10)
             ax.set_ylabel('Density', fontsize=10)
@@ -5962,12 +5994,13 @@ def plot_h2_histogram_4x3(
             n, _, _ = ax.hist(valid_samples, bins=bins, density=True, alpha=1.0, color=color,
                               edgecolor=color, linewidth=0.5)
 
-        # Extend y-axis upper bound with ~10% padding
-        # Handle edge cases where max(n) might be NaN or zero
-        y_max = np.nanmax(n) * 1.1 if len(n) > 0 and np.any(~np.isnan(n)) else 1.0
-        if np.isnan(y_max) or y_max <= 0:
-            y_max = 1.0
-        ax.set_ylim(0, y_max)
+        # Compute y-axis bounds from histogram data
+        n_max = np.nanmax(n) if len(n) > 0 and np.any(~np.isnan(n)) else 1.0
+        if np.isnan(n_max) or n_max <= 0:
+            n_max = 1.0
+        (y_lo, y_hi), y_ticks = get_axis_bounds_and_ticks([0, n_max], 0.1)
+        ax.set_ylim(y_lo, y_hi)
+        ax.set_yticks(y_ticks)
 
         ax.set_xlabel(x_label, fontsize=10)
         ax.set_ylabel('Density', fontsize=10)
@@ -6129,9 +6162,9 @@ def plot_h4_histogram_1x3(
         n, _, _ = ax.hist(valid_samples, bins=30, density=True, alpha=1.0, color=color,
                           edgecolor=color, linewidth=0.5)
 
-        # Extend y-axis upper bound with ~10% padding
-        y_max = np.max(n) * 1.1
-        ax.set_ylim(0, y_max)
+        (y_lo, y_hi), y_ticks = get_axis_bounds_and_ticks([0, np.max(n)], 0.1)
+        ax.set_ylim(y_lo, y_hi)
+        ax.set_yticks(y_ticks)
 
         ax.set_xlabel('h₄ (persistence parameter)', fontsize=10)
         ax.set_ylabel('Density', fontsize=10)
