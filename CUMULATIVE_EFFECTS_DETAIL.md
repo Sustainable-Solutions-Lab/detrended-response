@@ -184,9 +184,8 @@ All Countries (point estimates)                   Representative Countries (full
 cumulative_effects_all_countries.csv              cumulative_h_values_summary.csv
         │                                                         │
         ▼                                                         ▼
-cumulative_effects_by_approach.pdf                cumulative_effects_boxplot.pdf
-(method0-4 + method5h4pos)                        cumulative_effects_by_method.pdf
-                                                  (method0-4 + method5h4pos, bootstrap)
+cumulative_effects_by_approach.pdf                cumulative_effects_by_method.pdf
+(method0-4 + method5h4pos)                        (method0-4 + method5h4pos, bootstrap)
 ```
 
 ## Example: How h_conv Differs from h(T) and Why It Matters for Cumulative Effects

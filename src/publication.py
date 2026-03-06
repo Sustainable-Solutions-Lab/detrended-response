@@ -1618,8 +1618,6 @@ def generate_figures(
         results,
         output_dir,
         filename='fig_h2_histogram_4x3.pdf',
-        x_range=(-0.001, 0.0001),
-        bin_width=0.00002,
         input_file=None,
     )
     print("      [Figures] Saved fig_h2_histogram_4x3.pdf")

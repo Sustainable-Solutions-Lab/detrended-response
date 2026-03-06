@@ -5913,8 +5913,6 @@ def plot_h2_histogram_4x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
     filename: str = 'fig_h2_histogram_4x3.pdf',
-    x_range: tuple = (-0.001, 0.0001),
-    bin_width: float = 0.00002,
     input_file: str = None,
 ) -> None:
     """Plot 4x3 h2 coefficient histogram figure.
@@ -5932,21 +5930,33 @@ def plot_h2_histogram_4x3(
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
         filename: Output filename
-        x_range: Fixed x-axis range as (x_min, x_max)
-        bin_width: Width of histogram bins
         input_file: Optional input file path for annotation
     """
-    # Create 4x3 figure
-    fig, axes = plt.subplots(4, 3, figsize=(15, 16))
 
-    x_min, x_max = x_range
-    bins = np.arange(x_min, x_max + bin_width, bin_width)
-
-    # Define the layout: (row, col) -> (approach_name, coefficient_type, title_suffix)
-    # coefficient_type: 'h2' for standard, 'h2_low' for piecewise below T_opt, 'h4' for piecewise above T_opt
+    # Define the layout
     approach_cols = ['Approach QJ', 'Approach QP', 'Approach QL']
     piecewise_cols = ['Approach PJ', 'Approach PP', 'Approach PL']
     persistence_cols = ['Approach DJ', 'Approach DP', 'Approach DL']
+
+    # Collect all sample values to determine dynamic x-axis bounds
+    all_samples = []
+    for name in approach_cols + persistence_cols:
+        if name in results and results[name].h2_samples is not None:
+            all_samples.append(results[name].h2_samples[~np.isnan(results[name].h2_samples)])
+    for name in piecewise_cols:
+        if name in results:
+            if results[name].h2_samples is not None:
+                all_samples.append(results[name].h2_samples[~np.isnan(results[name].h2_samples)])
+            h4 = getattr(results[name], 'h4_samples', None)
+            if h4 is not None:
+                all_samples.append(h4[~np.isnan(h4)])
+    all_vals = np.concatenate(all_samples) if all_samples else np.array([-0.001, 0.0001])
+    (x_min, x_max), _ = get_axis_bounds_and_ticks([all_vals.min(), all_vals.max()], padding=0.05)
+    bin_width = (x_max - x_min) / 50
+    bins = np.arange(x_min, x_max + bin_width, bin_width)
+
+    # Create 4x3 figure
+    fig, axes = plt.subplots(4, 3, figsize=(15, 16))
 
     def plot_histogram_panel(ax, samples, point_est, color, title, x_label='h₂ Coefficient'):
         """Helper to plot a single histogram panel."""

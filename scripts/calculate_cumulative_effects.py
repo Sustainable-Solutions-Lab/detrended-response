@@ -190,127 +190,6 @@ def get_country_label(key, representatives: dict) -> str:
         return f"{iso3}\n(P{key})"
 
 
-def plot_cumulative_effects_boxplot(
-    df: pd.DataFrame,
-    representatives: dict,
-    output_dir: Path,
-    input_file: str = None
-) -> None:
-    """Create clustered box-and-whisker plot of cumulative effects.
-
-    Plots h_T_delta_cum values directly (already in log space as sum of log changes).
-    Y-axis labels show equivalent percent changes, with symmetric scaling so that
-    -50% and +100% are equidistant from 0.
-    Groups by country (min, P5, P25, P50, P75, P95, max) with approach bars per country.
-
-    Args:
-        df: DataFrame with cumulative effects for representative countries
-        representatives: Dictionary from select_representative_countries
-        output_dir: Directory to save plot
-        input_file: Input file for annotation
-    """
-    fig, ax = plt.subplots(figsize=(18, 6))
-
-    # Use central approaches in consistent order
-    approaches = CENTRAL_APPROACHES_BOXPLOT
-    n_approaches = len(approaches)
-
-    # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
-    country_keys = get_country_ordering(representatives)
-    n_clusters = len(country_keys)
-
-    # Spacing parameters
-    cluster_width = 0.8
-    box_width = cluster_width / (n_approaches + 1)  # Extra space between clusters
-
-    # Filter to last year for final values
-    last_year = int(df['year'].max())
-    df_2022 = df[df['year'] == last_year].copy()
-
-    # Create box plots
-    for i, country_key in enumerate(country_keys):
-        iso3 = representatives[country_key]['iso3']
-        cluster_center = i
-
-        for j, approach in enumerate(approaches):
-            # Get bootstrap samples (iterations 0-999) for this country/approach
-            mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
-            # h_T_delta_cum is already in log space (sum of log changes), use directly
-            bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
-
-            # Get point estimate (iteration -1)
-            mask_point = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] == -1)
-            point_estimate_arr = df_2022.loc[mask_point, 'h_T_delta_cum'].values
-            point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
-
-            # Position for this box
-            pos = cluster_center + (j - (n_approaches - 1) / 2) * box_width
-
-            # Draw box (only if we have valid bootstrap data)
-            color = APPROACH_COLORS.get(approach, 'gray')
-            if len(bootstrap_values) > 0:
-                box = ax.boxplot(
-                    [bootstrap_values],
-                    positions=[pos],
-                    widths=box_width * 0.8,
-                    patch_artist=True,
-                    showfliers=False,
-                    whis=[5, 95],  # Whiskers at 5th and 95th percentile
-                    medianprops=dict(color='black', linewidth=1),
-                )
-
-                # Color the box
-                for patch in box['boxes']:
-                    patch.set_facecolor(color)
-                    patch.set_alpha(0.7)
-
-            # Add point estimate as diamond marker (only if we have a valid estimate)
-            if not np.isnan(point_estimate):
-                ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
-                        markeredgecolor='black', markeredgewidth=1, zorder=10)
-
-    # X-axis labels (country codes with percentile info)
-    x_labels = [get_country_label(k, representatives) for k in country_keys]
-    ax.set_xticks(range(n_clusters))
-    ax.set_xticklabels(x_labels)
-
-    # Y-axis: dynamic bounds from data
-    all_vals = df_2022['h_T_delta_cum'].values
-    bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
-        [all_vals.min(), all_vals.max()])
-    ax.set_ylim(bounds)
-    ax.set_yticks(ticks_vals)
-    ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
-
-    # Formatting
-    ax.set_ylabel('Cumulative Climate Effect')
-    ax.set_xlabel('Representative Country (Percentile)')
-    first_year = int(df['year'].min())
-    ax.set_title(f'Cumulative Climate Effect on GDP Growth ({first_year}-{last_year})')
-    ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
-
-    # Legend for approaches
-    legend_handles = [
-        plt.Rectangle((0, 0), 1, 1, facecolor=APPROACH_COLORS.get(a, 'gray'), alpha=0.7)
-        for a in approaches
-    ]
-    ax.legend(legend_handles, approaches, loc='best', fontsize=8)
-
-    # Add diamond marker explanation to legend
-    ax.plot([], [], 'd', color='white', markersize=6,
-            markeredgecolor='black', markeredgewidth=1, label='Point estimate')
-
-    plt.tight_layout()
-
-    # Add input file annotation
-    add_input_file_annotation(fig, input_file)
-
-    # Save
-    output_path = output_dir / 'cumulative_effects_boxplot.pdf'
-    fig.savefig(output_path, bbox_inches='tight', dpi=300)
-    plt.close(fig)
-    print(f"      Saved: {output_path}")
-
 
 # Colors for representative countries (min to max)
 COUNTRY_COLORS = {
@@ -1268,7 +1147,7 @@ def main(argv=None):
         output_dir = create_output_dir(prefix="cumulative_")
 
     # Phase 1: Process all countries with point estimates
-    print("\n[1/7] Processing all countries (point estimates)...")
+    print("\n[1/6] Processing all countries (point estimates)...")
     df_all_countries = process_all_countries_point_estimate(input_path, input_dir, loess_window)
 
     # Save all countries cumulative effects
@@ -1280,11 +1159,11 @@ def main(argv=None):
     print(f"      Saved: {all_countries_path} ({len(df_all_countries):,} rows)")
 
     # Phase 2: Create multi-panel visualization by approach
-    print("\n[2/7] Creating cumulative effects by approach visualization...")
+    print("\n[2/6] Creating cumulative effects by approach visualization...")
     plot_cumulative_effects_by_approach(df_all_countries, output_dir, input_file)
 
     # Phase 3: Select representative countries using point estimate only
-    print("\n[3/7] Selecting representative countries (using point estimate)...")
+    print("\n[3/6] Selecting representative countries (using point estimate)...")
     representatives = select_representative_countries_from_file(
         input_path, input_dir, loess_window
     )
@@ -1319,14 +1198,14 @@ def main(argv=None):
     print(f"      Saved: {rep_path}")
 
     # Phase 4: Process full bootstrap data for representative countries only
-    print("\n[4/7] Processing bootstrap data for representative countries...")
+    print("\n[4/6] Processing bootstrap data for representative countries...")
     rep_iso3s = [representatives[p]['iso3'] for p in representatives]
     df_summary = process_representative_countries(
         input_path, rep_iso3s, input_dir, loess_window
     )
 
     # Save cumulative effects summary
-    print("\n[5/7] Saving cumulative effects summary...")
+    print("\n[5/6] Saving cumulative effects summary...")
 
     # Add header comment to CSV
     summary_path = output_dir / 'cumulative_h_values_summary.csv'
@@ -1336,10 +1215,7 @@ def main(argv=None):
     print(f"      Saved: {summary_path} ({len(df_summary):,} rows)")
 
     # Create visualizations
-    print("\n[6/7] Creating box plot visualization (grouped by country)...")
-    plot_cumulative_effects_boxplot(df_summary, representatives, output_dir, input_file)
-
-    print("\n[7/7] Creating box plot visualization (grouped by approach)...")
+    print("\n[6/6] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
 
     # Additional: Create 2-panel Approach DL plot

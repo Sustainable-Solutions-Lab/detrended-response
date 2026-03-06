@@ -204,3 +204,9 @@ Each step also writes `run_metadata.json` capturing key options and inputs.
 ## References
 
 The code implements variants of a temperature–growth panel regression widely used in the climate‑econometrics literature (often associated with Burke et al.). This repository is intended as a **methods sandbox** for examining how detrending choices affect the estimated temperature response.
+
+
+# example biogeochemistry full run
+python ./scripts/main.py --output-dir ./data/output/pipeline_ACCESS-ESM1-5_2026-03-05_1000 --use-csv ./data/input/ACCESS-ESM1-5_historical.csv --sample-years --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_CNRM-ESM2-1_2026-03-05_1000   --use-csv ./data/input/CNRM-ESM2-1_historical.csv --sample-years --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_MIROC-ES2L_2026-03-05_1000    --use-csv ./data/input/MIROC-ES2L_historical.csv --sample-years --n-bootstrap 1000--start-year 1960
