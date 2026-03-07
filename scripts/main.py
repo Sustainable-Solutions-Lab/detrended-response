@@ -1,12 +1,13 @@
-"""Pipeline orchestrator for the full detrended response analysis.
+"""Pipeline orchestrator for the detrended response analysis.
 
-Runs all 8 analysis steps in sequence, automatically passing output directories
+Runs analysis steps in sequence, automatically passing output directories
 between dependent steps. Each step can also be run standalone via its own script.
 
 Usage:
     python scripts/main.py                          # Full pipeline, 1000 bootstrap iterations
     python scripts/main.py --n-bootstrap 5          # Quick test run
-    python scripts/main.py --n-bootstrap 5 --sample-years  # Quick test with year sampling
+    python scripts/main.py --pipeline-dir data/output/pipeline_years-countries_2026-03-03
+        # Skip analysis+bootstrap, rerun steps 3-7 from existing pipeline
 """
 
 import argparse
@@ -21,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from run_analysis import main as run_analysis_main
 from run_bootstrap import main as run_bootstrap_main
 from make_tables_and_figures import main as run_publication_main
-from plot_uncertainty_bars import main as run_uncertainty_bars_main
+from summarize_bootstrap_uncertainty import main as run_uncertainty_bars_main
 from compare_Approach1J_Approach1P import main as run_comparison_main
 from calculate_cumulative_effects import main as run_cumulative_main
 from run_influence_analysis import main as run_influence_main
@@ -100,63 +101,90 @@ def main():
         action="store_true",
         help="Suppress progress messages in bootstrap",
     )
+    parser.add_argument(
+        "--pipeline-dir",
+        type=str,
+        default=None,
+        help="Existing pipeline directory with analysis/ and bootstrap/ subdirs. "
+             "Skips steps 1-2 and reruns steps 3-7 from existing results.",
+    )
 
     args = parser.parse_args()
 
-    # Create parent output directory
-    if args.output_dir:
-        pipeline_dir = Path(args.output_dir)
-    else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        pipeline_dir = Path("data/output") / f"pipeline_{timestamp}"
-    pipeline_dir.mkdir(parents=True, exist_ok=True)
-
-    print("=" * 70)
-    print("DETRENDED RESPONSE ANALYSIS PIPELINE")
-    print("=" * 70)
-    print(f"Output directory: {pipeline_dir}")
-    print(f"Bootstrap iterations: {args.n_bootstrap}")
-    print()
-
     t_pipeline_start = time.perf_counter()
 
-    # Build shared args for analysis and bootstrap
-    shared_args = ["--use-csv", args.use_csv, "--loess-window", str(args.loess_window)]
-    if args.year_min is not None:
-        shared_args += ["--year-min", str(args.year_min)]
-    if args.year_max is not None:
-        shared_args += ["--year-max", str(args.year_max)]
-    if args.mean_weight_distance is not None:
-        shared_args += ["--mean-weight-distance", str(args.mean_weight_distance)]
-    if args.start_year is not None:
-        shared_args += ["--start-year", str(args.start_year)]
+    if args.pipeline_dir:
+        # Reuse existing analysis and bootstrap results
+        pipeline_dir = Path(args.pipeline_dir)
+        analysis_dir = pipeline_dir / "analysis"
+        bootstrap_dir = pipeline_dir / "bootstrap"
 
-    # Step 1: Analysis
-    print("\n" + "#" * 70)
-    print("# STEP 1/7: Analysis")
-    print("#" * 70)
-    analysis_dir = run_analysis_main([
-        "--output-dir", str(pipeline_dir / "analysis"),
-        *shared_args,
-    ])
+        if not analysis_dir.exists():
+            print(f"ERROR: analysis directory not found: {analysis_dir}")
+            sys.exit(1)
+        if not bootstrap_dir.exists():
+            print(f"ERROR: bootstrap directory not found: {bootstrap_dir}")
+            sys.exit(1)
 
-    # Step 2: Bootstrap
-    print("\n" + "#" * 70)
-    print("# STEP 2/7: Bootstrap")
-    print("#" * 70)
-    bootstrap_args = [
-        "--output-dir", str(pipeline_dir / "bootstrap"),
-        "--n-bootstrap", str(args.n_bootstrap),
-        "--random-seed", str(args.random_seed),
-        *shared_args,
-    ]
-    if args.sample_years:
-        bootstrap_args.append("--sample-years")
-    if args.skip_slow:
-        bootstrap_args.append("--skip-slow")
-    if args.quiet:
-        bootstrap_args.append("--quiet")
-    bootstrap_dir = run_bootstrap_main(bootstrap_args)
+        print("=" * 70)
+        print("DETRENDED RESPONSE ANALYSIS PIPELINE (post-processing only)")
+        print("=" * 70)
+        print(f"Pipeline directory: {pipeline_dir}")
+        print(f"Skipping steps 1-2 (using existing analysis and bootstrap)")
+        print()
+    else:
+        # Full pipeline: create output directory and run analysis + bootstrap
+        if args.output_dir:
+            pipeline_dir = Path(args.output_dir)
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pipeline_dir = Path("data/output") / f"pipeline_{timestamp}"
+        pipeline_dir.mkdir(parents=True, exist_ok=True)
+
+        print("=" * 70)
+        print("DETRENDED RESPONSE ANALYSIS PIPELINE")
+        print("=" * 70)
+        print(f"Output directory: {pipeline_dir}")
+        print(f"Bootstrap iterations: {args.n_bootstrap}")
+        print()
+
+        # Build shared args for analysis and bootstrap
+        shared_args = ["--use-csv", args.use_csv, "--loess-window", str(args.loess_window)]
+        if args.year_min is not None:
+            shared_args += ["--year-min", str(args.year_min)]
+        if args.year_max is not None:
+            shared_args += ["--year-max", str(args.year_max)]
+        if args.mean_weight_distance is not None:
+            shared_args += ["--mean-weight-distance", str(args.mean_weight_distance)]
+        if args.start_year is not None:
+            shared_args += ["--start-year", str(args.start_year)]
+
+        # Step 1: Analysis
+        print("\n" + "#" * 70)
+        print("# STEP 1/7: Analysis")
+        print("#" * 70)
+        analysis_dir = run_analysis_main([
+            "--output-dir", str(pipeline_dir / "analysis"),
+            *shared_args,
+        ])
+
+        # Step 2: Bootstrap
+        print("\n" + "#" * 70)
+        print("# STEP 2/7: Bootstrap")
+        print("#" * 70)
+        bootstrap_args = [
+            "--output-dir", str(pipeline_dir / "bootstrap"),
+            "--n-bootstrap", str(args.n_bootstrap),
+            "--random-seed", str(args.random_seed),
+            *shared_args,
+        ]
+        if args.sample_years:
+            bootstrap_args.append("--sample-years")
+        if args.skip_slow:
+            bootstrap_args.append("--skip-slow")
+        if args.quiet:
+            bootstrap_args.append("--quiet")
+        bootstrap_dir = run_bootstrap_main(bootstrap_args)
 
     # Step 3: Publication tables and figures
     print("\n" + "#" * 70)

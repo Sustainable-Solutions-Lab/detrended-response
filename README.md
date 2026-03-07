@@ -112,7 +112,7 @@ You can run any step in isolation:
 - **Point estimation:** `python scripts/run_analysis.py`
 - **Bootstrap:** `python scripts/run_bootstrap.py`
 - **Publication tables/figures:** `python scripts/make_tables_and_figures.py`
-- **Uncertainty bar plots:** `python scripts/plot_uncertainty_bars.py`
+- **Bootstrap uncertainty summary:** `python scripts/summarize_bootstrap_uncertainty.py`
 - **QJ vs QP parameter comparison:** `python scripts/compare_Approach1J_Approach1P.py`
 - **Cumulative effects:** `python scripts/calculate_cumulative_effects.py`
 - **Influence analysis:** `python scripts/run_influence_analysis.py`

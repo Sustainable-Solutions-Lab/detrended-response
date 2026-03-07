@@ -142,6 +142,15 @@ def load_bootstrap_results(bootstrap_dir: Path) -> dict:
         print(f"      WARNING: bootstrap_k_samples.csv not found at {k_samples_path}")
         results['bootstrap_k_samples'] = None
 
+    # Load bootstrap width comparison (from compare_bootstrap_widths.py)
+    width_comparison_path = bootstrap_dir / "bootstrap_width_comparison.csv"
+    if width_comparison_path.exists():
+        results['bootstrap_width_comparison'] = pd.read_csv(width_comparison_path)
+        print(f"      Loaded bootstrap_width_comparison.csv: {len(results['bootstrap_width_comparison'])} comparisons")
+    else:
+        print(f"      WARNING: bootstrap_width_comparison.csv not found at {width_comparison_path}")
+        results['bootstrap_width_comparison'] = None
+
     return results
 
 
