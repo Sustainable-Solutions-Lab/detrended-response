@@ -1,6 +1,6 @@
 """Pipeline orchestrator for the full detrended response analysis.
 
-Runs all 7 analysis steps in sequence, automatically passing output directories
+Runs all 8 analysis steps in sequence, automatically passing output directories
 between dependent steps. Each step can also be run standalone via its own script.
 
 Usage:
@@ -169,9 +169,9 @@ def main():
         "--data-file", args.use_csv,
     ])
 
-    # Step 4: Uncertainty bar plots (output to same publication dir)
+    # Step 4: Uncertainty bar plots with width comparisons
     print("\n" + "#" * 70)
-    print("# STEP 4/7: Uncertainty bar plots")
+    print("# STEP 4/7: Uncertainty bar plots with width comparisons")
     print("#" * 70)
     run_uncertainty_bars_main([
         "--bootstrap-dir", str(bootstrap_dir),

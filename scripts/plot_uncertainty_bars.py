@@ -23,6 +23,7 @@ import pandas as pd
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from compare_bootstrap_widths import compute_width_comparisons
 from src.output import APPROACH_COLORS
 
 
@@ -172,9 +173,21 @@ def plot_uncertainty_range_bars(
     plt.close(fig)
 
 
+def p_to_stars(p):
+    """Convert p-value to significance stars."""
+    if p < 0.001:
+        return '***'
+    if p < 0.01:
+        return '**'
+    if p < 0.05:
+        return '*'
+    return ''
+
+
 def plot_combined_uncertainty_bars(
     bootstrap_summary: pd.DataFrame,
     output_dir: Path,
+    width_comparisons: pd.DataFrame = None,
 ) -> None:
     """Create bar charts showing both IQR and 90% CI ranges on the same panels.
 
@@ -186,6 +199,9 @@ def plot_combined_uncertainty_bars(
         Bootstrap summary table with percentile columns for each variable
     output_dir : Path
         Directory to save output figures
+    width_comparisons : pd.DataFrame, optional
+        Width comparison results from compute_width_comparisons(). If provided,
+        significance stars are shown above P and L bars.
     """
     # Define approach groups: rows are approach types, columns are variables
     approach_groups = [
@@ -295,6 +311,23 @@ def plot_combined_uncertainty_bars(
                     ax.text(x_clusters[1] + offset, iqr_ranges[i] / 2, method,
                             ha='center', va='center', fontsize=9, fontweight='bold', color='white')
 
+                # Add significance stars for P and L methods
+                if width_comparisons is not None and method in ('P', 'L'):
+                    response_type = group_key.split()[-1]  # e.g. 'Q' from 'Approach Q'
+                    comparison_label = f'{method} vs J'
+                    mask = (
+                        (width_comparisons['response'] == response_type) &
+                        (width_comparisons['coefficient'] == var) &
+                        (width_comparisons['comparison'] == comparison_label)
+                    )
+                    for range_type_key, cluster_idx, bar_height in [('90ci', 0, ci90_ranges[i]), ('iqr', 1, iqr_ranges[i])]:
+                        row = width_comparisons[mask & (width_comparisons['range_type'] == range_type_key)]
+                        if not row.empty and bar_height > 0:
+                            stars = p_to_stars(row['p_alt_narrower'].values[0])
+                            if stars:
+                                ax.text(x_clusters[cluster_idx] + offset, bar_height,
+                                        stars, ha='center', va='bottom', fontsize=8, fontweight='bold')
+
             # Customize subplot
             ax.set_xticks(x_clusters)
             ax.set_xticklabels(range_types)
@@ -360,6 +393,18 @@ def main(argv=None):
         default=None,
         help="Output directory for figures (default: same as bootstrap directory)",
     )
+    parser.add_argument(
+        "--n-resample",
+        type=int,
+        default=10000,
+        help="Number of meta-bootstrap resamples for width comparison (default: 10000)",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for width comparison (default: 42)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -394,10 +439,25 @@ def main(argv=None):
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n[2/3] Output directory: {output_dir}")
 
-    # Generate combined chart
-    print(f"\n[3/3] Generating bar chart...")
+    # Compute width comparisons if bootstrap coefficients are available
+    width_comparisons = None
+    coeff_path = bootstrap_dir / "bootstrap_coefficients.csv"
+    if coeff_path.exists():
+        print(f"\n[3/4] Computing bootstrap width comparisons...")
+        coeff_df = pd.read_csv(coeff_path, comment='#')
+        coeff_df = coeff_df[coeff_df['iteration'] >= 0]
+        width_comparisons = compute_width_comparisons(coeff_df, args.n_resample, args.seed)
+        # Save comparison CSV
+        csv_path = output_dir / "bootstrap_width_comparison.csv"
+        width_comparisons.to_csv(csv_path, index=False)
+        print(f"      Saved: {csv_path}")
+    else:
+        print(f"\n[3/4] No bootstrap_coefficients.csv found, skipping width comparisons")
 
-    plot_combined_uncertainty_bars(bootstrap_summary, output_dir)
+    # Generate combined chart
+    print(f"\n[4/4] Generating bar chart...")
+
+    plot_combined_uncertainty_bars(bootstrap_summary, output_dir, width_comparisons)
 
     print("\n" + "=" * 70)
     print(f"Figures saved to: {output_dir}")
