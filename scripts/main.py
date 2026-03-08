@@ -87,9 +87,9 @@ def main():
         help="Random seed for reproducibility (default: 42)",
     )
     parser.add_argument(
-        "--sample-years",
+        "--sample-countries-only",
         action="store_true",
-        help="Also sample years with replacement (time-dimension bootstrap)",
+        help="Only sample countries (skip year resampling in bootstrap)",
     )
     parser.add_argument(
         "--quiet",
@@ -184,8 +184,8 @@ def main():
             "--random-seed", str(args.random_seed),
             *shared_args,
         ]
-        if args.sample_years:
-            bootstrap_args.append("--sample-years")
+        if args.sample_countries_only:
+            bootstrap_args.append("--sample-countries-only")
         if args.quiet:
             bootstrap_args.append("--quiet")
         bootstrap_dir = run_bootstrap_main(bootstrap_args)

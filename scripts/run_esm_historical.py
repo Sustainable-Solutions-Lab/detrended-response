@@ -198,15 +198,10 @@ def main(argv=None):
         help="Random seed for reproducibility (default: 42)",
     )
     parser.add_argument(
-        "--sample-years",
+        "--sample-countries-only",
         action="store_true",
-        default=True,
-        help="Sample years with replacement (default: True for ESM data)",
-    )
-    parser.add_argument(
-        "--no-sample-years",
-        action="store_true",
-        help="Disable year sampling",
+        help="Only sample countries (skip year resampling). "
+             "By default, both countries and years are sampled.",
     )
     parser.add_argument(
         "--start-year",
@@ -234,8 +229,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    if args.no_sample_years:
-        args.sample_years = False
+    args.sample_years = not args.sample_countries_only
 
     # Set up output directory
     if args.output_dir:

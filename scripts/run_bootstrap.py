@@ -117,10 +117,10 @@ def main(argv=None):
              "If specified, adds '_mwXX' suffix to output directory.",
     )
     parser.add_argument(
-        "--sample-years",
+        "--sample-countries-only",
         action="store_true",
-        help="Also sample years with replacement (time-dimension bootstrap). "
-             "Uses weighted fitting instead of observation duplication.",
+        help="Only sample countries (skip year resampling). "
+             "By default, both countries and years are sampled.",
     )
     parser.add_argument(
         "--approaches",
@@ -134,6 +134,9 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     verbose = not args.quiet
+
+    # Derive sample_years flag (default True, disabled by --sample-countries-only)
+    args.sample_years_flag = not args.sample_countries_only
 
     # Compute LOESS window from mean weight distance if specified
     if args.mean_weight_distance is not None:
@@ -202,7 +205,7 @@ def main(argv=None):
     print("      Done.")
 
     # Run bootstrap
-    bootstrap_type = "country+year" if args.sample_years else "country-only"
+    bootstrap_type = "country+year" if args.sample_years_flag else "country-only"
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed})...")
     # Specify methods for h(T) computation — use selected approaches or all non-null
     if approach_names is not None:
@@ -220,7 +223,7 @@ def main(argv=None):
         verbose=verbose,
         loess_window=loess_window,
         h_T_approaches=h_T_approaches,
-        sample_years=args.sample_years,
+        sample_years=args.sample_years_flag,
         approaches=approach_names,
     )
     print("      Done.")
@@ -244,7 +247,7 @@ def main(argv=None):
     save_bootstrap_k_samples_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_var_attrib_csv(bootstrap_results, output_dir, input_file=input_file)
     save_bootstrap_country_samples_csv(country_samples, data, output_dir, input_file=input_file)
-    if args.sample_years:
+    if args.sample_years_flag:
         save_bootstrap_year_samples_csv(year_samples, data, output_dir, input_file=input_file)
     if h_T_samples:
         save_bootstrap_h_values(
@@ -281,7 +284,7 @@ def main(argv=None):
         'n_obs': data.n_obs,
         'n_bootstrap': args.n_bootstrap,
         'random_seed': args.random_seed,
-        'sample_years': args.sample_years,
+        'sample_years': args.sample_years_flag,
     }
     metadata_path = output_dir / 'run_metadata.json'
     with open(metadata_path, 'w') as f:

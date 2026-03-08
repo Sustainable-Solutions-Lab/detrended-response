@@ -33,7 +33,7 @@ pip install -r requirements.txt
 Run the included quick test (matches the command in the prompt):
 
 ```bash
-python ./scripts/main.py --sample-years --n-bootstrap 5
+python ./scripts/main.py --n-bootstrap 5
 ```
 
 This runs the full 7‑step pipeline and writes a timestamped directory under `data/output/`,
@@ -90,8 +90,8 @@ Key options:
 
 - `--n-bootstrap N` (default 1000)
 - `--random-seed SEED` (default 42)
-- `--sample-years`  
-  additionally resamples years with replacement and fits via weighted least squares
+- `--sample-countries-only`
+  only resample countries in bootstrap (skip year resampling; by default both are sampled)
 - `--loess-window YEARS`  
   LOESS bandwidth for approaches that use LOESS detrending
 - `--output-dir PATH`  
@@ -100,7 +100,7 @@ Key options:
 Example (fast, reproducible):
 
 ```bash
-python scripts/main.py --n-bootstrap 50 --random-seed 42 --sample-years --output-dir data/output/test_run
+python scripts/main.py --n-bootstrap 50 --random-seed 42 --output-dir data/output/test_run
 ```
 
 ### Individual steps
@@ -195,7 +195,7 @@ Each step also writes `run_metadata.json` capturing key options and inputs.
 ## Reproducibility notes
 
 - The analysis is deterministic given the same inputs and `--random-seed`.
-- Bootstrap uncertainty depends on the random seed and whether `--sample-years` is enabled.
+- Bootstrap uncertainty depends on the random seed and whether year resampling is enabled (default: yes; use `--sample-countries-only` to disable).
 - LOESS‑based results depend on `--loess-window`.
 
 
@@ -211,7 +211,7 @@ Use `--approaches` to run only specific approach codes (first letter = response 
 ```bash
 python ./scripts/main.py --approaches QP LP DP QL LL DL \
   --use-csv ./data/input/ACCESS-ESM1-5_historical.csv \
-  --sample-years --n-bootstrap 1000 --start-year 1960 \
+  --n-bootstrap 1000 --start-year 1960 \
   --output-dir ./data/output/pipeline_ACCESS-ESM1-5_subset
 ```
 
@@ -219,8 +219,8 @@ This runs only the Quadratic/Level/Decay response types with Polynomial and LOES
 
 
 # example biogeochemistry full run
-python ./scripts/main.py --output-dir ./data/output/pipeline_ACCESS-ESM1-5_2026-03-05_1000 --use-csv ./data/input/ACCESS-ESM1-5_historical.csv --sample-years --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_ACCESS-ESM1-5_2026-03-05_1000 --use-csv ./data/input/ACCESS-ESM1-5_historical.csv --n-bootstrap 1000 --start-year 1960
 
-python ./scripts/main.py --output-dir ./data/output/pipeline_CNRM-ESM2-1_2026-03-05_1000   --use-csv ./data/input/CNRM-ESM2-1_historical.csv   --sample-years --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_CNRM-ESM2-1_2026-03-05_1000   --use-csv ./data/input/CNRM-ESM2-1_historical.csv   --n-bootstrap 1000 --start-year 1960
 
-python ./scripts/main.py --output-dir ./data/output/pipeline_MIROC-ES2L_2026-03-05_1000    --use-csv ./data/input/MIROC-ES2L_historical.csv    --sample-years --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_MIROC-ES2L_2026-03-05_1000    --use-csv ./data/input/MIROC-ES2L_historical.csv    --n-bootstrap 1000 --start-year 1960
