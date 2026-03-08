@@ -122,12 +122,6 @@ def main(argv=None):
         help="Also sample years with replacement (time-dimension bootstrap). "
              "Uses weighted fitting instead of observation duplication.",
     )
-    parser.add_argument(
-        "--skip-slow",
-        action="store_true",
-        help="Skip slow approaches (PJ, DJ) during bootstrap to improve speed. "
-             "These approaches require optimization and take ~45s each per iteration.",
-    )
 
     args = parser.parse_args(argv)
     verbose = not args.quiet

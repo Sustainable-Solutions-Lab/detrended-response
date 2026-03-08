@@ -33,8 +33,8 @@ from src.bootstrap import run_bootstrap, compute_bootstrap_statistics, compute_A
 from src.output import save_all_outputs, save_bootstrap_coefficients_csv, save_bootstrap_k_samples_csv, save_bootstrap_h_values, save_all_bootstrap_plots
 import numpy as np
 
-# The 4 approaches to fit
-ESM_APPROACHES = ['Approach QJ', 'Approach QL', 'Approach DL', 'Approach LL']
+# The 6 approaches to fit
+ESM_APPROACHES = ['Approach QJ', 'Approach DJ', 'Approach LJ', 'Approach QL', 'Approach DL', 'Approach LL']
 
 # Available ESM models
 AVAILABLE_MODELS = ['ACCESS-ESM1-5', 'CNRM-ESM2-1', 'MIROC-ES2L']

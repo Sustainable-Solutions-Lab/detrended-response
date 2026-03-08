@@ -300,7 +300,6 @@ def run_bootstrap(
     loess_window: int = None,
     h_T_approaches: list = None,
     sample_years: bool = False,
-    skip_slow: bool = False,
     approaches: list = None,
 ) -> Tuple[Dict[str, BootstrapResult], np.ndarray, Dict[str, np.ndarray], np.ndarray]:
     """Run bootstrap analysis for all methods.
@@ -327,7 +326,6 @@ def run_bootstrap(
             Example: ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL']
         sample_years: If True, also sample years with replacement (time-dimension bootstrap).
             When True, uses weighted fitting instead of observation duplication.
-        skip_slow: If True, skip slow approaches (PJ, DJ) during bootstrap to improve speed.
         approaches: Optional list of approach names to fit (default: None = fit all).
 
     Returns:
@@ -461,7 +459,6 @@ def run_bootstrap(
                     year_means=boot_year_means,
                     trends_loess=boot_trends_loess,
                     weights=weights,
-                    skip_slow=skip_slow,
                     approaches=approaches,
                 )
             else:
@@ -484,7 +481,6 @@ def run_bootstrap(
                     trends_with_k=boot_trends_with_k,
                     year_means=boot_year_means,
                     trends_loess=boot_trends_loess,
-                    skip_slow=skip_slow,
                     approaches=approaches,
                 )
 
@@ -605,10 +601,19 @@ def run_bootstrap(
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
 
                 elif name == 'Approach LL':
-                    # Level effect / first-difference (h4=1): same as DL with h4 fixed at 1.0
+                    # Level effect (h4=1) with LOESS: same as DL with h4 fixed at 1.0
                     h4 = 1.0
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
                     correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_loess_at_base_year)
+                    X1 = data.temp - h4 * A_T_lag - correction_T
+                    X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
+                    h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2
+
+                elif name == 'Approach LJ':
+                    # Level effect (h4=1) with joint OLS: same as DJ with h4 fixed at 1.0
+                    h4 = 1.0
+                    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
+                    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_linear_at_first_year)
                     X1 = data.temp - h4 * A_T_lag - correction_T
                     X2 = data.temp**2 - h4 * A_T2_lag - correction_T2
                     h_T_samples[name][b] = r.h1 * X1 + r.h2 * X2

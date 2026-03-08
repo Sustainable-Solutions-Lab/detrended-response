@@ -14,6 +14,7 @@ Approaches (publication-ready):
     Approach DP: Persistence decay model with polynomial trend identification
     Approach DL: Persistence decay model with LOESS trend identification
     Approach LL: Level effect model (h4=1) with LOESS trend identification
+    Approach LJ: Level effect model (h4=1) with joint OLS
 """
 
 import time
@@ -1932,6 +1933,183 @@ def fit_ApproachDJ_persistence_conjoined(
     )
 
 
+def fit_ApproachLJ_level_effect_conjoined(
+    data: AnalysisData,
+    weights: np.ndarray = None,
+) -> FitResultApproach4:
+    """Approach LJ: Level effect model with joint OLS.
+
+    This is Approach DJ with h4 fixed at 1.0, which means:
+    h_conv(T(t)) = h(T(t)) - h(T(t-1))
+
+    The climate effect depends on the level of temperature, not just changes.
+    With h4=1, the accumulator decay is (1-h4)=0, so the pre-first-year
+    correction vanishes since (1-h4)^k = 0 for k >= 1.
+
+    Combines:
+    - Level effect climate response (h4=1 fixed)
+    - Full OLS estimation of country trends and year effects (like Approach QJ)
+
+    Model: Δy_i(t) = h1*X1 + h2*X2 + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
+
+    where X1 = T(t) - T(t-1), X2 = T²(t) - T²(t-1) (first-differenced).
+
+    Args:
+        data: AnalysisData object
+        weights: Optional observation weights for weighted least squares
+
+    Returns:
+        FitResultApproach4 with h1, h2, h4=1.0 (fixed), and standard errors
+    """
+    h4_val = 1.0
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+
+    # Get unique years
+    unique_years = sorted(set(data.year))
+
+    # When weights provided, only include years with non-zero total weight
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
+
+    # Number of parameters:
+    # - 2 for h1, h2 (h4 is fixed at 1.0)
+    # - 3 * (n_countries - 1) for j terms
+    # - n_active_years for k_t terms
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_active_years
+    n_total_params = 2 + n_j_params + n_k_params
+
+    # Pre-compute design matrix (country trends and year effects)
+    X = np.zeros((n_obs, n_total_params))
+
+    # Country-specific time trends (skip country 0 as reference)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = 2 + 3 * (c - 1)
+            X[i, col_base] = 1.0        # j0[c]
+            X[i, col_base + 1] = t      # j1[c]
+            X[i, col_base + 2] = t * t  # j2[c]
+
+    # Year fixed effects (only active years)
+    k_col_start = 2 + n_j_params
+    for i in range(n_obs):
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X[i, k_col_start + yr_idx] = 1.0
+
+    T = data.temp
+    y = data.growth_pcGDP
+
+    # Compute T_linear at first year for pre-history correction
+    T_linear_first = compute_T_linear_at_first_year(data, weights)
+
+    # Compute accumulators with h4=1 and pre-history correction
+    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_val)
+    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_val, T_linear_first)
+
+    # Modified temperature regressors
+    X1 = T - h4_val * A_T_lag - correction_T
+    X2 = T**2 - h4_val * A_T2_lag - correction_T2
+
+    X[:, 0] = X1
+    X[:, 1] = X2
+
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X)
+
+    h1 = beta[0]
+    h2 = beta[1]
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
+
+    # Extract year fixed effects (NaN for inactive years)
+    k = {}
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
+
+    # Fit statistics (h4 is fixed, only h1 and h2 are free climate params)
+    n_params = 2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_total_params)
+
+    # Total R²
+    total_r_sq = compute_total_r_squared(residuals, y)
+
+    # Optimal temperature
+    T_opt = compute_T_optimal(h1, h2)
+
+    # Compute j_trend and k_values for diagnostics
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = 2 + 3 * (c - 1)
+            j0 = beta[col_base]
+            j1 = beta[col_base + 1]
+            j2 = beta[col_base + 2]
+            j_trend[i] = j0 + j1 * t + j2 * t * t
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
+
+    # Climate response values (modified h_conv)
+    h_conv_values = h1 * X1 + h2 * X2
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_conv_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+
+    # Compute variance attribution
+    Delta_u = h_conv_values
+    v = np.zeros(n_obs)  # No separate baseline for joint approach
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultApproach4(
+        approach="Approach LJ: Level Effect (Joint OLS)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        h4=h4_val,
+        h4_se=0.0,  # h4 is fixed, not estimated
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_ApproachQJ_conjoined(data: AnalysisData, weights: np.ndarray = None) -> FitResult:
     """Approach 0: No pre-detrending, with country time trends and year fixed effects.
 
@@ -2794,7 +2972,6 @@ def fit_all_approaches(
     trends_with_k: CountryTrends = None, year_means: dict = None,
     trends_loess: CountryTrendsLoess = None,
     weights: np.ndarray = None,
-    skip_slow: bool = False,
     approaches: list = None,
 ) -> dict:
     """Fit all approaches and return results.
@@ -2809,6 +2986,7 @@ def fit_all_approaches(
         'Approach LL': Level effect model (h4=1) with LOESS (if trends_loess provided)
         'Approach PJ': Piecewise quadratic with full OLS (like Approach PL + Approach QJ)
         'Approach DJ': Persistence decay with full OLS (like Approach DL + Approach QJ)
+        'Approach LJ': Level effect model (h4=1) with joint OLS
         'Approach NJ': No climate response, joint OLS (country trends + year effects only)
         'Approach NP': No climate response, precomputed k (if trends_with_k and year_means provided)
         'Approach NL': No climate response, LOESS precomputed k (if trends_loess provided)
@@ -2820,7 +2998,6 @@ def fit_all_approaches(
         year_means: Pre-computed k[t] for approaches 1-4
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
         weights: Optional observation weights for weighted least squares (bootstrap)
-        skip_slow: If True, skip slow approaches (PJ, DJ) during bootstrap
         approaches: Optional list of approach names to fit (default: None = fit all)
     """
     results = {}
@@ -2844,11 +3021,12 @@ def fit_all_approaches(
         timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data, weights)
     if should_fit('Approach NJ'):
         timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
-    if not skip_slow:
-        if should_fit('Approach PJ'):
-            timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
-        if should_fit('Approach DJ'):
-            timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
+    if should_fit('Approach PJ'):
+        timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
+    if should_fit('Approach DJ'):
+        timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
+    if should_fit('Approach LJ'):
+        timed_fit('Approach LJ', fit_ApproachLJ_level_effect_conjoined, data, weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:

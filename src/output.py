@@ -52,6 +52,7 @@ APPROACH_COLORS = {
     'Approach PP': 'olive',
     'Approach DP': 'teal',
     'Approach LL': 'blue',
+    'Approach LJ': 'purple',
     'Approach NJ': 'gray',
     'Approach NP': 'gray',
     'Approach NL': 'gray',
