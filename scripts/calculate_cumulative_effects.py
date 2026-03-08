@@ -25,6 +25,7 @@ from src.axes import get_axis_bounds_and_ticks_ln_pct
 from src.detrending import DEFAULT_LOESS_WINDOW_YEARS
 from src.output import (
     APPROACH_COLORS, RESPONSE_TYPE_LABELS, TREND_TYPE_LABELS,
+    RESPONSE_TYPE_ORDER, TREND_TYPE_ORDER,
     build_approach_grid, create_output_dir, add_input_file_annotation,
 )
 
@@ -898,6 +899,305 @@ def plot_cumulative_effects_ApproachDL(
     print(f"      Saved: {output_path}")
 
 
+def build_persistence_grid(approach_keys):
+    """Build NxM grid for D and L response types only."""
+    codes = {}
+    for key in approach_keys:
+        code = key.split()[-1]
+        if code[0] in ('D', 'L'):
+            codes[code] = key
+    response_types = [r for r in RESPONSE_TYPE_ORDER if any(c[0] == r for c in codes)]
+    trend_types = [t for t in TREND_TYPE_ORDER if any(c[1] == t for c in codes)]
+    grid = []
+    for r in response_types:
+        row = []
+        for t in trend_types:
+            row.append(codes.get(r + t))
+        grid.append(row)
+    return grid, response_types, trend_types
+
+
+def plot_cumulative_effects_persistence_by_year(
+    df: pd.DataFrame,
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Create NxM multi-panel plot for D and L response types only.
+
+    Same format as plot_cumulative_effects_by_approach but filtered to persistence/level
+    approaches, giving an expanded y-axis that shows more detail.
+
+    Args:
+        df: DataFrame with cumulative effects for all countries (point estimate)
+        output_dir: Directory to save plot
+        input_file: Input file for annotation
+    """
+    available_approaches = list(df['approach'].unique())
+    grid, response_types, trend_types = build_persistence_grid(available_approaches)
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        print("      No D or L approaches found, skipping persistence by-year plot")
+        return
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.5 * nrows),
+                             sharey=True, sharex=True, squeeze=False)
+
+    row_labels = [RESPONSE_TYPE_LABELS.get(r, r) for r in response_types]
+    col_labels = [TREND_TYPE_LABELS.get(t, t) for t in trend_types]
+
+    all_data_mins = []
+    all_data_maxs = []
+
+    for row_idx in range(nrows):
+        for col_idx in range(ncols):
+            approach = grid[row_idx][col_idx]
+            ax = axes[row_idx, col_idx]
+            display_name = approach if approach else f'Approach {response_types[row_idx]}{trend_types[col_idx]}'
+
+            if approach is None or approach not in available_approaches:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+                ax.set_title(display_name, fontsize=10)
+                if row_idx == 0:
+                    ax.text(0.5, 1.15, col_labels[col_idx], transform=ax.transAxes,
+                            ha='center', va='bottom', fontsize=11, fontweight='bold')
+                if col_idx == 0:
+                    ax.set_ylabel(f'{row_labels[row_idx]}\nCumulative Effect', fontsize=9)
+                if row_idx == nrows - 1:
+                    ax.set_xlabel('Year')
+                continue
+
+            df_approach = df[df['approach'] == approach]
+            years = sorted(df_approach['year'].unique())
+
+            percentiles_by_year = []
+            for year in years:
+                values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
+                percentiles_by_year.append({
+                    'year': year,
+                    'p5': np.percentile(values, 5),
+                    'p25': np.percentile(values, 25),
+                    'p50': np.percentile(values, 50),
+                    'p75': np.percentile(values, 75),
+                    'p95': np.percentile(values, 95),
+                    'min': np.min(values),
+                    'max': np.max(values),
+                })
+
+            df_pct = pd.DataFrame(percentiles_by_year)
+            color = APPROACH_COLORS.get(approach, 'gray')
+
+            all_data_mins.append(df_pct['min'].min())
+            all_data_maxs.append(df_pct['max'].max())
+
+            ax.plot(df_pct['year'], df_pct['min'], color=color, linewidth=0.5, linestyle='-', alpha=0.5, label='Min/Max')
+            ax.plot(df_pct['year'], df_pct['max'], color=color, linewidth=0.5, linestyle='-', alpha=0.5)
+            ax.fill_between(df_pct['year'], df_pct['p5'], df_pct['p95'],
+                            alpha=0.2, color=color, label='90% range')
+            ax.fill_between(df_pct['year'], df_pct['p25'], df_pct['p75'],
+                            alpha=0.4, color=color, label='50% range')
+            ax.plot(df_pct['year'], df_pct['p50'], color=color, linewidth=2, label='Median')
+
+            ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+            ax.set_title(approach, fontsize=10)
+
+            if row_idx == 0:
+                ax.text(0.5, 1.15, col_labels[col_idx], transform=ax.transAxes,
+                        ha='center', va='bottom', fontsize=11, fontweight='bold')
+            if col_idx == 0:
+                ax.set_ylabel(f'{row_labels[row_idx]}\nCumulative Effect', fontsize=9)
+            if row_idx == nrows - 1:
+                ax.set_xlabel('Year')
+            if row_idx == 0 and col_idx == 0:
+                ax.legend(loc='lower left', fontsize=7)
+
+    if all_data_mins:
+        bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+            [min(all_data_mins), max(all_data_maxs)], padding=0.05)
+        for ax in axes.flat:
+            ax.set_ylim(bounds)
+            ax.set_yticks(ticks_vals)
+            ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+
+    output_path = output_dir / f'cumulative_effects_persistence_by_year_{nrows}x{ncols}.pdf'
+    fig.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    print(f"      Saved: {output_path}")
+
+
+def plot_cumulative_effects_persistence_boxplot(
+    df: pd.DataFrame,
+    representatives: dict,
+    output_dir: Path,
+    input_file: str = None
+) -> None:
+    """Create grouped boxplot for D and L response types only.
+
+    Same format as plot_cumulative_effects_by_approach_grouped but filtered to
+    persistence/level approaches, with y-axis scaled to IQR bounds of D/L data.
+
+    Args:
+        df: DataFrame with cumulative effects for representative countries (bootstrap)
+        representatives: Dictionary from select_representative_countries
+        output_dir: Directory to save plot
+        input_file: Input file for annotation
+    """
+    available_approaches = list(df['approach'].unique())
+    grid, response_types, trend_types = build_persistence_grid(available_approaches)
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        print("      No D or L approaches found, skipping persistence boxplot")
+        return
+
+    # Build flat list of approaches ordered by trend type, then response type
+    approaches = []
+    approach_trend_group = []
+    for col_idx, t in enumerate(trend_types):
+        for row_idx, r in enumerate(response_types):
+            name = grid[row_idx][col_idx]
+            if name is not None and name in available_approaches:
+                approaches.append(name)
+                approach_trend_group.append(col_idx)
+
+    n_approaches = len(approaches)
+    if n_approaches == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(max(12, 2 * n_approaches), 6))
+
+    country_keys = get_country_ordering(representatives)
+    n_countries = len(country_keys)
+
+    cluster_width = 0.85
+    box_width = cluster_width / (n_countries + 1)
+    group_gap = 0.6
+
+    last_year = int(df['year'].max())
+    df_last = df[df['year'] == last_year].copy()
+
+    # Compute x-positions with gaps between trend method groups
+    x_positions = []
+    offset = 0.0
+    prev_group = None
+    for i, group_idx in enumerate(approach_trend_group):
+        if prev_group is not None and group_idx != prev_group:
+            offset += group_gap
+        x_positions.append(offset)
+        offset += 1.0
+        prev_group = group_idx
+
+    # Track IQR bounds for y-axis scaling
+    iqr_mins = []
+    iqr_maxs = []
+
+    for i, approach in enumerate(approaches):
+        cluster_center = x_positions[i]
+
+        for j, country_key in enumerate(country_keys):
+            iso3 = representatives[country_key]['iso3']
+
+            mask = (df_last['iso3'] == iso3) & (df_last['approach'] == approach) & (df_last['iteration'] >= 0)
+            bootstrap_values = df_last.loc[mask, 'h_T_delta_cum'].values
+
+            mask_point = (df_last['iso3'] == iso3) & (df_last['approach'] == approach) & (df_last['iteration'] == -1)
+            point_estimate_arr = df_last.loc[mask_point, 'h_T_delta_cum'].values
+            point_estimate = point_estimate_arr[0] if len(point_estimate_arr) > 0 else np.nan
+
+            pos = cluster_center + (j - (n_countries - 1) / 2) * box_width
+
+            color = COUNTRY_COLORS.get(country_key, 'gray')
+            if len(bootstrap_values) > 0:
+                iqr_mins.append(np.percentile(bootstrap_values, 25))
+                iqr_maxs.append(np.percentile(bootstrap_values, 75))
+
+                box = ax.boxplot(
+                    [bootstrap_values],
+                    positions=[pos],
+                    widths=box_width * 0.8,
+                    patch_artist=True,
+                    showfliers=False,
+                    whis=[5, 95],
+                    medianprops=dict(color='black', linewidth=1),
+                )
+                for patch in box['boxes']:
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.7)
+
+            if not np.isnan(point_estimate):
+                ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
+                        markeredgecolor='black', markeredgewidth=1, zorder=10)
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(approaches)
+
+    # Vertical separator lines between trend method groups
+    for i in range(1, len(x_positions)):
+        if approach_trend_group[i] != approach_trend_group[i - 1]:
+            sep_x = (x_positions[i - 1] + x_positions[i]) / 2
+            ax.axvline(x=sep_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
+
+    # Group labels
+    group_centers = []
+    group_labels = []
+    for col_idx, t in enumerate(trend_types):
+        indices = [i for i, g in enumerate(approach_trend_group) if g == col_idx]
+        if indices:
+            center = (x_positions[indices[0]] + x_positions[indices[-1]]) / 2
+            group_centers.append(center)
+            group_labels.append(TREND_TYPE_LABELS.get(t, t))
+
+    # Y-axis: scaled to IQR bounds of D/L data
+    if iqr_mins and iqr_maxs:
+        bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+            [min(iqr_mins), max(iqr_maxs)], padding=0.05)
+        ax.set_ylim(bounds)
+        ax.set_yticks(ticks_vals)
+        ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
+
+    ax.set_ylabel('Cumulative Climate Effect')
+    first_year = int(df['year'].min())
+    ax.set_title(f'Cumulative Climate Effect on GDP Growth ({first_year}-{last_year}) — Persistence/Level Approaches', pad=25)
+    ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+
+    for center, label in zip(group_centers, group_labels):
+        ax.text(center, ax.get_ylim()[1] * 1.02, label, ha='center', va='bottom',
+                fontsize=10, fontweight='bold')
+
+    # Legend for countries
+    legend_handles = []
+    legend_labels = []
+    for country_key in country_keys:
+        color = COUNTRY_COLORS.get(country_key, 'gray')
+        legend_handles.append(plt.Rectangle((0, 0), 1, 1, facecolor=color, alpha=0.7))
+        iso3 = representatives[country_key]['iso3']
+        if country_key == 'min':
+            legend_labels.append(f'{iso3} (min)')
+        elif country_key == 'max':
+            legend_labels.append(f'{iso3} (max)')
+        elif country_key == 5:
+            legend_labels.append(f'{iso3} (P5)')
+        elif country_key == 95:
+            legend_labels.append(f'{iso3} (P95)')
+        else:
+            legend_labels.append(f'{iso3} (P{country_key})')
+    ax.legend(legend_handles, legend_labels, loc='best', fontsize=8)
+
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+
+    output_path = output_dir / 'cumulative_effects_persistence_boxplot.pdf'
+    fig.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+    print(f"      Saved: {output_path}")
+
+
 def select_representative_countries_from_file(
     input_path: Path,
     bootstrap_dir: Path,
@@ -1247,9 +1547,10 @@ def main(argv=None):
     print("\n[6/6] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
 
-    # Additional: Create 2-panel Approach DL plot
-    print("\n[Bonus] Creating Approach DL 2-panel visualization...")
-    plot_cumulative_effects_ApproachDL(df_all_countries, df_summary, representatives, output_dir, input_file)
+    # Persistence/Level focused plots (D and L response types only)
+    print("\n[Bonus] Creating persistence/level cumulative effects plots...")
+    plot_cumulative_effects_persistence_by_year(df_all_countries, output_dir, input_file)
+    plot_cumulative_effects_persistence_boxplot(df_summary, representatives, output_dir, input_file)
 
     print("\n" + "=" * 70)
     print(f"Results saved to: {output_dir}")
