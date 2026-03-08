@@ -92,11 +92,6 @@ def main():
         help="Also sample years with replacement (time-dimension bootstrap)",
     )
     parser.add_argument(
-        "--skip-slow",
-        action="store_true",
-        help="Skip slow approaches (PJ, DJ) during bootstrap",
-    )
-    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress progress messages in bootstrap",
@@ -180,8 +175,6 @@ def main():
         ]
         if args.sample_years:
             bootstrap_args.append("--sample-years")
-        if args.skip_slow:
-            bootstrap_args.append("--skip-slow")
         if args.quiet:
             bootstrap_args.append("--quiet")
         bootstrap_dir = run_bootstrap_main(bootstrap_args)

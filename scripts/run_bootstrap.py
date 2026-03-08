@@ -192,12 +192,11 @@ def main(argv=None):
 
     # Run bootstrap
     bootstrap_type = "country+year" if args.sample_years else "country-only"
-    skip_info = " (skipping PJ/DJ)" if args.skip_slow else ""
-    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed}){skip_info}...")
+    print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed})...")
     # Specify methods for h(T) computation
-    h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL', 'Approach PP', 'Approach DP']
-    if not args.skip_slow:
-        h_T_approaches.extend(['Approach PJ', 'Approach DJ'])
+    h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL',
+                       'Approach PP', 'Approach DP', 'Approach PJ', 'Approach DJ',
+                       'Approach LL', 'Approach LJ']
     bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -208,7 +207,6 @@ def main(argv=None):
         loess_window=loess_window,
         h_T_approaches=h_T_approaches,
         sample_years=args.sample_years,
-        skip_slow=args.skip_slow,
     )
     print("      Done.")
 

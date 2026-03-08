@@ -62,7 +62,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
     - J = Joint OLS solution
     - P = Polynomial trend identification (linear/quadratic)
     - L = LOESS trend identification
-  - Examples: `Approach QJ`, `Approach QP`, `Approach QL`, `Approach PL`, `Approach DL`, `Approach LL`, etc.
+  - Examples: `Approach QJ`, `Approach QP`, `Approach QL`, `Approach PL`, `Approach DL`, `Approach LL`, `Approach LJ`, etc.
 - **Coefficients**: Use `h1`, `h2`, `T_optimal`, `h2_low`, `h2_high` consistently
 - **Bootstrap results**: Use `_samples` suffix for arrays of bootstrap values, `_point` for point estimates
 - Descriptive names preferred - long, clear names are better than short, ambiguous ones
@@ -85,6 +85,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
   - Approach PP: olive
   - Approach DP: teal
   - Approach LL: blue
+  - Approach LJ: purple
   - Approach NJ/Approach NP/Approach NL (null models): gray
 - **Uncertainty bands**: Show 90% CI (lighter) and IQR (darker) for bootstrap results
 - **Year effects**: Plot k(t) with bootstrap uncertainty bands, shared y-axis across methods
