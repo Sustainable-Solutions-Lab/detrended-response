@@ -2123,20 +2123,17 @@ def save_bootstrap_h_values(
                 approach_key = name
 
                 # Compute h(T) for each observation based on approach type
-                if name in ['Approach QJ', 'Approach QP', 'Approach QL']:
+                response_type = name.split()[-1][0]  # 'Q', 'P', 'D', or 'L'
+                if response_type == 'Q':
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
-                elif name in ['Approach PJ', 'Approach PP', 'Approach PL']:
+                elif response_type == 'P':
                     # Piecewise quadratic: h2 below T_opt, h4 above T_opt
                     below = temp_arr <= r.T_opt
                     h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt)**2, r.h4 * (temp_arr - r.T_opt)**2)
-                elif name in ['Approach DJ', 'Approach DP', 'Approach DL']:
-                    # Persistence decay: h_conv(T) = h1*(T - h4*A_T_lag - correction_T) + h2*(T² - h4*A_T2_lag - correction_T2)
-                    # The correction term accounts for assumed constant temperature before first year
-                    # We assume pre-history temperature was T_loess at base year (not actual T at first year)
-                    # This makes the baseline consistent with using T_loess_base in cumulative effects
+                elif response_type in ('D', 'L'):
+                    # Persistence/level decay: h_conv(T) = h1*X1 + h2*X2
                     h4 = r.h4
                     A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4)
-                    # Build array with T_loess at base year for each country's pre-history
                     T_loess_base = _get_T_loess_at_base_year(data, trends_loess, base_year=data.year_range[0])
                     correction_T, correction_T2 = compute_pre_first_year_correction(data, h4, T_loess_base)
                     X1 = temp_arr - h4 * A_T_lag - correction_T
@@ -2244,8 +2241,7 @@ def save_bootstrap_h_baselines(
             country_T_loess_base[iso3] = T_loess[earliest_idx]
 
     # Approaches to process (matching h_T_samples keys)
-    approaches_to_save = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL', 'Approach PJ', 'Approach DJ', 'Approach PP', 'Approach DP']
-    available_approaches = [a for a in approaches_to_save if a in bootstrap_results]
+    available_approaches = [a for a in bootstrap_results if not a.startswith('Approach N')]
 
     rows = []
 
@@ -2268,14 +2264,15 @@ def save_bootstrap_h_baselines(
         # Process each country
         for iso3, T_base in country_T_loess_base.items():
             # Point estimate (iteration = -1)
-            if approach_key in ['Approach PL', 'Approach PJ', 'Approach PP']:
+            response_type = approach_key.split()[-1][0]  # 'Q', 'P', 'D', or 'L'
+            if response_type == 'P':
                 # Piecewise: h2*(T-T_opt)² below, h4*(T-T_opt)² above
                 if T_base <= T_opt_point:
                     h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
                 else:
                     h_T_baseline = h4_point * (T_base - T_opt_point) ** 2
-            elif approach_key in ['Approach DL', 'Approach DJ', 'Approach DP'] and h4_point > 0:
-                # Approach4/6/8 with persistence: baseline = 0
+            elif response_type in ('D', 'L') and h4_point > 0:
+                # Persistence/level with decay: baseline = 0
                 # (constant temperature gives X1=X2=0 due to persistence decay)
                 h_T_baseline = 0.0
             else:
@@ -2295,17 +2292,17 @@ def save_bootstrap_h_baselines(
                 h1_b = h1_samples[b]
                 h2_b = h2_samples[b]
 
-                if approach_key in ['Approach PL', 'Approach PJ', 'Approach PP']:
+                if response_type == 'P':
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     T_opt_b = T_opt_samples[b]
                     if T_base <= T_opt_b:
                         h_T_baseline_b = h2_b * (T_base - T_opt_b) ** 2
                     else:
                         h_T_baseline_b = h4_b * (T_base - T_opt_b) ** 2
-                elif approach_key in ['Approach DL', 'Approach DJ', 'Approach DP']:
+                elif response_type in ('D', 'L'):
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     if h4_b > 0:
-                        # Approach4/6/8 with persistence: baseline = 0
+                        # Persistence/level: baseline = 0
                         h_T_baseline_b = 0.0
                     else:
                         h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
