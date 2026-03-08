@@ -209,10 +209,10 @@ The code implements variants of a temperature–growth panel regression widely u
 Use `--approaches` to run only specific approach codes (first letter = response type, second = trend method):
 
 ```bash
-python ./scripts/main.py --approaches QP LP DP QL LL DL \
+python ./scripts/main.py --approaches QJ LJ DJ QL LL DL \
   --use-csv ./data/input/ACCESS-ESM1-5_historical.csv \
-  --n-bootstrap 1000 --start-year 1960 \
-  --output-dir ./data/output/pipeline_ACCESS-ESM1-5_subset
+  --n-bootstrap 100 --start-year 1960 \
+  --output-dir ./data/output/pipeline_ACCESS-ESM1-5
 ```
 
 This runs only the Quadratic/Level/Decay response types with Polynomial and LOESS trend identification.

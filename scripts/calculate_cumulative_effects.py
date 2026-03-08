@@ -1198,6 +1198,25 @@ def plot_cumulative_effects_persistence_boxplot(
     print(f"      Saved: {output_path}")
 
 
+def _find_reference_approach(input_path: Path) -> str:
+    """Find the best approach to use for representative country selection.
+
+    Prefers Approach QJ, then falls back to the first available quadratic approach,
+    then any available approach.
+    """
+    # Read a small sample to discover available approaches
+    sample = pd.read_csv(input_path, comment='#', nrows=500000)
+    available = set(sample[sample['iteration'] == -1]['approach'].unique())
+    preference_order = ['Approach QJ', 'Approach QP', 'Approach QL',
+                        'Approach LJ', 'Approach LP', 'Approach LL']
+    for pref in preference_order:
+        if pref in available:
+            return pref
+    # Fall back to any non-null approach
+    non_null = [a for a in available if not a.startswith('Approach N')]
+    return non_null[0] if non_null else sorted(available)[0]
+
+
 def select_representative_countries_from_file(
     input_path: Path,
     bootstrap_dir: Path,
@@ -1207,7 +1226,8 @@ def select_representative_countries_from_file(
 ) -> dict:
     """Select representative countries using only point estimate data.
 
-    Loads only iteration=-1, approach=Approach QJ to minimize memory usage.
+    Loads only iteration=-1 for a single reference approach to minimize memory usage.
+    Prefers Approach QJ if available, otherwise falls back to other approaches.
 
     Args:
         input_path: Path to bootstrap_h_values.csv
@@ -1219,27 +1239,28 @@ def select_representative_countries_from_file(
     Returns:
         Dictionary mapping percentile (or 'min'/'max') -> {'iso3': str, 'value': float, 'target': float}
     """
-    print("      Loading point estimate data (iteration=-1, Approach QJ)...")
+    ref_approach = _find_reference_approach(input_path)
+    print(f"      Loading point estimate data (iteration=-1, {ref_approach})...")
 
     # Read CSV in chunks, filtering to only needed rows
     chunks = []
     for chunk in pd.read_csv(input_path, comment='#', chunksize=100000):
-        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == 'Approach QJ')]
+        filtered = chunk[(chunk['iteration'] == -1) & (chunk['approach'] == ref_approach)]
         if len(filtered) > 0:
             chunks.append(filtered)
 
     df = pd.concat(chunks, ignore_index=True)
     print(f"      Loaded {len(df):,} rows for country selection")
 
-    # Load baselines (point estimates only, Approach QJ)
+    # Load baselines (point estimates only, reference approach)
     baselines = load_baselines(bootstrap_dir, iteration=-1)
     if baselines is not None:
-        baselines_ApproachQJ = baselines[baselines['approach'] == 'Approach QJ']
+        baselines_ref = baselines[baselines['approach'] == ref_approach]
         baselines_dict = {
             row['iso3']: row['h_T_baseline']
-            for _, row in baselines_ApproachQJ.iterrows()
+            for _, row in baselines_ref.iterrows()
         }
-        print(f"      Loaded {len(baselines_dict):,} baseline values for Approach QJ")
+        print(f"      Loaded {len(baselines_dict):,} baseline values for {ref_approach}")
     else:
         baselines_dict = {}
 
@@ -1247,7 +1268,7 @@ def select_representative_countries_from_file(
     results = []
     for iso3, group in df.groupby('iso3'):
         h_T_baseline = baselines_dict.get(iso3)
-        processed = process_group(group, 'Approach QJ', loess_window, h_T_baseline=h_T_baseline)
+        processed = process_group(group, ref_approach, loess_window, h_T_baseline=h_T_baseline)
         # Get last year value
         last_year = int(processed['year'].max())
         row_2022 = processed[processed['year'] == last_year]
