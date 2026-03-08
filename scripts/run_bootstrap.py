@@ -122,6 +122,15 @@ def main(argv=None):
         help="Also sample years with replacement (time-dimension bootstrap). "
              "Uses weighted fitting instead of observation duplication.",
     )
+    parser.add_argument(
+        "--approaches",
+        nargs="+",
+        default=None,
+        help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
+             "First letter: N/Q/P/D/L (response type). "
+             "Second letter: J/P/L (trend method). "
+             "Default: fit all approaches.",
+    )
 
     args = parser.parse_args(argv)
     verbose = not args.quiet
@@ -181,22 +190,27 @@ def main(argv=None):
     print("      Done.")
 
     # Fit original model (point estimates)
+    approach_names = [f"Approach {code}" for code in args.approaches] if args.approaches else None
     print("\n[3/7] Fitting original model (point estimates)...")
     original_results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
         year_means=year_means,
-        trends_loess=trends_loess
+        trends_loess=trends_loess,
+        approaches=approach_names,
     )
     print("      Done.")
 
     # Run bootstrap
     bootstrap_type = "country+year" if args.sample_years else "country-only"
     print(f"\n[4/7] Running bootstrap ({args.n_bootstrap} iterations, {bootstrap_type}, seed={args.random_seed})...")
-    # Specify methods for h(T) computation
-    h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL',
-                       'Approach PP', 'Approach DP', 'Approach PJ', 'Approach DJ',
-                       'Approach LL', 'Approach LJ']
+    # Specify methods for h(T) computation — use selected approaches or all non-null
+    if approach_names is not None:
+        h_T_approaches = [a for a in approach_names if not a.startswith('Approach N')]
+    else:
+        h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL',
+                           'Approach PP', 'Approach DP', 'Approach PJ', 'Approach DJ',
+                           'Approach LL', 'Approach LJ']
     bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
         trends=trends,
@@ -207,6 +221,7 @@ def main(argv=None):
         loess_window=loess_window,
         h_T_approaches=h_T_approaches,
         sample_years=args.sample_years,
+        approaches=approach_names,
     )
     print("      Done.")
 

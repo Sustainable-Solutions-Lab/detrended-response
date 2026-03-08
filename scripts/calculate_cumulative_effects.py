@@ -23,7 +23,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.axes import get_axis_bounds_and_ticks_ln_pct
 from src.detrending import DEFAULT_LOESS_WINDOW_YEARS
-from src.output import APPROACH_COLORS, create_output_dir, add_input_file_annotation
+from src.output import (
+    APPROACH_COLORS, RESPONSE_TYPE_LABELS, TREND_TYPE_LABELS,
+    build_approach_grid, create_output_dir, add_input_file_annotation,
+)
 
 
 def find_most_recent_dir(pattern: str) -> str:
@@ -74,12 +77,6 @@ def load_run_metadata(directory: Path) -> dict:
 
 # Central approaches for analysis (in display order)
 CENTRAL_APPROACHES_POINT = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL']
-# All 9 approaches grouped by method (J, P, L) for boxplot figures
-CENTRAL_APPROACHES_BOXPLOT = [
-    'Approach QJ', 'Approach PJ', 'Approach DJ',
-    'Approach QP', 'Approach PP', 'Approach DP',
-    'Approach QL', 'Approach PL', 'Approach DL',
-]
 
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
@@ -209,12 +206,15 @@ def plot_cumulative_effects_by_approach_grouped(
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create clustered box-and-whisker plot grouped by approach.
+    """Create clustered box-and-whisker plot grouped by trend identification method.
 
     Plots h_T_delta_cum values directly (already in log space as sum of log changes).
     Y-axis labels show equivalent percent changes, with symmetric scaling so that
     -50% and +100% are equidistant from 0.
-    Groups by approach with country bars per approach cluster.
+
+    Groups by trend identification method (J, P, L columns), with response type
+    clusters (Q, P, D, L) within each group. Country boxes are clustered within
+    each approach.
 
     Args:
         df: DataFrame with cumulative effects for representative countries
@@ -222,11 +222,30 @@ def plot_cumulative_effects_by_approach_grouped(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    fig, ax = plt.subplots(figsize=(18, 6))
+    # Build grid from available approaches in the data
+    available_approaches = list(df['approach'].unique())
+    grid, response_types, trend_types = build_approach_grid(available_approaches)
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
 
-    # Use central approaches in consistent order
-    approaches = CENTRAL_APPROACHES_BOXPLOT
+    # Build flat list of approaches ordered by trend type, then response type
+    # (columns of the grid transposed)
+    approaches = []
+    approach_trend_group = []  # which trend group index each approach belongs to
+    for col_idx, t in enumerate(trend_types):
+        for row_idx, r in enumerate(response_types):
+            name = grid[row_idx][col_idx]
+            if name is not None and name in available_approaches:
+                approaches.append(name)
+                approach_trend_group.append(col_idx)
+
     n_approaches = len(approaches)
+    if n_approaches == 0:
+        return
+
+    fig, ax = plt.subplots(figsize=(max(12, 2 * n_approaches), 6))
 
     # Get ordered country keys (min, P5, P25, P50, P75, P95, max)
     country_keys = get_country_ordering(representatives)
@@ -234,21 +253,36 @@ def plot_cumulative_effects_by_approach_grouped(
 
     # Spacing parameters
     cluster_width = 0.85
-    box_width = cluster_width / (n_countries + 1)  # Extra space between clusters
-    group_gap = 0.6  # Extra space between method groups (J, P, L)
+    box_width = cluster_width / (n_countries + 1)
+    group_gap = 0.6  # Extra space between trend method groups
 
     # Filter to last year for final values
     last_year = int(df['year'].max())
     df_2022 = df[df['year'] == last_year].copy()
 
-    # Compute x-positions with gaps between groups
-    # Groups: [0,1,2] = J methods, [3,4,5] = P methods, [6,7,8] = L methods
+    # Compute x-positions with gaps between trend method groups
     x_positions = []
-    for i in range(n_approaches):
-        group_idx = i // 3  # Which group (0=J, 1=P, 2=L)
-        pos_in_group = i % 3  # Position within group
-        x_pos = group_idx * (3 + group_gap) + pos_in_group
-        x_positions.append(x_pos)
+    pos_in_group = 0
+    prev_group = approach_trend_group[0] if approach_trend_group else 0
+    for i, group_idx in enumerate(approach_trend_group):
+        if group_idx != prev_group:
+            pos_in_group = 0
+            prev_group = group_idx
+        x_pos = group_idx * (len([g for g in approach_trend_group if g == group_idx]) + group_gap)
+        # Simpler: accumulate positions sequentially with gaps at group boundaries
+        x_positions.append(0)  # placeholder
+        pos_in_group += 1
+
+    # Recompute positions more cleanly
+    x_positions = []
+    offset = 0.0
+    prev_group = None
+    for i, group_idx in enumerate(approach_trend_group):
+        if prev_group is not None and group_idx != prev_group:
+            offset += group_gap  # add gap between groups
+        x_positions.append(offset)
+        offset += 1.0
+        prev_group = group_idx
 
     # Create box plots - grouped by approach
     for i, approach in enumerate(approaches):
@@ -259,7 +293,6 @@ def plot_cumulative_effects_by_approach_grouped(
 
             # Get bootstrap samples (iterations 0-999) for this country/approach
             mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
-            # h_T_delta_cum is already in log space (sum of log changes), use directly
             bootstrap_values = df_2022.loc[mask, 'h_T_delta_cum'].values
 
             # Get point estimate (iteration -1)
@@ -270,7 +303,7 @@ def plot_cumulative_effects_by_approach_grouped(
             # Position for this box
             pos = cluster_center + (j - (n_countries - 1) / 2) * box_width
 
-            # Draw box - color by country (only if we have valid bootstrap data)
+            # Draw box - color by country
             color = COUNTRY_COLORS.get(country_key, 'gray')
             if len(bootstrap_values) > 0:
                 box = ax.boxplot(
@@ -279,16 +312,15 @@ def plot_cumulative_effects_by_approach_grouped(
                     widths=box_width * 0.8,
                     patch_artist=True,
                     showfliers=False,
-                    whis=[5, 95],  # Whiskers at 5th and 95th percentile
+                    whis=[5, 95],
                     medianprops=dict(color='black', linewidth=1),
                 )
 
-                # Color the box
                 for patch in box['boxes']:
                     patch.set_facecolor(color)
                     patch.set_alpha(0.7)
 
-            # Add point estimate as diamond marker (only if we have a valid estimate)
+            # Add point estimate as diamond marker
             if not np.isnan(point_estimate):
                 ax.plot(pos, point_estimate, 'd', color='white', markersize=6,
                         markeredgecolor='black', markeredgewidth=1, zorder=10)
@@ -297,21 +329,21 @@ def plot_cumulative_effects_by_approach_grouped(
     ax.set_xticks(x_positions)
     ax.set_xticklabels(approaches)
 
-    # Add vertical separator lines between method groups
-    # Lines go between positions 2 and 3, and between 5 and 6
-    y_min, y_max = ax.get_ylim()
-    sep1_x = (x_positions[2] + x_positions[3]) / 2
-    sep2_x = (x_positions[5] + x_positions[6]) / 2
-    ax.axvline(x=sep1_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
-    ax.axvline(x=sep2_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
+    # Add vertical separator lines between trend method groups
+    for i in range(1, len(x_positions)):
+        if approach_trend_group[i] != approach_trend_group[i - 1]:
+            sep_x = (x_positions[i - 1] + x_positions[i]) / 2
+            ax.axvline(x=sep_x, color='gray', linestyle='-', linewidth=1, alpha=0.5)
 
-    # Add group labels at top
-    group_centers = [
-        (x_positions[0] + x_positions[2]) / 2,  # J group center
-        (x_positions[3] + x_positions[5]) / 2,  # P group center
-        (x_positions[6] + x_positions[8]) / 2,  # L group center
-    ]
-    group_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
+    # Compute group centers and labels for trend method groups
+    group_centers = []
+    group_labels = []
+    for col_idx, t in enumerate(trend_types):
+        indices = [i for i, g in enumerate(approach_trend_group) if g == col_idx]
+        if indices:
+            center = (x_positions[indices[0]] + x_positions[indices[-1]]) / 2
+            group_centers.append(center)
+            group_labels.append(TREND_TYPE_LABELS.get(t, t))
 
     # Y-axis: dynamic bounds from data
     all_vals = df_2022['h_T_delta_cum'].values
@@ -333,9 +365,6 @@ def plot_cumulative_effects_by_approach_grouped(
                 fontsize=10, fontweight='bold')
 
     # Legend for countries
-    # Labels clarify that percentiles are of the cumulative effect distribution:
-    # - Low percentiles (P5) = most negative effect = most hurt by climate
-    # - High percentiles (P95) = most positive effect = most helped by climate
     legend_handles = []
     legend_labels = []
     for country_key in country_keys:
@@ -510,15 +539,10 @@ def plot_cumulative_effects_by_approach(
     output_dir: Path,
     input_file: str = None
 ) -> None:
-    """Create 3x3 multi-panel plot showing cumulative effect distribution across countries.
+    """Create NxM multi-panel plot showing cumulative effect distribution across countries.
 
-    Layout:
-        Rows = response functions (1=quadratic, 2=piecewise, 3=persistence)
-        Columns = methods (J=Joint, P=Polynomial, L=LOESS)
-
-        Row 0: Approach QJ, Approach QP, Approach QL
-        Row 1: Approach PJ, Approach PP, Approach PL
-        Row 2: Approach DJ, Approach DP, Approach DL
+    Grid dimensions are determined dynamically from the approaches present in the data.
+    Rows = response functions, Columns = trend identification methods.
 
     Each panel shows one approach with:
     - 90% range (5th-95th percentile) as light shading
@@ -532,36 +556,42 @@ def plot_cumulative_effects_by_approach(
         output_dir: Directory to save plot
         input_file: Input file for annotation
     """
-    # 3x3 grid: rows = response functions (1,2,3), columns = methods (J,P,L)
-    approach_order = [
-        ['Approach QJ', 'Approach QP', 'Approach QL'],
-        ['Approach PJ', 'Approach PP', 'Approach PL'],
-        ['Approach DJ', 'Approach DP', 'Approach DL'],
-    ]
+    available_approaches = list(df['approach'].unique())
+    grid, response_types, trend_types = build_approach_grid(available_approaches)
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
 
-    # Check for missing approaches
-    available_approaches = set(df['approach'].unique())
-    all_approaches = [a for row in approach_order for a in row]
-    missing_approaches = [a for a in all_approaches if a not in available_approaches]
-    if missing_approaches:
-        raise ValueError(
-            f"Missing approaches in data: {missing_approaches}. "
-            f"Available: {sorted(available_approaches)}. "
-            f"You may need to re-run run_bootstrap.py to generate data for all approaches."
-        )
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3.5 * nrows),
+                             sharey=True, sharex=True, squeeze=False)
 
-    fig, axes = plt.subplots(3, 3, figsize=(12, 10), sharey=True, sharex=True)
-
-    # Row and column labels
-    row_labels = ['Quadratic (Q)', 'Piecewise (P)', 'Decay (D)']
-    col_labels = ['Joint (J)', 'Polynomial (P)', 'LOESS (L)']
+    row_labels = [RESPONSE_TYPE_LABELS.get(r, r) for r in response_types]
+    col_labels = [TREND_TYPE_LABELS.get(t, t) for t in trend_types]
 
     all_data_mins = []
     all_data_maxs = []
 
-    for row_idx, row_approaches in enumerate(approach_order):
-        for col_idx, approach in enumerate(row_approaches):
+    for row_idx in range(nrows):
+        for col_idx in range(ncols):
+            approach = grid[row_idx][col_idx]
             ax = axes[row_idx, col_idx]
+            display_name = approach if approach else f'Approach {response_types[row_idx]}{trend_types[col_idx]}'
+
+            if approach is None or approach not in available_approaches:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.axhline(y=0, color='gray', linestyle='--', linewidth=0.5)
+                ax.set_title(display_name, fontsize=10)
+                if row_idx == 0:
+                    ax.text(0.5, 1.15, col_labels[col_idx], transform=ax.transAxes,
+                            ha='center', va='bottom', fontsize=11, fontweight='bold')
+                if col_idx == 0:
+                    ax.set_ylabel(f'{row_labels[row_idx]}\nCumulative Effect', fontsize=9)
+                if row_idx == nrows - 1:
+                    ax.set_xlabel('Year')
+                continue
 
             # Filter to this approach
             df_approach = df[df['approach'] == approach]
@@ -570,7 +600,6 @@ def plot_cumulative_effects_by_approach(
             years = sorted(df_approach['year'].unique())
 
             # Calculate percentiles across countries for each year
-            # h_T_delta_cum is already in log space (sum of log changes), use directly
             percentiles_by_year = []
             for year in years:
                 values = df_approach[df_approach['year'] == year]['h_T_delta_cum'].values
@@ -589,7 +618,6 @@ def plot_cumulative_effects_by_approach(
 
             color = APPROACH_COLORS.get(approach, 'gray')
 
-            # Values are already in log space, use directly
             p5 = df_pct['p5']
             p25 = df_pct['p25']
             p50 = df_pct['p50']
@@ -634,7 +662,7 @@ def plot_cumulative_effects_by_approach(
                 ax.set_ylabel(f'{row_labels[row_idx]}\nCumulative Effect', fontsize=9)
 
             # X-axis label (bottom row only)
-            if row_idx == 2:
+            if row_idx == nrows - 1:
                 ax.set_xlabel('Year')
 
             # Legend (top-left panel only)
@@ -642,12 +670,13 @@ def plot_cumulative_effects_by_approach(
                 ax.legend(loc='lower left', fontsize=7)
 
     # Set y-axis from global data range across all panels
-    bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
-        [min(all_data_mins), max(all_data_maxs)], padding=0.05)
-    for ax in axes.flat:
-        ax.set_ylim(bounds)
-        ax.set_yticks(ticks_vals)
-        ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
+    if all_data_mins:
+        bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+            [min(all_data_mins), max(all_data_maxs)], padding=0.05)
+        for ax in axes.flat:
+            ax.set_ylim(bounds)
+            ax.set_yticks(ticks_vals)
+            ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
 
     plt.tight_layout()
 
@@ -655,7 +684,7 @@ def plot_cumulative_effects_by_approach(
     add_input_file_annotation(fig, input_file)
 
     # Save
-    output_path = output_dir / 'cumulative_effects_by_year.pdf'
+    output_path = output_dir / f'cumulative_effects_by_year_{nrows}x{ncols}.pdf'
     fig.savefig(output_path, bbox_inches='tight', dpi=300)
     plt.close(fig)
     print(f"      Saved: {output_path}")

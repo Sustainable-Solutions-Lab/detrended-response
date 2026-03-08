@@ -97,6 +97,15 @@ def main():
         help="Suppress progress messages in bootstrap",
     )
     parser.add_argument(
+        "--approaches",
+        nargs="+",
+        default=None,
+        help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
+             "First letter: N/Q/P/D/L (response type). "
+             "Second letter: J/P/L (trend method). "
+             "Default: fit all approaches.",
+    )
+    parser.add_argument(
         "--pipeline-dir",
         type=str,
         default=None,
@@ -153,6 +162,8 @@ def main():
             shared_args += ["--mean-weight-distance", str(args.mean_weight_distance)]
         if args.start_year is not None:
             shared_args += ["--start-year", str(args.start_year)]
+        if args.approaches is not None:
+            shared_args += ["--approaches"] + args.approaches
 
         # Step 1: Analysis
         print("\n" + "#" * 70)

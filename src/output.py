@@ -5636,6 +5636,18 @@ def plot_temperature_derivative_4panel_variants(
 RESPONSE_TYPE_ORDER = ['Q', 'P', 'D', 'L']
 TREND_TYPE_ORDER = ['J', 'P', 'L']
 
+RESPONSE_TYPE_LABELS = {
+    'Q': 'Quadratic (Q)',
+    'P': 'Piecewise (P)',
+    'D': 'Decay (D)',
+    'L': 'Level (L)',
+}
+TREND_TYPE_LABELS = {
+    'J': 'Joint (J)',
+    'P': 'Polynomial (P)',
+    'L': 'LOESS (L)',
+}
+
 
 def build_approach_grid(approach_keys):
     """Build NxM grid from approach names, ordered by canonical type ordering.
