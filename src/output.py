@@ -1,5 +1,6 @@
 """Output and visualization for detrended response analysis."""
 
+import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -619,37 +620,64 @@ def _plot_temperature_response_subset(
     plt.close()
 
 
+def _plot_temperature_response_panels(
+    results: Dict[str, FitResult], output_dir: Path,
+    T_range: tuple = (0, 30), input_file: str = None
+) -> None:
+    """Plot h(T) - h(T*) with one subplot per approach."""
+    valid = [(name, r) for name, r in results.items()
+             if not np.isnan(getattr(r, 'T_opt', np.nan))]
+    if not valid:
+        return
+
+    n = len(valid)
+    ncols = min(n, 3)
+    nrows = math.ceil(n / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             sharey=True, squeeze=False)
+
+    T = np.linspace(T_range[0], T_range[1], TEMPERATURE_PLOT_POINTS)
+
+    for idx, (name, r) in enumerate(valid):
+        ax = axes[idx // ncols][idx % ncols]
+        h_relative = compute_h_response(T, r)
+        ax.plot(T, h_relative, color=get_color(name, 'gray'),
+                linestyle=get_linestyle(name, '-'), linewidth=2)
+        ax.axvline(r.T_opt, color=get_color(name, 'gray'), linestyle=':', alpha=0.5)
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_title(f"{r.approach} (T_opt = {r.T_opt:.1f}°C)", fontsize=11)
+        ax.set_xlim(T_range)
+        ax.grid(True, alpha=0.3)
+        if idx // ncols == nrows - 1:
+            ax.set_xlabel('Temperature (°C)')
+        if idx % ncols == 0:
+            ax.set_ylabel('h(T) - h(T_opt)')
+
+    for idx in range(n, nrows * ncols):
+        axes[idx // ncols][idx % ncols].set_visible(False)
+
+    fig.suptitle('Temperature Response by Approach', fontsize=14)
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / 'temperature_response_panels.pdf')
+    plt.close()
+
+
 def plot_temperature_response(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
     input_file: str = None
 ) -> None:
-    """Plot h(T) - h(T*) for methods, generating three separate plots."""
-    # Plot 1: Basic methods (method0, method1)
+    """Plot h(T) - h(T*): combined plot and per-approach panels."""
     _plot_temperature_response_subset(
         results, output_dir,
-        approaches=['Approach QJ', 'Approach QP'],
-        filename='temperature_response_all.pdf',
-        title_suffix='Basic Methods',
+        approaches=list(results.keys()),
+        filename='temperature_response_combined.pdf',
+        title_suffix='All Approaches',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Precomputed k methods (method1)
-    _plot_temperature_response_subset(
-        results, output_dir,
-        approaches=['Approach QJ', 'Approach QP'],
-        filename='temperature_response_precomputed_k.pdf',
-        title_suffix='Precomputed k Methods',
-        T_range=T_range,
-        input_file=input_file
-    )
-    # Plot 3: LOESS methods (Approach QL, Approach PL, Approach DL)
-    _plot_temperature_response_subset(
-        results, output_dir,
-        approaches=['Approach QL', 'Approach PL', 'Approach DL'],
-        filename='temperature_response_loess.pdf',
-        title_suffix='LOESS Methods',
-        T_range=T_range,
-        input_file=input_file
+    _plot_temperature_response_panels(
+        results, output_dir, T_range=T_range, input_file=input_file
     )
 
 
@@ -696,37 +724,63 @@ def _plot_temperature_derivative_subset(
     plt.close()
 
 
+def _plot_temperature_derivative_panels(
+    results: Dict[str, FitResult], output_dir: Path,
+    T_range: tuple = (0, 30), input_file: str = None
+) -> None:
+    """Plot dh/dT with one subplot per approach."""
+    valid = [(name, r) for name, r in results.items()
+             if not np.isnan(getattr(r, 'T_opt', np.nan))]
+    if not valid:
+        return
+
+    n = len(valid)
+    ncols = min(n, 3)
+    nrows = math.ceil(n / ncols)
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             sharey=True, squeeze=False)
+
+    T = np.linspace(T_range[0], T_range[1], TEMPERATURE_PLOT_POINTS)
+
+    for idx, (name, r) in enumerate(valid):
+        ax = axes[idx // ncols][idx % ncols]
+        dh_dT = compute_dh_dT(T, r)
+        ax.plot(T, dh_dT, color=get_color(name, 'gray'),
+                linestyle=get_linestyle(name, '-'), linewidth=2)
+        ax.axhline(0, color='gray', linewidth=0.5)
+        ax.set_title(r.approach, fontsize=11)
+        ax.set_xlim(T_range)
+        ax.grid(True, alpha=0.3)
+        if idx // ncols == nrows - 1:
+            ax.set_xlabel('Temperature (°C)')
+        if idx % ncols == 0:
+            ax.set_ylabel('dh/dT')
+
+    for idx in range(n, nrows * ncols):
+        axes[idx // ncols][idx % ncols].set_visible(False)
+
+    fig.suptitle('Temperature Derivative by Approach', fontsize=14)
+    plt.tight_layout()
+    add_input_file_annotation(fig, input_file)
+    plt.savefig(output_dir / 'temperature_derivative_panels.pdf')
+    plt.close()
+
+
 def plot_temperature_derivative(
     results: Dict[str, FitResult], output_dir: Path, T_range: tuple = (0, 30),
     input_file: str = None
 ) -> None:
-    """Plot dh/dT for methods, generating three separate plots."""
-    # Plot 1: Basic methods (method0, method1)
+    """Plot dh/dT: combined plot and per-approach panels."""
     _plot_temperature_derivative_subset(
         results, output_dir,
-        approaches=['Approach QJ', 'Approach QP'],
-        filename='temperature_derivative_all.pdf',
-        title_suffix='Basic Methods',
+        approaches=list(results.keys()),
+        filename='temperature_derivative_combined.pdf',
+        title_suffix='All Approaches',
         T_range=T_range,
         input_file=input_file
     )
-    # Plot 2: Precomputed k methods (method1)
-    _plot_temperature_derivative_subset(
-        results, output_dir,
-        approaches=['Approach QJ', 'Approach QP'],
-        filename='temperature_derivative_precomputed_k.pdf',
-        title_suffix='Precomputed k Methods',
-        T_range=T_range,
-        input_file=input_file
-    )
-    # Plot 3: LOESS methods (Approach QL, Approach PL, Approach DL)
-    _plot_temperature_derivative_subset(
-        results, output_dir,
-        approaches=['Approach QL', 'Approach PL', 'Approach DL'],
-        filename='temperature_derivative_loess.pdf',
-        title_suffix='LOESS Methods',
-        T_range=T_range,
-        input_file=input_file
+    _plot_temperature_derivative_panels(
+        results, output_dir, T_range=T_range, input_file=input_file
     )
 
 
