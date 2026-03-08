@@ -92,8 +92,6 @@ Key options:
 - `--random-seed SEED` (default 42)
 - `--sample-years`  
   additionally resamples years with replacement and fits via weighted least squares
-- `--skip-slow`  
-  skips the slowest approaches (PJ, DJ) during bootstrap
 - `--loess-window YEARS`  
   LOESS bandwidth for approaches that use LOESS detrending
 - `--output-dir PATH`  
