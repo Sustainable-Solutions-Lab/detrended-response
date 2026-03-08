@@ -1579,61 +1579,40 @@ def generate_figures(
         print("      [Figures] Saved fig_year_effects_main.pdf")
 
     # =========================================================================
-    # 3x3 and 4x3 Grid Figures (all 9 main approaches)
+    # Grid Figures (dynamically sized based on approaches present)
     # =========================================================================
 
-    # Temperature response 3x3 grid
+    # Temperature response grid
     if data is not None:
-        print("      [Figures] Generating temperature response figure (3x3 grid)...")
+        print("      [Figures] Generating temperature response grid figure...")
         plot_temperature_response_3x3(
-            results,
-            data,
-            output_dir,
-            filename='fig_temperature_response_3x3.pdf',
-            T_range=(0, 30),
-            input_file=None,
+            results, data, output_dir,
+            T_range=(0, 30), input_file=None,
         )
-        print("      [Figures] Saved fig_temperature_response_3x3.pdf")
 
-    # Figure 12: Temperature derivative 3x3 grid
-    print("      [Figures] Generating temperature derivative figure (3x3 grid)...")
+    # Temperature derivative grid
+    print("      [Figures] Generating temperature derivative grid figure...")
     plot_temperature_derivative_3x3(
-        results,
-        output_dir,
-        filename='fig_temperature_derivative_3x3.pdf',
-        T_range=(0, 30),
-        input_file=None,
+        results, output_dir,
+        T_range=(0, 30), input_file=None,
     )
-    print("      [Figures] Saved fig_temperature_derivative_3x3.pdf")
 
-    # Figure 13: T_optimal histogram 3x3 grid
-    print("      [Figures] Generating T_optimal histogram figure (3x3 grid)...")
+    # T_optimal histogram grid
+    print("      [Figures] Generating T_optimal histogram grid figure...")
     plot_T_optimal_histogram_3x3(
-        results,
-        output_dir,
-        filename='fig_T_optimal_histogram_3x3.pdf',
-        input_file=None,
+        results, output_dir, input_file=None,
     )
-    print("      [Figures] Saved fig_T_optimal_histogram_3x3.pdf")
 
-    # Figure 14: h2 histogram 4x3 grid (separate rows for piecewise h2 and h4)
-    print("      [Figures] Generating h2 histogram figure (4x3 grid)...")
+    # h2 histogram grid
+    print("      [Figures] Generating h2 histogram grid figure...")
     plot_h2_histogram_4x3(
-        results,
-        output_dir,
-        filename='fig_h2_histogram_4x3.pdf',
-        input_file=None,
+        results, output_dir, input_file=None,
     )
-    print("      [Figures] Saved fig_h2_histogram_4x3.pdf")
 
-    # Figure 15: h4 histogram 1x3 row (persistence approaches only)
-    print("      [Figures] Generating h4 histogram figure (1x3 row)...")
+    # h4 histogram row (persistence approaches only)
+    print("      [Figures] Generating h4 histogram figure...")
     plot_h4_histogram_1x3(
-        results,
-        output_dir,
-        filename='fig_h4_histogram_1x3.pdf',
-        input_file=None,
+        results, output_dir, input_file=None,
     )
-    print("      [Figures] Saved fig_h4_histogram_1x3.pdf")
 
     # Note: Year effects figure is now fig_year_effects_main.pdf (separate from temperature response)

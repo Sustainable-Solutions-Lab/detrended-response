@@ -100,6 +100,15 @@ def main(argv=None):
         help="Mean weighting distance in years for LOESS. Window = 44/7 * this value. "
              "If specified, adds '_mwXX' suffix to output directory.",
     )
+    parser.add_argument(
+        "--approaches",
+        nargs="+",
+        default=None,
+        help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
+             "First letter: N/Q/P/D/L (response type). "
+             "Second letter: J/P/L (trend method). "
+             "Default: fit all approaches.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -170,13 +179,15 @@ def main(argv=None):
     print(f"      Time: {t_loess:.3f}s")
 
     # Fit all methods
+    approach_names = [f"Approach {code}" for code in args.approaches] if args.approaches else None
     print("\n[4/5] Fitting all methods...")
     t_start = time.perf_counter()
     results = fit_all_approaches(
         data, trends,
         trends_with_k=trends_with_k,
         year_means=year_means,
-        trends_loess=trends_loess
+        trends_loess=trends_loess,
+        approaches=approach_names,
     )
     t_fit = time.perf_counter() - t_start
 
@@ -227,13 +238,14 @@ def main(argv=None):
     else:
         output_dir = create_output_dir(prefix="analysis_", suffix=mw_suffix)
 
-    # Define approach order for output tables
-    approach_order = [
+    # Define approach order for output tables (filter to only fitted approaches)
+    all_approach_order = [
         'Approach NJ', 'Approach NP', 'Approach NL',
         'Approach QJ', 'Approach QP', 'Approach QL',
         'Approach PJ', 'Approach PP', 'Approach PL',
         'Approach DJ', 'Approach DP', 'Approach DL',
     ]
+    approach_order = [a for a in all_approach_order if a in results]
     save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)
     t_output = time.perf_counter() - t_start
 

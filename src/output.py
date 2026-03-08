@@ -5633,44 +5633,68 @@ def plot_temperature_derivative_4panel_variants(
 # - Rows = Climate response functions (1=quadratic, 2=piecewise, 3=persistence)
 # - Columns = Solution methods (J=Joint, P=Polynomial, L=LOESS)
 #
-# Grid arrangement:
-#   Approach QJ  Approach QP  Approach QL    (Row 0: Quadratic)
-#   Approach PJ  Approach PP  Approach PL    (Row 1: Piecewise)
-#   Approach DJ  Approach DP  Approach DL    (Row 2: Persistence)
+RESPONSE_TYPE_ORDER = ['Q', 'P', 'D', 'L']
+TREND_TYPE_ORDER = ['J', 'P', 'L']
 
-APPROACH_ORDER_3X3 = [
-    ['Approach QJ', 'Approach QP', 'Approach QL'],
-    ['Approach PJ', 'Approach PP', 'Approach PL'],
-    ['Approach DJ', 'Approach DP', 'Approach DL'],
-]
+
+def build_approach_grid(approach_keys):
+    """Build NxM grid from approach names, ordered by canonical type ordering.
+
+    Excludes N-type (null model) approaches — they have no climate response
+    to plot on temperature response, derivative, or coefficient figures.
+
+    Returns (grid, response_types, trend_types) where grid[i][j] is an
+    approach name or None.
+    """
+    codes = {}
+    for key in approach_keys:
+        code = key.split()[-1]  # "Approach QJ" → "QJ"
+        if code[0] != 'N':  # Exclude null models
+            codes[code] = key
+    response_types = [r for r in RESPONSE_TYPE_ORDER if any(c[0] == r for c in codes)]
+    trend_types = [t for t in TREND_TYPE_ORDER if any(c[1] == t for c in codes)]
+    grid = []
+    for r in response_types:
+        row = []
+        for t in trend_types:
+            code = r + t
+            row.append(codes.get(code))  # None if not in results
+        grid.append(row)
+    return grid, response_types, trend_types
 
 
 def plot_temperature_response_3x3(
     results: Dict[str, "BootstrapResult"],
     data: AnalysisData,
     output_dir: Path,
-    filename: str = 'fig_temperature_response_3x3.pdf',
+    filename: str = None,
     T_range: tuple = (0, 30),
     input_file: str = None,
 ) -> None:
-    """Plot 3x3 temperature response figure (h(T) - h(T_opt)).
+    """Plot NxM temperature response figure (h(T) - h(T_opt)).
 
-    Creates a 3x3 figure with temperature response curves and uncertainty bands.
-    Layout:
-        Row 0: Approach QJ, Approach QP, Approach QL (Quadratic)
-        Row 1: Approach PJ, Approach PP, Approach PL (Piecewise)
-        Row 2: Approach DJ, Approach DP, Approach DL (Persistence)
+    Grid dimensions are determined dynamically from the approaches present
+    in results.
 
     Args:
         results: Dict of BootstrapResult for each approach
         data: AnalysisData for temperature histogram
         output_dir: Directory to save the plot
-        filename: Output filename
+        filename: Output filename (default: auto-sized, e.g. fig_temperature_response_3x3.pdf)
         T_range: Temperature range for x-axis (default: (0, 30))
         input_file: Optional input file path for annotation
     """
-    # Create 3x3 figure
-    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+    grid, response_types, trend_types = build_approach_grid(results.keys())
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
+
+    if filename is None:
+        filename = f'fig_temperature_response_{nrows}x{ncols}.pdf'
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
 
     # Temperature array for response plots
     T = np.linspace(T_range[0], T_range[1], 200)
@@ -5685,10 +5709,10 @@ def plot_temperature_response_3x3(
     # Pre-compute uncertainty bands and point estimates for all approaches
     precomputed = {}
     iqr_extremes = []
-    for row in range(3):
-        for col in range(3):
-            name = APPROACH_ORDER_3X3[row][col]
-            if name not in results:
+    for row in range(nrows):
+        for col in range(ncols):
+            name = grid[row][col]
+            if name is None or name not in results:
                 continue
             result = results[name]
             h_p5, h_p25, h_p50, h_p75, h_p95 = compute_h_response_uncertainty_bands(
@@ -5706,13 +5730,14 @@ def plot_temperature_response_3x3(
         y_ticks = np.arange(-0.15, 0.01, 0.03)
 
     # Plot each panel
-    for row in range(3):
-        for col in range(3):
-            name = APPROACH_ORDER_3X3[row][col]
+    for row in range(nrows):
+        for col in range(ncols):
+            name = grid[row][col]
             ax = axes[row, col]
+            display_name = name if name is not None else f'Approach {response_types[row]}{trend_types[col]}'
 
-            if name not in precomputed:
-                ax.text(0.5, 0.5, f'{name}\n(not available)',
+            if name is None or name not in precomputed:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
                         ha='center', va='center', transform=ax.transAxes,
                         fontsize=10, color='gray')
                 ax.set_xlim(T_range)
@@ -5771,27 +5796,33 @@ def plot_temperature_response_3x3(
 def plot_temperature_derivative_3x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
-    filename: str = 'fig_temperature_derivative_3x3.pdf',
+    filename: str = None,
     T_range: tuple = (0, 30),
     input_file: str = None,
 ) -> None:
-    """Plot 3x3 temperature derivative figure (dh/dT).
+    """Plot NxM temperature derivative figure (dh/dT).
 
-    Creates a 3x3 figure with temperature derivative curves and uncertainty bands.
-    Layout:
-        Row 0: Approach QJ, Approach QP, Approach QL (Quadratic)
-        Row 1: Approach PJ, Approach PP, Approach PL (Piecewise)
-        Row 2: Approach DJ, Approach DP, Approach DL (Persistence)
+    Grid dimensions are determined dynamically from the approaches present
+    in results.
 
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        filename: Output filename
+        filename: Output filename (default: auto-sized)
         T_range: Temperature range for x-axis (default: (0, 30))
         input_file: Optional input file path for annotation
     """
-    # Create 3x3 figure
-    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+    grid, response_types, trend_types = build_approach_grid(results.keys())
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
+
+    if filename is None:
+        filename = f'fig_temperature_derivative_{nrows}x{ncols}.pdf'
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
 
     # Temperature array for derivative plots
     T = np.linspace(T_range[0], T_range[1], 200)
@@ -5799,10 +5830,10 @@ def plot_temperature_derivative_3x3(
     # Pre-compute uncertainty bands and point estimates for all approaches
     precomputed = {}
     iqr_extremes = []
-    for row in range(3):
-        for col in range(3):
-            name = APPROACH_ORDER_3X3[row][col]
-            if name not in results:
+    for row in range(nrows):
+        for col in range(ncols):
+            name = grid[row][col]
+            if name is None or name not in results:
                 continue
             result = results[name]
             dh_p5, dh_p25, dh_p50, dh_p75, dh_p95 = compute_derivative_uncertainty_bands(
@@ -5820,13 +5851,14 @@ def plot_temperature_derivative_3x3(
         y_ticks = np.arange(-0.025, 0.016, 0.005)
 
     # Plot each panel
-    for row in range(3):
-        for col in range(3):
-            name = APPROACH_ORDER_3X3[row][col]
+    for row in range(nrows):
+        for col in range(ncols):
+            name = grid[row][col]
             ax = axes[row, col]
+            display_name = name if name is not None else f'Approach {response_types[row]}{trend_types[col]}'
 
-            if name not in precomputed:
-                ax.text(0.5, 0.5, f'{name}\n(not available)',
+            if name is None or name not in precomputed:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
                         ha='center', va='center', transform=ax.transAxes,
                         fontsize=10, color='gray')
                 ax.set_xlim(T_range)
@@ -5871,25 +5903,31 @@ def plot_temperature_derivative_3x3(
 def plot_T_optimal_histogram_3x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
-    filename: str = 'fig_T_optimal_histogram_3x3.pdf',
+    filename: str = None,
     input_file: str = None,
 ) -> None:
-    """Plot 3x3 T_optimal bootstrap histogram figure.
+    """Plot NxM T_optimal bootstrap histogram figure.
 
-    Creates a 3x3 figure with T_optimal histograms and uncertainty bands.
-    Layout:
-        Row 0: Approach QJ, Approach QP, Approach QL (Quadratic)
-        Row 1: Approach PJ, Approach PP, Approach PL (Piecewise)
-        Row 2: Approach DJ, Approach DP, Approach DL (Persistence)
+    Grid dimensions are determined dynamically from the approaches present
+    in results.
 
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        filename: Output filename
+        filename: Output filename (default: auto-sized)
         input_file: Optional input file path for annotation
     """
-    # Create 3x3 figure
-    fig, axes = plt.subplots(3, 3, figsize=(15, 12))
+    grid, response_types, trend_types = build_approach_grid(results.keys())
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
+
+    if filename is None:
+        filename = f'fig_T_optimal_histogram_{nrows}x{ncols}.pdf'
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
 
     # Fixed x-axis range (same as temperature response/derivative plots)
     x_min, x_max = 0, 30
@@ -5897,13 +5935,14 @@ def plot_T_optimal_histogram_3x3(
     bins = np.arange(x_min, x_max + 0.5, 0.5)
 
     # Plot each panel
-    for row in range(3):
-        for col in range(3):
-            name = APPROACH_ORDER_3X3[row][col]
+    for row in range(nrows):
+        for col in range(ncols):
+            name = grid[row][col]
             ax = axes[row, col]
+            display_name = name if name is not None else f'Approach {response_types[row]}{trend_types[col]}'
 
-            if name not in results:
-                ax.text(0.5, 0.5, f'{name}\n(not available)',
+            if name is None or name not in results:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
                         ha='center', va='center', transform=ax.transAxes,
                         fontsize=10, color='gray')
                 ax.set_xlim(x_min, x_max)
@@ -5968,51 +6007,55 @@ def plot_T_optimal_histogram_3x3(
 def plot_h2_histogram_4x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
-    filename: str = 'fig_h2_histogram_4x3.pdf',
+    filename: str = None,
     input_file: str = None,
 ) -> None:
-    """Plot 4x3 h2 coefficient histogram figure.
+    """Plot h2 coefficient histogram figure with dynamic grid.
 
-    Creates a 4x3 figure with h2 histograms. Piecewise approaches get separate
-    rows for h2 (T ≤ T_opt) and h4 (T > T_opt).
-
-    Layout:
-        Row 0: Approach QJ, Approach QP, Approach QL (Quadratic h2)
-        Row 1: Approach PJ, Approach PP, Approach PL (h2 for T ≤ T_opt)
-        Row 2: Approach PJ, Approach PP, Approach PL (h4 for T > T_opt)
-        Row 3: Approach DJ, Approach DP, Approach DL (Persistence h2)
+    Dynamically builds rows based on which non-N response types are present.
+    One row per response type for h2, plus an extra row for Piecewise h4
+    (only if P-type approaches are present).
 
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        filename: Output filename
+        filename: Output filename (default: auto-sized)
         input_file: Optional input file path for annotation
     """
+    grid, response_types, trend_types = build_approach_grid(results.keys())
+    ncols = len(trend_types)
+    if not response_types or ncols == 0:
+        return
 
-    # Define the layout
-    approach_cols = ['Approach QJ', 'Approach QP', 'Approach QL']
-    piecewise_cols = ['Approach PJ', 'Approach PP', 'Approach PL']
-    persistence_cols = ['Approach DJ', 'Approach DP', 'Approach DL']
+    # Build row definitions: each is (row_label, approach_names, sample_attr, point_attr, x_label)
+    row_defs = []
+    for r in response_types:
+        cols = [f'Approach {r}{t}' for t in trend_types]
+        row_defs.append((r, cols, 'h2_samples', 'h2_point', 'h₂ Coefficient', None))
+        if r == 'P':
+            # Extra row for piecewise h4
+            row_defs.append(('P_h4', cols, 'h4_samples', 'h4_point', 'h₄ Coefficient', 'h₄ (T > T_opt)'))
+
+    nrows = len(row_defs)
+
+    if filename is None:
+        filename = f'fig_h2_histogram_{nrows}x{ncols}.pdf'
 
     # Collect all sample values to determine dynamic x-axis bounds
     all_samples = []
-    for name in approach_cols + persistence_cols:
-        if name in results and results[name].h2_samples is not None:
-            all_samples.append(results[name].h2_samples[~np.isnan(results[name].h2_samples)])
-    for name in piecewise_cols:
-        if name in results:
-            if results[name].h2_samples is not None:
-                all_samples.append(results[name].h2_samples[~np.isnan(results[name].h2_samples)])
-            h4 = getattr(results[name], 'h4_samples', None)
-            if h4 is not None:
-                all_samples.append(h4[~np.isnan(h4)])
+    for _, cols, sample_attr, _, _, _ in row_defs:
+        for name in cols:
+            if name in results:
+                samples = getattr(results[name], sample_attr, None)
+                if samples is not None:
+                    all_samples.append(samples[~np.isnan(samples)])
     all_vals = np.concatenate(all_samples) if all_samples else np.array([-0.001, 0.0001])
     (x_min, x_max), _ = get_axis_bounds_and_ticks([all_vals.min(), all_vals.max()], padding=0.05)
     bin_width = (x_max - x_min) / 50
     bins = np.arange(x_min, x_max + bin_width, bin_width)
 
-    # Create 4x3 figure
-    fig, axes = plt.subplots(4, 3, figsize=(15, 16))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows),
+                             squeeze=False)
 
     def plot_histogram_panel(ax, samples, point_est, color, title, x_label='h₂ Coefficient'):
         """Helper to plot a single histogram panel."""
@@ -6053,7 +6096,6 @@ def plot_h2_histogram_4x3(
                        label=f'Point: {point_est:.5f}')
 
         # Plot histogram on top
-        # Use warnings filter to suppress divide-by-zero when all values are identical
         import warnings
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', message='invalid value encountered in divide')
@@ -6075,77 +6117,25 @@ def plot_h2_histogram_4x3(
         ax.legend(fontsize=7, loc='upper left')
         ax.grid(True, alpha=0.3)
 
-    # Row 0: Approach1 (Quadratic h2)
-    for col, name in enumerate(approach_cols):
-        ax = axes[0, col]
-        if name not in results:
-            ax.text(0.5, 0.5, f'{name}\n(not available)',
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=10, color='gray')
-            ax.set_xlim(x_min, x_max)
-            ax.set_xlabel('h₂ Coefficient', fontsize=10)
-            ax.set_ylabel('Density', fontsize=10)
-            ax.grid(True, alpha=0.3)
-            continue
+    for row_idx, (row_type, cols, sample_attr, point_attr, x_label, title_suffix) in enumerate(row_defs):
+        for col_idx, name in enumerate(cols):
+            ax = axes[row_idx, col_idx]
+            if name not in results:
+                ax.text(0.5, 0.5, f'{name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                ax.set_xlim(x_min, x_max)
+                ax.set_xlabel(x_label, fontsize=10)
+                ax.set_ylabel('Density', fontsize=10)
+                ax.grid(True, alpha=0.3)
+                continue
 
-        result = results[name]
-        color = get_color(name, 'steelblue')
-        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, result.approach)
-
-    # Row 1: Approach2 h2 (T ≤ T_opt)
-    for col, name in enumerate(piecewise_cols):
-        ax = axes[1, col]
-        if name not in results:
-            ax.text(0.5, 0.5, f'{name}\n(not available)',
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=10, color='gray')
-            ax.set_xlim(x_min, x_max)
-            ax.set_xlabel('h₂ Coefficient', fontsize=10)
-            ax.set_ylabel('Density', fontsize=10)
-            ax.grid(True, alpha=0.3)
-            continue
-
-        result = results[name]
-        color = get_color(name, 'steelblue')
-        title = f'{result.approach}: h₂ (T ≤ T_opt)'
-        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, title)
-
-    # Row 2: Approach2 h4 (T > T_opt)
-    for col, name in enumerate(piecewise_cols):
-        ax = axes[2, col]
-        if name not in results:
-            ax.text(0.5, 0.5, f'{name}\n(not available)',
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=10, color='gray')
-            ax.set_xlim(x_min, x_max)
-            ax.set_xlabel('h₄ Coefficient', fontsize=10)
-            ax.set_ylabel('Density', fontsize=10)
-            ax.grid(True, alpha=0.3)
-            continue
-
-        result = results[name]
-        color = get_color(name, 'steelblue')
-        h4_samples = getattr(result, 'h4_samples', None)
-        h4_point = getattr(result, 'h4_point', None)
-        title = f'{result.approach}: h₄ (T > T_opt)'
-        plot_histogram_panel(ax, h4_samples, h4_point, color, title, x_label='h₄ Coefficient')
-
-    # Row 3: Approach3 (Persistence h2)
-    for col, name in enumerate(persistence_cols):
-        ax = axes[3, col]
-        if name not in results:
-            ax.text(0.5, 0.5, f'{name}\n(not available)',
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=10, color='gray')
-            ax.set_xlim(x_min, x_max)
-            ax.set_xlabel('h₂ Coefficient', fontsize=10)
-            ax.set_ylabel('Density', fontsize=10)
-            ax.grid(True, alpha=0.3)
-            continue
-
-        result = results[name]
-        color = get_color(name, 'steelblue')
-        plot_histogram_panel(ax, result.h2_samples, result.h2_point, color, result.approach)
+            result = results[name]
+            color = get_color(name, 'steelblue')
+            samples = getattr(result, sample_attr, None)
+            point_est = getattr(result, point_attr, None)
+            title = f'{result.approach}: {title_suffix}' if title_suffix else result.approach
+            plot_histogram_panel(ax, samples, point_est, color, title, x_label)
 
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
@@ -6157,37 +6147,37 @@ def plot_h2_histogram_4x3(
 def plot_h4_histogram_1x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
-    filename: str = 'fig_h4_histogram_1x3.pdf',
+    filename: str = None,
     input_file: str = None,
 ) -> None:
-    """Plot 1x3 h4 (persistence parameter) histogram figure.
+    """Plot 1xM h4 (persistence parameter) histogram figure.
 
-    Creates a 1x3 figure with h4 histograms for persistence approaches.
-    Layout: Approach DJ, Approach DP, Approach DL
+    Dynamically finds all D-type approaches in results and plots 1×M
+    where M = number of trend types with D approaches.
 
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
-        filename: Output filename
+        filename: Output filename (default: auto-sized)
         input_file: Optional input file path for annotation
     """
-    approaches = ['Approach DJ', 'Approach DP', 'Approach DL']
+    # Find D-type approaches present in results
+    trend_types = [t for t in TREND_TYPE_ORDER
+                   if f'Approach D{t}' in results]
+    if not trend_types:
+        return
 
-    # Create 1x3 figure
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    approaches = [f'Approach D{t}' for t in trend_types]
+    ncols = len(approaches)
+
+    if filename is None:
+        filename = f'fig_h4_histogram_1x{ncols}.pdf'
+
+    fig, axes = plt.subplots(1, ncols, figsize=(5 * ncols, 4), squeeze=False)
 
     # Plot each panel
     for col, name in enumerate(approaches):
-        ax = axes[col]
-
-        if name not in results:
-            ax.text(0.5, 0.5, f'{name}\n(not available)',
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=10, color='gray')
-            ax.set_xlabel('h₄ (persistence parameter)', fontsize=10)
-            ax.set_ylabel('Density', fontsize=10)
-            ax.grid(True, alpha=0.3)
-            continue
+        ax = axes[0, col]
 
         result = results[name]
         color = get_color(name, 'steelblue')
@@ -6211,7 +6201,6 @@ def plot_h4_histogram_1x3(
         # Compute statistics
         p5 = np.percentile(valid_samples, 5)
         p25 = np.percentile(valid_samples, 25)
-        p50 = np.percentile(valid_samples, 50)
         p75 = np.percentile(valid_samples, 75)
         p95 = np.percentile(valid_samples, 95)
 
