@@ -13,6 +13,7 @@ Approaches (publication-ready):
     Approach DJ: Persistence decay model with joint OLS
     Approach DP: Persistence decay model with polynomial trend identification
     Approach DL: Persistence decay model with LOESS trend identification
+    Approach LL: Level effect model (h4=1) with LOESS trend identification
 """
 
 import time
@@ -1311,6 +1312,126 @@ def fit_ApproachDL_persistence_decay(
         h2_se=h2_se,
         h4=h4_opt,
         h4_se=h4_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        T_opt=T_opt,
+        total_r_squared=total_r_sq,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_ApproachLL_first_difference(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    weights: np.ndarray = None,
+) -> FitResultApproach4:
+    """Approach LL: Level effect model with LOESS detrending.
+
+    This is Approach DL with h4 fixed at 1.0, which means:
+    h_conv(T(t)) = h(T(t)) - h(T(t-1))
+
+    The climate effect depends on the level of temperature, not just changes.
+
+    With h4=1, the accumulator decay is (1-h4)=0, so A_T(t) = T(t) (no memory)
+    and A_T_lag(t) = T(t-1). The pre-first-year correction vanishes since
+    (1-h4)^k = 0 for k >= 1.
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        weights: Optional observation weights for weighted least squares
+
+    Returns:
+        FitResultApproach4 with h1, h2, h4=1.0 (fixed), and standard errors
+    """
+    h4_val = 1.0
+
+    # Compute dependent variable: dy - k[t] - j_i[t] (same as Approach QL)
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    T = data.temp
+    T_trend = trends_loess.T_loess
+
+    # Compute accumulators with h4=1 (decay=0, so only previous value matters)
+    A_T_lag, A_T2_lag = compute_persistence_accumulators(data, h4_val)
+    A_T_trend_lag, A_T2_trend_lag = compute_persistence_accumulators_at_T(
+        data, h4_val, T_trend
+    )
+    # Pre-first-year corrections vanish at h4=1 since (1-h4)^k = 0
+    correction_T, correction_T2 = compute_pre_first_year_correction(data, h4_val, T)
+    correction_T_trend, correction_T2_trend = compute_pre_first_year_correction(
+        data, h4_val, T_trend
+    )
+
+    # Modified regressors with detrending
+    X1 = (T - h4_val * A_T_lag - correction_T) - (T_trend - h4_val * A_T_trend_lag - correction_T_trend)
+    X2 = (T**2 - h4_val * A_T2_lag - correction_T2) - (T_trend**2 - h4_val * A_T2_trend_lag - correction_T2_trend)
+    X_opt = np.column_stack([X1, X2])
+
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h1 = beta_ols[0]
+    h2 = beta_ols[1]
+    h1_se = np.sqrt(max(cov[0, 0], 0))
+    h2_se = np.sqrt(max(cov[1, 1], 0))
+
+    # Year effects are pre-computed year means
+    k = dict(year_means)
+
+    # Fit statistics (only 2 free params: h1, h2; h4 is fixed)
+    n_params = 2
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+
+    # Total R² (variance explained in original dy)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    # Optimal temperature
+    T_opt = compute_T_optimal(h1, h2)
+
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    # Climate response values using h_conv formulation
+    h_conv_values = h1 * X1 + h2 * X2
+
+    # Compute variance decomposition
+    components = {
+        'h_T': h_conv_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    # Compute variance attribution
+    Delta_u = h_conv_values
+    h_conv_T_trend = h1 * (T_trend - h4_val * A_T_trend_lag - correction_T_trend) \
+                   + h2 * (T_trend**2 - h4_val * A_T2_trend_lag - correction_T2_trend)
+    v = h_conv_T_trend
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach4(
+        approach="Approach LL: Level Effect (LOESS Detrending)",
+        h1=h1,
+        h2=h2,
+        h1_se=h1_se,
+        h2_se=h2_se,
+        h4=h4_val,
+        h4_se=0.0,  # h4 is fixed, not estimated
         k=k,
         r_squared=r_sq,
         adj_r_squared=adj_r_sq,
@@ -2673,7 +2794,8 @@ def fit_all_approaches(
     trends_with_k: CountryTrends = None, year_means: dict = None,
     trends_loess: CountryTrendsLoess = None,
     weights: np.ndarray = None,
-    skip_slow: bool = False
+    skip_slow: bool = False,
+    approaches: list = None,
 ) -> dict:
     """Fit all approaches and return results.
 
@@ -2684,6 +2806,7 @@ def fit_all_approaches(
         'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
         'Approach PL': Piecewise quadratic response with LOESS (if trends_loess provided)
         'Approach DL': Persistence decay model with LOESS (if trends_loess provided)
+        'Approach LL': Level effect model (h4=1) with LOESS (if trends_loess provided)
         'Approach PJ': Piecewise quadratic with full OLS (like Approach PL + Approach QJ)
         'Approach DJ': Persistence decay with full OLS (like Approach DL + Approach QJ)
         'Approach NJ': No climate response, joint OLS (country trends + year effects only)
@@ -2698,9 +2821,14 @@ def fit_all_approaches(
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
         weights: Optional observation weights for weighted least squares (bootstrap)
         skip_slow: If True, skip slow approaches (PJ, DJ) during bootstrap
+        approaches: Optional list of approach names to fit (default: None = fit all)
     """
     results = {}
     timings = {}
+    wanted = set(approaches) if approaches else None
+
+    def should_fit(name):
+        return wanted is None or name in wanted
 
     def timed_fit(name, fit_func, *args):
         """Fit an approach and record timing."""
@@ -2712,39 +2840,54 @@ def fit_all_approaches(
         print(f"      {name}: {elapsed:.3f}s")
 
     # Conjoined approaches
-    timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data, weights)
-    timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
+    if should_fit('Approach QJ'):
+        timed_fit('Approach QJ', fit_ApproachQJ_conjoined, data, weights)
+    if should_fit('Approach NJ'):
+        timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
     if not skip_slow:
-        timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
-        timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
+        if should_fit('Approach PJ'):
+            timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
+        if should_fit('Approach DJ'):
+            timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
-        timed_fit('Approach QP', fit_ApproachQP_precomputed_k,
-                  data, trends_with_k, year_means, weights)
-        # NP uses precomputed trends - weighting is done in detrending step
-        timed_fit('Approach NP', fit_ApproachNP_precomputed_k,
-                  data, trends_with_k, year_means)
+        if should_fit('Approach QP'):
+            timed_fit('Approach QP', fit_ApproachQP_precomputed_k,
+                      data, trends_with_k, year_means, weights)
+        if should_fit('Approach NP'):
+            # NP uses precomputed trends - weighting is done in detrending step
+            timed_fit('Approach NP', fit_ApproachNP_precomputed_k,
+                      data, trends_with_k, year_means)
 
-    # Add Approach QL, Approach PL, Approach DL and Approach NL if trends_loess and year_means are provided
+    # Add Approach QL, Approach PL, Approach DL, Approach LL and Approach NL if trends_loess and year_means are provided
     if trends_loess is not None and year_means is not None:
-        timed_fit('Approach QL', fit_ApproachQL_loess,
-                  data, trends_loess, year_means, weights)
-        # NL uses precomputed trends - weighting is done in detrending step
-        timed_fit('Approach NL', fit_ApproachNL_precomputed_k_loess,
-                  data, trends_loess, year_means)
-        timed_fit('Approach PL', fit_ApproachPL_piecewise,
-                  data, trends_loess, year_means, (0.0, 30.0), weights)
-        timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
-                  data, trends_loess, year_means, (0.0, 1.0), weights)
+        if should_fit('Approach QL'):
+            timed_fit('Approach QL', fit_ApproachQL_loess,
+                      data, trends_loess, year_means, weights)
+        if should_fit('Approach NL'):
+            # NL uses precomputed trends - weighting is done in detrending step
+            timed_fit('Approach NL', fit_ApproachNL_precomputed_k_loess,
+                      data, trends_loess, year_means)
+        if should_fit('Approach PL'):
+            timed_fit('Approach PL', fit_ApproachPL_piecewise,
+                      data, trends_loess, year_means, (0.0, 30.0), weights)
+        if should_fit('Approach DL'):
+            timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
+                      data, trends_loess, year_means, (0.0, 1.0), weights)
+        if should_fit('Approach LL'):
+            timed_fit('Approach LL', fit_ApproachLL_first_difference,
+                      data, trends_loess, year_means, weights)
 
     # Add Approach PP and Approach DP if trends_with_k and year_means are provided
     # These use linear T / quadratic GDP detrending with alternative climate response functions
     if trends_with_k is not None and year_means is not None:
-        timed_fit('Approach PP', fit_ApproachPP_piecewise_linear_detrend,
-                  data, trends_with_k, year_means, (0.0, 30.0), weights)
-        timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,
-                  data, trends_with_k, year_means, (0.0, 1.0), weights)
+        if should_fit('Approach PP'):
+            timed_fit('Approach PP', fit_ApproachPP_piecewise_linear_detrend,
+                      data, trends_with_k, year_means, (0.0, 30.0), weights)
+        if should_fit('Approach DP'):
+            timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,
+                      data, trends_with_k, year_means, (0.0, 1.0), weights)
 
     total_time = sum(timings.values())
     print(f"      Total fitting time: {total_time:.3f}s")
