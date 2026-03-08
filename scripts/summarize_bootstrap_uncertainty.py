@@ -208,12 +208,33 @@ def plot_combined_uncertainty_bars(
         Width comparison results from compute_width_comparisons(). If provided,
         significance stars are shown above P and L bars.
     """
-    # Define approach groups: rows are approach types, columns are variables
-    approach_groups = [
-        ('Approach Q', 'Quadratic', ['Approach QJ', 'Approach QP', 'Approach QL']),
-        ('Approach P', 'Piecewise', ['Approach PJ', 'Approach PP', 'Approach PL']),
-        ('Approach D', 'Persistence', ['Approach DJ', 'Approach DP', 'Approach DL']),
-    ]
+    # Response type metadata: display name, which variables apply, h4 unit label
+    RESPONSE_TYPE_INFO = {
+        'Q': ('Quadratic', ['h2', 'T_opt'], None),
+        'P': ('Piecewise', ['h2', 'T_opt', 'h4'], '[°C$^{-2}$]'),
+        'D': ('Persistence', ['h2', 'T_opt', 'h4'], '[year$^{-1}$]'),
+        'L': ('Level', ['h2', 'T_opt'], None),
+    }
+    RESPONSE_TYPE_DISPLAY_ORDER = ['Q', 'P', 'D', 'L']
+
+    # Build approach groups dynamically from available data
+    available = set(bootstrap_summary['approach'].unique())
+    approach_groups = []
+    for r in RESPONSE_TYPE_DISPLAY_ORDER:
+        members = [f'Approach {r}{m}' for m in ['J', 'P', 'L'] if f'Approach {r}{m}' in available]
+        if members:
+            info = RESPONSE_TYPE_INFO[r]
+            approach_groups.append((f'Approach {r}', info[0], members))
+
+    if not approach_groups:
+        print("      Skipping uncertainty bar chart (no recognized approaches)")
+        return
+
+    # Check if any J approaches exist (needed for width comparisons)
+    has_j = any(f'Approach {r}J' in available for r in RESPONSE_TYPE_DISPLAY_ORDER)
+    if not has_j:
+        print("      Skipping uncertainty bar chart (no J approaches for comparison)")
+        return
 
     # Variables for each column
     variables = ['h2', 'T_opt', 'h4']
@@ -232,8 +253,12 @@ def plot_combined_uncertainty_bars(
         'h4': r'$h_4$',
     }
 
-    # Create 3x3 figure
-    fig, axes = plt.subplots(3, 3, figsize=(12, 10))
+    nrows = len(approach_groups)
+
+    # Create dynamic grid
+    fig, axes = plt.subplots(nrows, 3, figsize=(12, 3.3 * nrows + 1))
+    if nrows == 1:
+        axes = axes[np.newaxis, :]  # ensure 2D
     fig.suptitle('Bootstrap Uncertainty Ranges: IQR and 90% CI', fontsize=14, fontweight='bold')
 
     methods = ['J', 'P', 'L']
@@ -244,15 +269,22 @@ def plot_combined_uncertainty_bars(
     # X positions for the two clusters (90% CI and IQR)
     x_clusters = np.arange(n_range_types)
     width = 0.25  # Width for each bar
-    cluster_width = n_methods * width
+
+    h4_title_placed = False
+    blank_cell = None  # track first blank cell for legend
 
     for row_idx, (group_key, group_name, approaches) in enumerate(approach_groups):
+        response_code = group_key.split()[-1]  # e.g. 'Q' from 'Approach Q'
+        info = RESPONSE_TYPE_INFO[response_code]
+
         for col_idx, var in enumerate(variables):
             ax = axes[row_idx, col_idx]
 
-            # Approach Q doesn't have h4, so leave that cell blank
-            if row_idx == 0 and col_idx == 2:
+            # Check if this variable applies to this response type
+            if var not in info[1]:
                 ax.axis('off')
+                if blank_cell is None:
+                    blank_cell = (row_idx, col_idx)
                 continue
 
             # Get ranges for each method (J, P, L)
@@ -294,34 +326,29 @@ def plot_combined_uncertainty_bars(
                     ci90_ranges.append(0)
 
             # Plot bars grouped by range type
-            # First cluster: 90% CI with J, P, L bars (solid)
-            # Second cluster: IQR with J, P, L bars (half-tone/hatched)
             for i, method in enumerate(methods):
                 offset = (i - (n_methods - 1) / 2) * width
                 # 90% CI cluster (x=0) - solid bars
-                bar_90 = ax.bar(x_clusters[0] + offset, ci90_ranges[i], width,
-                                color=method_colors[method], edgecolor='white', linewidth=0.5)
-                # IQR cluster (x=1) - lighter tone bars (no hatching)
-                bar_iqr = ax.bar(x_clusters[1] + offset, iqr_ranges[i], width,
-                                 color=method_colors[method], edgecolor='white', linewidth=0.5,
-                                 alpha=2/3)
+                ax.bar(x_clusters[0] + offset, ci90_ranges[i], width,
+                       color=method_colors[method], edgecolor='white', linewidth=0.5)
+                # IQR cluster (x=1) - lighter tone bars
+                ax.bar(x_clusters[1] + offset, iqr_ranges[i], width,
+                       color=method_colors[method], edgecolor='white', linewidth=0.5,
+                       alpha=2/3)
 
                 # Add method labels (J, P, L) in the middle of each bar
-                # 90% CI bar label
                 if ci90_ranges[i] > 0:
                     ax.text(x_clusters[0] + offset, ci90_ranges[i] / 2, method,
                             ha='center', va='center', fontsize=9, fontweight='bold', color='white')
-                # IQR bar label
                 if iqr_ranges[i] > 0:
                     ax.text(x_clusters[1] + offset, iqr_ranges[i] / 2, method,
                             ha='center', va='center', fontsize=9, fontweight='bold', color='white')
 
                 # Add significance stars for P and L methods
-                if width_comparisons is not None and method in ('P', 'L'):
-                    response_type = group_key.split()[-1]  # e.g. 'Q' from 'Approach Q'
+                if width_comparisons is not None and len(width_comparisons) > 0 and method in ('P', 'L'):
                     comparison_label = f'{method} vs J'
                     mask = (
-                        (width_comparisons['response'] == response_type) &
+                        (width_comparisons['response'] == response_code) &
                         (width_comparisons['coefficient'] == var) &
                         (width_comparisons['comparison'] == comparison_label)
                     )
@@ -337,41 +364,39 @@ def plot_combined_uncertainty_bars(
             ax.set_xticks(x_clusters)
             ax.set_xticklabels(range_types)
 
-            # Add title to top row panels (h4 title goes on row 1 since row 0 is blank)
-            if row_idx == 0 and col_idx < 2:
+            # Add column titles on the first row that has this variable
+            if var in ('h2', 'T_opt') and row_idx == 0:
                 ax.set_title(var_titles[var], fontsize=12, fontweight='bold')
-            elif row_idx == 1 and col_idx == 2:
+            elif var == 'h4' and not h4_title_placed:
                 ax.set_title(var_titles[var], fontsize=12, fontweight='bold')
+                h4_title_placed = True
 
             # Add row labels on the left and unit labels
-            # Units: h2 = °C⁻², T_opt = °C, h4 = °C⁻² (ApproachP) or year⁻¹ (ApproachD)
             if col_idx == 0:
-                # h2 column: °C⁻²
                 ax.set_ylabel(f'{group_key}\n({group_name})\n[°C$^{{-2}}$]', fontsize=10, fontweight='bold')
             elif col_idx == 1:
-                # T_opt column: °C
                 ax.set_ylabel('[°C]', fontsize=10)
             elif col_idx == 2:
-                # h4 column: depends on approach
-                if row_idx == 1:  # ApproachP (Piecewise)
-                    ax.set_ylabel('[°C$^{{-2}}$]', fontsize=10)
-                elif row_idx == 2:  # ApproachD (Persistence)
-                    ax.set_ylabel('[year$^{{-1}}$]', fontsize=10)
+                h4_unit = info[2]  # from RESPONSE_TYPE_INFO
+                if h4_unit:
+                    ax.set_ylabel(h4_unit, fontsize=10)
 
             # Add grid for readability
             ax.yaxis.grid(True, linestyle='--', alpha=0.3)
             ax.set_axisbelow(True)
 
-    # Add legend to the blank cell (row 0, col 2)
-    ax_legend = axes[0, 2]
-    ax_legend.axis('off')
-    # Create proxy artists for legend
+    # Add legend to the first blank cell, or create one in the last row
     from matplotlib.patches import Patch
     legend_elements = [
         Patch(facecolor='gray', edgecolor='black', label='90% CI'),
         Patch(facecolor='gray', edgecolor='black', alpha=2/3, label='IQR'),
     ]
-    ax_legend.legend(handles=legend_elements, loc='center', fontsize=11, frameon=True)
+    if blank_cell is not None:
+        ax_legend = axes[blank_cell[0], blank_cell[1]]
+        ax_legend.legend(handles=legend_elements, loc='center', fontsize=11, frameon=True)
+    else:
+        # No blank cell; add legend to the last axes
+        axes[nrows - 1, 2].legend(handles=legend_elements, loc='upper right', fontsize=9, frameon=True)
 
     plt.tight_layout()
 
@@ -408,31 +433,41 @@ def generate_approach_summary_latex(
     output_dir : Path
         Directory to save the .tex file
     """
-    # Table row definitions: (approach_key, short_label)
-    rows = [
-        ('Approach QJ', 'QJ'),
-        ('Approach QP', 'QP'),
-        ('Approach QL', 'QL'),
-        ('Approach PJ', 'PJ'),
-        ('Approach PP', 'PP'),
-        ('Approach PL', 'PL'),
-        ('Approach DJ', 'DJ'),
-        ('Approach DP', 'DP'),
-        ('Approach DL', 'DL'),
+    # Build table rows dynamically from available approaches
+    available = set(bootstrap_summary['approach'].unique())
+    all_rows = [
+        ('Approach QJ', 'QJ'), ('Approach QP', 'QP'), ('Approach QL', 'QL'),
+        ('Approach PJ', 'PJ'), ('Approach PP', 'PP'), ('Approach PL', 'PL'),
+        ('Approach DJ', 'DJ'), ('Approach DP', 'DP'), ('Approach DL', 'DL'),
+        ('Approach LJ', 'LJ'), ('Approach LP', 'LP'), ('Approach LL', 'LL'),
     ]
+    rows = [(a, l) for a, l in all_rows if a in available]
 
-    # Response type section headers
-    section_headers = {
-        'Approach QJ': r'\multicolumn{5}{l}{\textit{Quadratic response}} \\',
-        'Approach PJ': r'\multicolumn{5}{l}{\textit{Piecewise quadratic response}} \\',
-        'Approach DJ': r'\multicolumn{5}{l}{\textit{Decay (persistence) response}} \\',
+    # Response type section headers (keyed by first approach letter)
+    section_header_text = {
+        'Q': r'\multicolumn{5}{l}{\textit{Quadratic response}} \\',
+        'P': r'\multicolumn{5}{l}{\textit{Piecewise quadratic response}} \\',
+        'D': r'\multicolumn{5}{l}{\textit{Decay (persistence) response}} \\',
+        'L': r'\multicolumn{5}{l}{\textit{Level effect response}} \\',
     }
+    # Map first approach of each response type to its header
+    section_headers = {}
+    seen_response_types = set()
+    for approach, label in rows:
+        rtype = label[0]
+        if rtype not in seen_response_types:
+            seen_response_types.add(rtype)
+            section_headers[approach] = section_header_text[rtype]
 
     # Precompute 1/h4 percentiles for D approaches from raw bootstrap samples
     boot_samples = bootstrap_coefficients[bootstrap_coefficients['iteration'] >= 0]
     inv_h4_stats = {}
     for approach in ['Approach DJ', 'Approach DP', 'Approach DL']:
+        if approach not in available:
+            continue
         h4_samples = boot_samples[boot_samples['approach'] == approach]['h4'].dropna().values
+        if len(h4_samples) == 0:
+            continue
         inv_samples = 1.0 / h4_samples
         summary_row = bootstrap_summary[bootstrap_summary['approach'] == approach].iloc[0]
         inv_h4_stats[approach] = {

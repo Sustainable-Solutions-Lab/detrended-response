@@ -80,11 +80,19 @@ def compute_width_comparisons(bootstrap_coeff_df, n_resample=10000, seed=42):
     """
     rng = np.random.default_rng(seed)
 
-    comparisons = [
-        ('Q', 'h2'), ('Q', 'T_opt'),
-        ('P', 'h2'), ('P', 'T_opt'), ('P', 'h4'),
-        ('D', 'h2'), ('D', 'T_opt'), ('D', 'h4'),
-    ]
+    # Build comparisons dynamically from available approaches
+    available = set(bootstrap_coeff_df['approach'].unique())
+    response_coeffs = {
+        'Q': ['h2', 'T_opt'],
+        'P': ['h2', 'T_opt', 'h4'],
+        'D': ['h2', 'T_opt', 'h4'],
+        'L': ['h2', 'T_opt'],
+    }
+    comparisons = []
+    for r in ['Q', 'P', 'D', 'L']:
+        if f'Approach {r}J' in available:
+            for coeff in response_coeffs[r]:
+                comparisons.append((r, coeff))
 
     results = []
 
