@@ -213,6 +213,7 @@ def main(argv=None):
     else:
         h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL',
                            'Approach PP', 'Approach DP', 'Approach PJ', 'Approach DJ',
+                           'Approach SL', 'Approach SP', 'Approach SJ',
                            'Approach LL', 'Approach LJ']
     bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
@@ -303,8 +304,9 @@ def main(argv=None):
         print(f"\n{result.approach}")
         print("-" * 50)
 
-        # Approach PL/Approach PJ/Approach PP: h2 (below T_opt), h4 (above T_opt), T_opt (piecewise quadratic)
-        if name in ['Approach PL', 'Approach PJ', 'Approach PP'] and result.h4_point is not None:
+        # Piecewise/Segmented: h2 (below T_opt), h4 (above T_opt), T_opt
+        if name in ['Approach PL', 'Approach PJ', 'Approach PP',
+                     'Approach SL', 'Approach SJ', 'Approach SP'] and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (above T_opt): {result.h4_point:.6f}")

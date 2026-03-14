@@ -251,7 +251,11 @@ def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
     seen = set()
     pct_labels = []
     for t in raw_ticks:
+        if t > 700:  # exp(710) overflows float64
+            continue
         pct = round_pct_nice((np.exp(t) - 1) * 100, pct_range=(pct_min, pct_max))
+        if pct <= -100:  # log(0) is undefined; skip
+            continue
         if pct not in seen:
             seen.add(pct)
             pct_labels.append(pct)

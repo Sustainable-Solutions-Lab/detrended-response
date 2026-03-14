@@ -1048,9 +1048,10 @@ def generate_covariance_tables(
         return
 
     # Define approach groups
-    j_approaches = ['Approach NJ', 'Approach QJ', 'Approach PJ', 'Approach DJ']
+    j_approaches = ['Approach NJ', 'Approach QJ', 'Approach PJ', 'Approach SJ', 'Approach DJ']
     pl_approaches = ['Approach NP', 'Approach NL', 'Approach QP', 'Approach QL',
-                     'Approach PP', 'Approach PL', 'Approach DP', 'Approach DL']
+                     'Approach PP', 'Approach PL', 'Approach SP', 'Approach SL',
+                     'Approach DP', 'Approach DL']
 
     # Filter to approaches that exist in the data
     available_j = [a for a in j_approaches if a in var_attrib_df['approach'].values]
@@ -1510,6 +1511,7 @@ def generate_tables(
         'Approach NJ', 'Approach NP', 'Approach NL',
         'Approach QJ', 'Approach QP', 'Approach QL',
         'Approach PJ', 'Approach PP', 'Approach PL',
+        'Approach SJ', 'Approach SP', 'Approach SL',
         'Approach DJ', 'Approach DP', 'Approach DL',
     ]
 

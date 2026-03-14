@@ -75,6 +75,7 @@ def plot_uncertainty_range_bars(
     approach_groups = [
         ('Approach Q', 'Quadratic', ['Approach QJ', 'Approach QP', 'Approach QL']),
         ('Approach P', 'Piecewise', ['Approach PJ', 'Approach PP', 'Approach PL']),
+        ('Approach S', 'Segmented', ['Approach SJ', 'Approach SP', 'Approach SL']),
         ('Approach D', 'Persistence', ['Approach DJ', 'Approach DP', 'Approach DL']),
     ]
 
@@ -212,10 +213,11 @@ def plot_combined_uncertainty_bars(
     RESPONSE_TYPE_INFO = {
         'Q': ('Quadratic', ['h2', 'T_opt'], None),
         'P': ('Piecewise', ['h2', 'T_opt', 'h4'], '[°C$^{-2}$]'),
+        'S': ('Segmented', ['h2', 'T_opt', 'h4'], '[°C$^{-1}$]'),
         'D': ('Persistence', ['h2', 'T_opt', 'h4'], '[year$^{-1}$]'),
         'L': ('Level', ['h2', 'T_opt'], None),
     }
-    RESPONSE_TYPE_DISPLAY_ORDER = ['Q', 'P', 'D', 'L']
+    RESPONSE_TYPE_DISPLAY_ORDER = ['Q', 'P', 'S', 'D', 'L']
 
     # Build approach groups dynamically from available data
     available = set(bootstrap_summary['approach'].unique())
@@ -438,6 +440,7 @@ def generate_approach_summary_latex(
     all_rows = [
         ('Approach QJ', 'QJ'), ('Approach QP', 'QP'), ('Approach QL', 'QL'),
         ('Approach PJ', 'PJ'), ('Approach PP', 'PP'), ('Approach PL', 'PL'),
+        ('Approach SJ', 'SJ'), ('Approach SP', 'SP'), ('Approach SL', 'SL'),
         ('Approach DJ', 'DJ'), ('Approach DP', 'DP'), ('Approach DL', 'DL'),
         ('Approach LJ', 'LJ'), ('Approach LP', 'LP'), ('Approach LL', 'LL'),
     ]
@@ -447,6 +450,7 @@ def generate_approach_summary_latex(
     section_header_text = {
         'Q': r'\multicolumn{5}{l}{\textit{Quadratic response}} \\',
         'P': r'\multicolumn{5}{l}{\textit{Piecewise quadratic response}} \\',
+        'S': r'\multicolumn{5}{l}{\textit{Segmented linear response}} \\',
         'D': r'\multicolumn{5}{l}{\textit{Decay (persistence) response}} \\',
         'L': r'\multicolumn{5}{l}{\textit{Level effect response}} \\',
     }

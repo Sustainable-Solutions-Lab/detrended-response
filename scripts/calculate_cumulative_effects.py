@@ -76,9 +76,6 @@ def load_run_metadata(directory: Path) -> dict:
 # Constants
 # ==============================================================================
 
-# Central approaches for analysis (in display order)
-CENTRAL_APPROACHES_POINT = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL']
-
 # Base year for cumulative effect calculation
 BASE_YEAR = 1961
 

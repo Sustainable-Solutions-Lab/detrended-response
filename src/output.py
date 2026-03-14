@@ -2175,9 +2175,13 @@ def save_bootstrap_h_values(
                 approach_key = name
 
                 # Compute h(T) for each observation based on approach type
-                response_type = name.split()[-1][0]  # 'Q', 'P', 'D', or 'L'
+                response_type = name.split()[-1][0]  # 'Q', 'P', 'S', 'D', or 'L'
                 if response_type == 'Q':
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
+                elif response_type == 'S':
+                    # Segmented linear: h2*(T-T_opt) below, h4*(T-T_opt) above
+                    below = temp_arr <= r.T_opt
+                    h_T_point = np.where(below, r.h2 * (temp_arr - r.T_opt), r.h4 * (temp_arr - r.T_opt))
                 elif response_type == 'P':
                     # Piecewise quadratic: h2 below T_opt, h4 above T_opt
                     below = temp_arr <= r.T_opt
@@ -2316,8 +2320,14 @@ def save_bootstrap_h_baselines(
         # Process each country
         for iso3, T_base in country_T_loess_base.items():
             # Point estimate (iteration = -1)
-            response_type = approach_key.split()[-1][0]  # 'Q', 'P', 'D', or 'L'
-            if response_type == 'P':
+            response_type = approach_key.split()[-1][0]  # 'Q', 'P', 'S', 'D', or 'L'
+            if response_type == 'S':
+                # Segmented linear: h2*(T-T_opt) below, h4*(T-T_opt) above
+                if T_base <= T_opt_point:
+                    h_T_baseline = h2_point * (T_base - T_opt_point)
+                else:
+                    h_T_baseline = h4_point * (T_base - T_opt_point)
+            elif response_type == 'P':
                 # Piecewise: h2*(T-T_opt)² below, h4*(T-T_opt)² above
                 if T_base <= T_opt_point:
                     h_T_baseline = h2_point * (T_base - T_opt_point) ** 2
@@ -2344,7 +2354,14 @@ def save_bootstrap_h_baselines(
                 h1_b = h1_samples[b]
                 h2_b = h2_samples[b]
 
-                if response_type == 'P':
+                if response_type == 'S':
+                    h4_b = h4_samples[b] if h4_samples is not None else 0.0
+                    T_opt_b = T_opt_samples[b]
+                    if T_base <= T_opt_b:
+                        h_T_baseline_b = h2_b * (T_base - T_opt_b)
+                    else:
+                        h_T_baseline_b = h4_b * (T_base - T_opt_b)
+                elif response_type == 'P':
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     T_opt_b = T_opt_samples[b]
                     if T_base <= T_opt_b:
@@ -4004,6 +4021,18 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
         h_point = h2 * (T - T_opt) ** 2
         return h_point, T_opt
 
+    # Handle segmented linear approaches Approach SL/Approach SJ/Approach SP: h2*(T-T_opt) for T<=T_opt, h4*(T-T_opt) for T>T_opt
+    if approach_key in ('Approach SL', 'Approach SJ', 'Approach SP') and result.h4_point is not None:
+        T_opt = result.T_opt_point
+        h2_low = result.h2_point
+        h2_high = result.h4_point
+        h_point = np.where(
+            T <= T_opt,
+            h2_low * (T - T_opt),
+            h2_high * (T - T_opt)
+        )
+        return h_point, T_opt
+
     # Handle piecewise approaches Approach PL/Approach PJ/Approach PP (asymmetric): h2 for T <= T_opt, h4 for T > T_opt
     if approach_key in ('Approach PL', 'Approach PJ', 'Approach PP') and result.h4_point is not None:
         T_opt = result.T_opt_point
@@ -4472,6 +4501,11 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
         h2 = getattr(result, 'h4_point', 0) or 0
         T_opt = result.T_opt_point
         return 2 * h2 * (T - T_opt)
+
+    # Handle segmented linear approaches: derivative is step function
+    if approach_key in ('Approach SL', 'Approach SJ', 'Approach SP') and result.h4_point is not None:
+        T_opt = result.T_opt_point
+        return np.where(T <= T_opt, result.h2_point, result.h4_point)
 
     # Handle piecewise approaches Approach PL/Approach PJ/Approach PP (asymmetric: h2 for T <= T_opt, h4 for T > T_opt)
     if approach_key in ('Approach PL', 'Approach PJ', 'Approach PP') and result.h4_point is not None:
@@ -5743,12 +5777,13 @@ def plot_temperature_derivative_4panel_variants(
 # - Rows = Climate response functions (1=quadratic, 2=piecewise, 3=persistence)
 # - Columns = Solution methods (J=Joint, P=Polynomial, L=LOESS)
 #
-RESPONSE_TYPE_ORDER = ['Q', 'P', 'D', 'L']
+RESPONSE_TYPE_ORDER = ['Q', 'P', 'S', 'D', 'L']
 TREND_TYPE_ORDER = ['J', 'P', 'L']
 
 RESPONSE_TYPE_LABELS = {
     'Q': 'Quadratic (Q)',
     'P': 'Piecewise (P)',
+    'S': 'Segmented (S)',
     'D': 'Decay (D)',
     'L': 'Level (L)',
 }
