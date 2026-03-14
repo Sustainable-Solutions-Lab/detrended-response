@@ -54,6 +54,9 @@ APPROACH_COLORS = {
     'Approach DP': 'teal',
     'Approach LL': 'blue',
     'Approach LJ': 'purple',
+    'Approach SL': 'gold',
+    'Approach SJ': 'darkkhaki',
+    'Approach SP': 'goldenrod',
     'Approach NJ': 'gray',
     'Approach NP': 'gray',
     'Approach NL': 'gray',
@@ -74,6 +77,9 @@ APPROACH_LINESTYLES = {
     'Approach DJ': '-',           # solid (conjoined)
     'Approach PP': '-.',          # dash-dot (like Approach QP)
     'Approach DP': '-.',          # dash-dot (like Approach QP)
+    'Approach SL': (0, (5, 1)),   # densely dashed
+    'Approach SJ': '-',           # solid (conjoined)
+    'Approach SP': '-.',          # dash-dot
     'Approach NJ': '--',
     'Approach NP': ':',
     'Approach NL': ':',
@@ -147,6 +153,15 @@ def is_persistence_result(result) -> bool:
     return False
 
 
+def is_segmented_result(result) -> bool:
+    """Check if result is from segmented linear model (Approach SL/Approach SJ/Approach SP).
+
+    Segmented results have T_opt, h2, and h4 as primary parameters (slopes, not curvatures).
+    """
+    approach = getattr(result, 'approach', '')
+    return 'segmented' in approach.lower() or approach.startswith(('Approach SL', 'Approach SJ', 'Approach SP'))
+
+
 def piecewise_quad_shape(T: np.ndarray, T_opt: float) -> tuple:
     """Compute piecewise quadratic shape.
 
@@ -164,6 +179,23 @@ def piecewise_quad_shape(T: np.ndarray, T_opt: float) -> tuple:
     return low_component, high_component
 
 
+def segmented_linear_shape(T: np.ndarray, T_opt: float) -> tuple:
+    """Compute segmented linear shape.
+
+    Returns two arrays: one for T <= T_opt contribution, one for T > T_opt.
+
+    Args:
+        T: Temperature array
+        T_opt: Optimal temperature (breakpoint)
+
+    Returns:
+        Tuple of (low_component, high_component)
+    """
+    low_component = np.where(T <= T_opt, T - T_opt, 0.0)
+    high_component = np.where(T > T_opt, T - T_opt, 0.0)
+    return low_component, high_component
+
+
 def compute_h_response(T: np.ndarray, result) -> np.ndarray:
     """Compute h(T) - h(T_opt) for any approach type.
 
@@ -178,7 +210,14 @@ def compute_h_response(T: np.ndarray, result) -> np.ndarray:
     Returns:
         Array of h(T) - h(T_opt) values
     """
-    if is_piecewise_result(result):
+    if is_segmented_result(result):
+        # Segmented linear: h(T_opt) = 0, so h(T) - h(T_opt) = h(T)
+        T_opt = result.T_opt
+        h2 = result.h2   # Slope below T_opt
+        h4 = result.h4   # Slope above T_opt
+        low_comp, high_comp = segmented_linear_shape(T, T_opt)
+        return h2 * low_comp + h4 * high_comp
+    elif is_piecewise_result(result):
         # Piecewise quadratic: h(T_opt) = 0, so h(T) - h(T_opt) = h(T)
         T_opt = result.T_opt
         h2 = result.h2   # Curvature below T_opt
@@ -211,7 +250,13 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
     Returns:
         Array of dh/dT values
     """
-    if is_piecewise_result(result):
+    if is_segmented_result(result):
+        # Segmented linear derivative: step function
+        T_opt = result.T_opt
+        h2 = result.h2   # Slope below T_opt
+        h4 = result.h4   # Slope above T_opt
+        return np.where(T <= T_opt, h2, h4)
+    elif is_piecewise_result(result):
         # Piecewise quadratic derivative
         T_opt = result.T_opt
         h2 = result.h2   # Curvature below T_opt
@@ -307,8 +352,8 @@ def save_summary_table(
             'n_obs': result.n_obs,
             'n_params': result.n_params,
         }
-        # Add h4 for piecewise (Approach2*) and persistence (Approach3*) approaches
-        if is_piecewise_result(result) or is_persistence_result(result):
+        # Add h4 for piecewise, segmented, and persistence approaches
+        if is_piecewise_result(result) or is_segmented_result(result) or is_persistence_result(result):
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
         rows.append(row)
@@ -413,9 +458,16 @@ def save_summary_table(
                     f.write(f"  f2 = N/A\n")
             # Special handling for Approach 8a (shared T_opt, total/trend)
             # h2 = curvature for actual T; h4 = curvature for trend T
-            elif hasattr(result, 'h4') and hasattr(result, 'T_opt_se') and result.h1 == 0.0 and not is_piecewise_result(result):
+            elif hasattr(result, 'h4') and hasattr(result, 'T_opt_se') and result.h1 == 0.0 and not is_piecewise_result(result) and not is_segmented_result(result):
                 f.write(f"  h2 = {result.h2:.6f}  (SE: {result.h2_se:.6f})  [actual T curvature]\n")
                 f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [trend T curvature]\n")
+                T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
+                f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
+            # Special handling for segmented linear
+            # h2 = slope below T_opt; h4 = slope above T_opt
+            elif is_segmented_result(result):
+                f.write(f"  h2 = {result.h2:.6f}  (SE: {result.h2_se:.6f})  [slope below T_opt]\n")
+                f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [slope above T_opt]\n")
                 T_opt_se = result.T_opt_se if not np.isnan(result.T_opt_se) else 0.0
                 f.write(f"  T_opt = {result.T_opt:.4f}  (SE: {T_opt_se:.4f})\n")
             # Special handling for Approach 8 (piecewise quadratic)
@@ -3474,6 +3526,7 @@ def compute_h_response_uncertainty_bands(
         Tuple of arrays (h_lower, h_median, h_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key in ('Approach PL', 'Approach PJ', 'Approach PP'))
+    is_segmented = (approach_key in ('Approach SL', 'Approach SJ', 'Approach SP'))
 
     # Handle approach 6b (trend only)
     if approach_key == 'method2b':
@@ -3511,7 +3564,36 @@ def compute_h_response_uncertainty_bands(
         T_opt_valid = T_opt_samples[valid_mask]
         return _compute_symmetric_piecewise_bands(h2_valid, T_opt_valid, T_range, percentiles)
 
-    if is_piecewise:
+    if is_segmented:
+        # Segmented linear model: h2 for T <= T_opt, h4 for T > T_opt (linear, not squared)
+        h2_low_samples = getattr(result, 'h2_samples', None)
+        h2_high_samples = getattr(result, 'h4_samples', None)
+
+        if h2_low_samples is None or h2_high_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        valid_mask = (~np.isnan(h2_low_samples) &
+                      ~np.isnan(h2_high_samples) &
+                      ~np.isnan(result.T_opt_samples))
+
+        h2_low_valid = h2_low_samples[valid_mask]
+        h2_high_valid = h2_high_samples[valid_mask]
+        T_opt_valid = result.T_opt_samples[valid_mask]
+
+        if len(h2_low_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        n_samples = len(h2_low_valid)
+        n_T = len(T_range)
+        h_relative_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h2_low = h2_low_valid[i]
+            h2_high = h2_high_valid[i]
+            T_opt = T_opt_valid[i]
+            low_comp, high_comp = segmented_linear_shape(T_range, T_opt)
+            h_relative_samples[i, :] = h2_low * low_comp + h2_high * high_comp
+    elif is_piecewise:
         # Piecewise quadratic model: h2 for T <= T_opt, h4 for T > T_opt
         h2_low_samples = getattr(result, 'h2_samples', None)
         h2_high_samples = getattr(result, 'h4_samples', None)
@@ -4203,6 +4285,7 @@ def compute_derivative_uncertainty_bands(
         Tuple of arrays (dh_lower, dh_median, dh_upper) each with shape (len(T_range),)
     """
     is_piecewise = (approach_key in ('Approach PL', 'Approach PJ', 'Approach PP'))
+    is_segmented = (approach_key in ('Approach SL', 'Approach SJ', 'Approach SP'))
 
     # Handle approach 6b (trend only - uses h3,h4 for trend response)
     if approach_key == 'method2b':
@@ -4237,7 +4320,37 @@ def compute_derivative_uncertainty_bands(
         T_opt_valid = T_opt_samples[valid_mask]
         return _compute_symmetric_piecewise_derivative_bands(h2_valid, T_opt_valid, T_range, percentiles)
 
-    if is_piecewise:
+    if is_segmented:
+        # Segmented linear model: derivative is step function (constant h2 below, h4 above T_opt)
+        h2_low_samples = getattr(result, 'h2_samples', None)
+        h2_high_samples = getattr(result, 'h4_samples', None)
+
+        if h2_low_samples is None or h2_high_samples is None:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        valid_mask = (~np.isnan(h2_low_samples) &
+                      ~np.isnan(h2_high_samples) &
+                      ~np.isnan(result.T_opt_samples))
+
+        h2_low_valid = h2_low_samples[valid_mask]
+        h2_high_valid = h2_high_samples[valid_mask]
+        T_opt_valid = result.T_opt_samples[valid_mask]
+
+        if len(h2_low_valid) == 0:
+            return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
+
+        n_samples = len(h2_low_valid)
+        n_T = len(T_range)
+        dh_samples = np.zeros((n_samples, n_T))
+
+        for i in range(n_samples):
+            h2_low = h2_low_valid[i]
+            h2_high = h2_high_valid[i]
+            T_opt = T_opt_valid[i]
+
+            # Segmented linear derivative: step function
+            dh_samples[i, :] = np.where(T_range <= T_opt, h2_low, h2_high)
+    elif is_piecewise:
         # Piecewise quadratic model: h2 for T <= T_opt, h4 for T > T_opt
         h2_low_samples = getattr(result, 'h2_samples', None)
         h2_high_samples = getattr(result, 'h4_samples', None)

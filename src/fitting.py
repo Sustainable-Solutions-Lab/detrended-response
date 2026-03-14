@@ -10,6 +10,9 @@ Approaches (publication-ready):
     Approach PJ: Piecewise quadratic response with joint OLS
     Approach PP: Piecewise quadratic response with polynomial trend identification
     Approach PL: Piecewise quadratic response with LOESS trend identification
+    Approach SJ: Segmented linear response with joint OLS
+    Approach SP: Segmented linear response with polynomial trend identification
+    Approach SL: Segmented linear response with LOESS trend identification
     Approach DJ: Persistence decay model with joint OLS
     Approach DP: Persistence decay model with polynomial trend identification
     Approach DL: Persistence decay model with LOESS trend identification
@@ -1128,6 +1131,158 @@ def fit_ApproachPL_piecewise(
     )
 
 
+def fit_ApproachSL_segmented(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
+) -> FitResultApproach8:
+    """Approach SL: Segmented linear temperature response with LOESS detrending.
+
+    Model: h(T) = h2 * (T - T_opt)  if T <= T_opt
+           h(T) = h4 * (T - T_opt)  if T > T_opt
+
+    This model:
+    - Has an optimum at T_opt where h(T_opt) = 0
+    - Allows different slopes above vs below T_opt (V-shaped response)
+    - Uses 1D optimization over T_opt with inner 2-column OLS for h2, h4
+
+    For fitting we use the h(T) - h(T_trend) formulation.
+
+    Args:
+        data: AnalysisData object
+        trends_loess: CountryTrendsLoess (with LOESS trends)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
+
+    Returns:
+        FitResultApproach8 with T_opt, h2 (slope below), h4 (slope above), and standard errors
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t]
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    T = data.temp
+    T_trend = trends_loess.T_loess
+
+    def segmented_linear(T_vals, T_opt_val):
+        """Compute segmented linear: different slopes above/below T_opt.
+
+        Returns two columns: one for low (T <= T_opt) and one for high (T > T_opt).
+        """
+        low_col = np.where(T_vals <= T_opt_val, T_vals - T_opt_val, 0.0)
+        high_col = np.where(T_vals > T_opt_val, T_vals - T_opt_val, 0.0)
+        return low_col, high_col
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving inner 2-column OLS for h2, h4."""
+        low_T, high_T = segmented_linear(T, T_opt_val)
+        low_trend, high_trend = segmented_linear(T_trend, T_opt_val)
+
+        X1 = low_T - low_trend
+        X2 = high_T - high_trend
+        X = np.column_stack([X1, X2])
+
+        try:
+            if weights is not None:
+                y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+                sqrt_W = np.sqrt(weights)
+                X_w = X * sqrt_W[:, np.newaxis]
+                y_w = y_clean * sqrt_W
+                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+                y_pred = X @ beta_ols
+                sse = np.sum(weights * (y_clean - y_pred) ** 2)
+            else:
+                beta_ols, _, _, _ = linalg.lstsq(X, y)
+                y_pred = X @ beta_ols
+                sse = np.sum((y - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
+
+    x0 = 15.0
+    result = minimize(
+        lambda x: compute_sse_for_T_opt(x[0]),
+        x0=[x0],
+        bounds=[T_opt_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    T_opt_opt = result.x[0]
+
+    # Re-fit at optimal T_opt
+    low_T, high_T = segmented_linear(T, T_opt_opt)
+    low_trend, high_trend = segmented_linear(T_trend, T_opt_opt)
+    X1 = low_T - low_trend
+    X2 = high_T - high_trend
+    X_opt = np.column_stack([X1, X2])
+
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h2_low = beta_ols[0]
+    h2_high = beta_ols[1]
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
+
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    k = dict(year_means)
+    n_params = 3
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    h_values = h2_low * X1 + h2_high * X2
+    h_of_T_trend = h2_low * low_trend + h2_high * high_trend
+
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    Delta_u = h_values
+    v = h_of_T_trend
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach8(
+        approach="Approach SL: Segmented Linear (LOESS Detrending)",
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_ApproachDL_persistence_decay(
     data: AnalysisData,
     trends_loess: CountryTrendsLoess,
@@ -1659,6 +1814,211 @@ def fit_ApproachPJ_piecewise_conjoined(
 
     return FitResultApproach8(
         approach="Approach PJ: Piecewise (Joint OLS)",
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
+def fit_ApproachSJ_segmented_conjoined(
+    data: AnalysisData,
+    T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
+) -> FitResultApproach8:
+    """Approach SJ: Segmented linear response with full OLS for j_i(t) and k(t).
+
+    Combines:
+    - Segmented linear climate response (like Approach SL but linear not quadratic)
+    - Full OLS estimation of country trends and year effects (like Approach QJ)
+
+    Model: Δy_i(t) = h2*(T-T_opt) [T≤T_opt] + h4*(T-T_opt) [T>T_opt]
+                     + j_{0,i} + j_{1,i}*t + j_{2,i}*t² + k_t
+
+    Uses 1D optimization over T_opt with inner OLS solving for all other parameters.
+
+    Args:
+        data: AnalysisData object
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
+
+    Returns:
+        FitResultApproach8 with T_opt, h2 (slope below), h4 (slope above), and standard errors
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+
+    unique_years = sorted(set(data.year))
+
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
+
+    n_j_params = 3 * (n_countries - 1)
+    n_k_params = n_active_years
+    n_total_params = 2 + n_j_params + n_k_params
+
+    # Pre-compute constant parts of design matrix
+    X_base = np.zeros((n_obs, n_total_params))
+
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = 2 + 3 * (c - 1)
+            X_base[i, col_base] = 1.0
+            X_base[i, col_base + 1] = t
+            X_base[i, col_base + 2] = t * t
+
+    k_col_start = 2 + n_j_params
+    for i in range(n_obs):
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            yr_idx = active_year_to_idx[yr]
+            X_base[i, k_col_start + yr_idx] = 1.0
+
+    T = data.temp
+    y = data.growth_pcGDP
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving full OLS."""
+        low_col = np.where(T <= T_opt_val, T - T_opt_val, 0.0)
+        high_col = np.where(T > T_opt_val, T - T_opt_val, 0.0)
+
+        X = X_base.copy()
+        X[:, 0] = low_col
+        X[:, 1] = high_col
+
+        if weights is not None:
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y * sqrt_W
+            XTX = X_w.T @ X_w
+            XTy = X_w.T @ y_w
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum(weights * (y - y_pred) ** 2)
+        else:
+            XTX = X.T @ X
+            XTy = X.T @ y
+            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
+            y_pred = X @ beta_ols
+            sse = np.sum((y - y_pred) ** 2)
+        return sse
+
+    # 1D optimization: grid search then Brent's method
+    T_opt_grid = np.linspace(T_opt_bounds[0], T_opt_bounds[1], 31)
+    sse_grid = [compute_sse_for_T_opt(T_val) for T_val in T_opt_grid]
+    best_grid_idx = np.argmin(sse_grid)
+
+    search_lo = T_opt_grid[max(0, best_grid_idx - 1)]
+    search_hi = T_opt_grid[min(len(T_opt_grid) - 1, best_grid_idx + 1)]
+
+    result = minimize_scalar(
+        compute_sse_for_T_opt,
+        bounds=(search_lo, search_hi),
+        method='bounded',
+        options={'xatol': 1e-8}
+    )
+    T_opt_opt = result.x
+
+    # Re-fit at optimal T_opt
+    low_col = np.where(T <= T_opt_opt, T - T_opt_opt, 0.0)
+    high_col = np.where(T > T_opt_opt, T - T_opt_opt, 0.0)
+
+    X_opt = X_base.copy()
+    X_opt[:, 0] = low_col
+    X_opt[:, 1] = high_col
+
+    if weights is not None:
+        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+
+    h2_low = beta[0]
+    h2_high = beta[1]
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
+
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        n_obs,
+        n_params=3
+    )
+
+    # Extract year fixed effects
+    k = {}
+    for yr in unique_years:
+        if yr in active_year_to_idx:
+            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
+        else:
+            k[yr] = np.nan
+
+    n_params = 3
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_total_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+
+    # Compute j_trend and k_values for diagnostics
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = 2 + 3 * (c - 1)
+            j0 = beta[col_base]
+            j1 = beta[col_base + 1]
+            j2 = beta[col_base + 2]
+            j_trend[i] = j0 + j1 * t + j2 * t * t
+        k_val = k[yr]
+        k_values[i] = k_val if not np.isnan(k_val) else 0.0
+
+    h_values = h2_low * low_col + h2_high * high_col
+
+    # For conjoined approach: no separate T_trend
+    T_trend = T
+    low_trend = np.where(T_trend <= T_opt_opt, T_trend - T_opt_opt, 0.0)
+    high_trend = np.where(T_trend > T_opt_opt, T_trend - T_opt_opt, 0.0)
+    h_of_T_trend = h2_low * low_trend + h2_high * high_trend
+
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+
+    # For conjoined approach: Delta_u = 0, v = h(T)
+    Delta_u = np.zeros(n_obs)
+    v = h_values
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultApproach8(
+        approach="Approach SJ: Segmented Linear (Joint OLS)",
         h2=h2_low,
         h2_se=h2_low_se,
         h4=h2_high,
@@ -2750,6 +3110,167 @@ def fit_ApproachPP_piecewise_linear_detrend(
     )
 
 
+def fit_ApproachSP_segmented_linear_detrend(
+    data: AnalysisData,
+    trends: CountryTrends,
+    year_means: dict,
+    T_opt_bounds: tuple = (0.0, 30.0),
+    weights: np.ndarray = None,
+) -> FitResultApproach8:
+    """Approach SP: Segmented linear response with linear T + quadratic GDP detrending.
+
+    Combines:
+    - Segmented linear climate response (like Approach SL)
+    - Linear temperature + quadratic GDP detrending with pre-computed k (like Approach QP)
+
+    Model: h(T) = h2 * (T - T_opt)  if T <= T_opt
+           h(T) = h4 * (T - T_opt)  if T > T_opt
+
+    Args:
+        data: AnalysisData object
+        trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
+        year_means: Pre-computed k[t] = mean(dy_i[t])
+        T_opt_bounds: Bounds for optimal temperature (default [0, 30])
+        weights: Optional observation weights for weighted least squares
+
+    Returns:
+        FitResultApproach8 with T_opt, h2 (slope below), h4 (slope above), and standard errors
+    """
+    # Compute dependent variable: dy - k[t] - j_i[t]
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+
+    T = data.temp
+
+    # Compute T_trend using linear polynomial fit (T0 + T1*t)
+    T_trend = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+
+    def segmented_linear(T_vals, T_opt_val):
+        """Compute segmented linear: different slopes above/below T_opt."""
+        low_col = np.where(T_vals <= T_opt_val, T_vals - T_opt_val, 0.0)
+        high_col = np.where(T_vals > T_opt_val, T_vals - T_opt_val, 0.0)
+        return low_col, high_col
+
+    def compute_sse_for_T_opt(T_opt_val):
+        """Compute SSE for given T_opt by solving inner 2-column OLS for h2, h4."""
+        low_T, high_T = segmented_linear(T, T_opt_val)
+        low_trend, high_trend = segmented_linear(T_trend, T_opt_val)
+
+        X1 = low_T - low_trend
+        X2 = high_T - high_trend
+        X = np.column_stack([X1, X2])
+
+        try:
+            if weights is not None:
+                y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+                sqrt_W = np.sqrt(weights)
+                X_w = X * sqrt_W[:, np.newaxis]
+                y_w = y_clean * sqrt_W
+                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+                y_pred = X @ beta_ols
+                sse = np.sum(weights * (y_clean - y_pred) ** 2)
+            else:
+                beta_ols, _, _, _ = linalg.lstsq(X, y)
+                y_pred = X @ beta_ols
+                sse = np.sum((y - y_pred) ** 2)
+            return sse
+        except Exception:
+            return np.inf
+
+    x0 = 15.0
+    result = minimize(
+        lambda x: compute_sse_for_T_opt(x[0]),
+        x0=[x0],
+        bounds=[T_opt_bounds],
+        method='L-BFGS-B',
+        options={'ftol': 1e-8}
+    )
+    T_opt_opt = result.x[0]
+
+    # Re-fit at optimal T_opt
+    low_T, high_T = segmented_linear(T, T_opt_opt)
+    low_trend, high_trend = segmented_linear(T_trend, T_opt_opt)
+    X1 = low_T - low_trend
+    X2 = high_T - high_trend
+    X_opt = np.column_stack([X1, X2])
+
+    if weights is not None:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
+    h2_low = beta_ols[0]
+    h2_high = beta_ols[1]
+    h2_low_se = np.sqrt(max(cov[0, 0], 0))
+    h2_high_se = np.sqrt(max(cov[1, 1], 0))
+
+    T_opt_se = compute_1d_se_numerical(
+        compute_sse_for_T_opt,
+        T_opt_opt,
+        T_opt_bounds,
+        data.n_obs,
+        n_params=3
+    )
+
+    k = dict(year_means)
+    n_params = 3
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    j_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        k_values[i] = year_means[yr]
+
+    h_values = h2_low * X1 + h2_high * X2
+    h_of_T_trend = h2_low * low_trend + h2_high * high_trend
+
+    components = {
+        'h_T': h_values,
+        'j': j_trend,
+        'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    Delta_u = h_values
+    v = h_of_T_trend
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach8(
+        approach="Approach SP: Segmented Linear (Polynomial Detrending)",
+        h2=h2_low,
+        h2_se=h2_low_se,
+        h4=h2_high,
+        h4_se=h2_high_se,
+        T_opt=T_opt_opt,
+        T_opt_se=T_opt_se,
+        k=k,
+        r_squared=r_sq,
+        adj_r_squared=adj_r_sq,
+        rmse=rmse,
+        n_obs=data.n_obs,
+        n_params=n_params,
+        residuals=residuals,
+        total_r_squared=total_r_sq,
+        var_decomp=var_decomp,
+        var_attrib=var_attrib,
+    )
+
+
 def fit_ApproachDP_persistence_linear_detrend(
     data: AnalysisData,
     trends: CountryTrends,
@@ -3023,6 +3544,8 @@ def fit_all_approaches(
         timed_fit('Approach NJ', fit_ApproachNJ_joint, data, weights)
     if should_fit('Approach PJ'):
         timed_fit('Approach PJ', fit_ApproachPJ_piecewise_conjoined, data, (0.0, 30.0), weights)
+    if should_fit('Approach SJ'):
+        timed_fit('Approach SJ', fit_ApproachSJ_segmented_conjoined, data, (0.0, 30.0), weights)
     if should_fit('Approach DJ'):
         timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
     if should_fit('Approach LJ'):
@@ -3050,6 +3573,9 @@ def fit_all_approaches(
         if should_fit('Approach PL'):
             timed_fit('Approach PL', fit_ApproachPL_piecewise,
                       data, trends_loess, year_means, (0.0, 30.0), weights)
+        if should_fit('Approach SL'):
+            timed_fit('Approach SL', fit_ApproachSL_segmented,
+                      data, trends_loess, year_means, (0.0, 30.0), weights)
         if should_fit('Approach DL'):
             timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
                       data, trends_loess, year_means, (0.0, 1.0), weights)
@@ -3062,6 +3588,9 @@ def fit_all_approaches(
     if trends_with_k is not None and year_means is not None:
         if should_fit('Approach PP'):
             timed_fit('Approach PP', fit_ApproachPP_piecewise_linear_detrend,
+                      data, trends_with_k, year_means, (0.0, 30.0), weights)
+        if should_fit('Approach SP'):
+            timed_fit('Approach SP', fit_ApproachSP_segmented_linear_detrend,
                       data, trends_with_k, year_means, (0.0, 30.0), weights)
         if should_fit('Approach DP'):
             timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,

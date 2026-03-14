@@ -590,6 +590,16 @@ def run_bootstrap(
                         r.h4 * (data.temp - T_opt)**2
                     )
 
+                elif name in ('Approach SL', 'Approach SJ', 'Approach SP'):
+                    # Segmented linear: h2*(T-T_opt) if T≤T_opt else h4*(T-T_opt)
+                    T_opt = r.T_opt
+                    below = data.temp <= T_opt
+                    h_T_samples[name][b] = np.where(
+                        below,
+                        r.h2 * (data.temp - T_opt),
+                        r.h4 * (data.temp - T_opt)
+                    )
+
                 elif name == 'Approach DP':
                     # Persistence with linear detrend: same formula as Approach DL/Approach DJ
                     # Use T_linear_at_first_year for pre-history correction

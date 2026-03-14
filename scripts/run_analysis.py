@@ -105,7 +105,7 @@ def main(argv=None):
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
-             "First letter: N/Q/P/D/L (response type). "
+             "First letter: N/Q/P/S/D/L (response type). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )
@@ -161,6 +161,10 @@ def main(argv=None):
     print(f"      Years: {data.n_years}")
     print(f"      Year range: {data.year_range[0]} - {data.year_range[1]}")
     print(f"      Time: {t_load:.3f}s")
+    print(f"      Start year: {data.year_range[0]}")
+    print(f"      End year: {data.year_range[1]}")
+    print(f"      Mean GDP growth rate: {np.mean(data.growth_pcGDP):.16e}")
+    print(f"      Mean temperature: {np.mean(data.temp):.16e} C")
 
     # Compute country-level trends
     print("\n[2/5] Computing country-level trends...")

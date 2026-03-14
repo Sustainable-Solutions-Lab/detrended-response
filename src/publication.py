@@ -751,6 +751,11 @@ def generate_variance_decomposition_by_response(
             'description': 'Piecewise quadratic',
             'latex_description': r'Piecewise quadratic',
         },
+        'Segmented': {
+            'approaches': ['Approach SJ', 'Approach SP', 'Approach SL'],
+            'description': 'Segmented linear',
+            'latex_description': r'Segmented linear',
+        },
         'Persistence': {
             'approaches': ['Approach DJ', 'Approach DP', 'Approach DL'],
             'description': 'Quadratic with decay',
