@@ -105,7 +105,7 @@ def main(argv=None):
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
-             "First letter: N/Q/P/S/D/L (response type). "
+             "First letter: N/Q/P/S/T/D/L (response type). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )
@@ -208,6 +208,21 @@ def main(argv=None):
         if name in ['Approach PL', 'Approach PJ', 'Approach PP'] and hasattr(r, 'h4'):
             print(f"  h2 (below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
+
+        # Three-interval approaches: h2, h4, T_crit_low, delta_T_crit, T_opt
+        elif name in ['Approach TL', 'Approach TJ', 'Approach TP'] and hasattr(r, 'T_crit_low'):
+            print(f"  h2 (slope below T_crit_low) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (slope above T_crit_high) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
+            print(f"  T_crit_low = {r.T_crit_low:.4f}")
+            print(f"  delta_T_crit = {r.delta_T_crit:.4f}")
+            T_opt_str = f"{r.T_opt:.4f}" if not np.isnan(r.T_opt) else "N/A"
+            print(f"  T_opt = {T_opt_str}")
+
+        # Segmented linear approaches: h2, h4 (slopes), T_opt
+        elif name in ['Approach SL', 'Approach SJ', 'Approach SP'] and hasattr(r, 'h4'):
+            print(f"  h2 (slope below T_opt) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
+            print(f"  h4 (slope above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
         # Approach DL/Approach DJ/Approach DP: h1, h2, h4 (persistence decay), T_opt

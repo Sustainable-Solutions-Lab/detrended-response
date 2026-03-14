@@ -177,6 +177,12 @@ class BootstrapResult:
     var_attrib_point: dict = None      # From original fit
     var_attrib_samples: dict = None    # Dict mapping key -> np.ndarray of bootstrap samples
 
+    # Three-interval (T approach) specific (optional)
+    T_crit_low_point: float = None
+    T_crit_low_samples: np.ndarray = None
+    delta_T_crit_point: float = None
+    delta_T_crit_samples: np.ndarray = None
+
     # Year fixed effects k(t)
     k_point: Dict[int, float] = None      # Point estimates from original fit
     k_samples: Dict[int, np.ndarray] = None  # year -> array of shape (n_bootstrap,)
@@ -362,6 +368,9 @@ def run_bootstrap(
     h1_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     h2_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     T_opt_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
+    # Three-interval specific samples
+    T_crit_low_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    delta_T_crit_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     # Approach-specific samples (f1, h3, h4, f2, T_dep_opt have different meanings per approach)
@@ -508,6 +517,11 @@ def run_bootstrap(
                 # f2: 6c T_opt_trend, 8b quadratic modulation
                 if hasattr(r, 'f2') and r.f2 is not None:
                     f2_samples[name][b] = r.f2
+                # T_crit_low and delta_T_crit: three-interval approaches
+                if hasattr(r, 'T_crit_low') and r.T_crit_low is not None:
+                    T_crit_low_samples[name][b] = r.T_crit_low
+                if hasattr(r, 'delta_T_crit') and r.delta_T_crit is not None:
+                    delta_T_crit_samples[name][b] = r.delta_T_crit
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -589,6 +603,12 @@ def run_bootstrap(
                         r.h2 * (data.temp - T_opt)**2,
                         r.h4 * (data.temp - T_opt)**2
                     )
+
+                elif name in ('Approach TL', 'Approach TJ', 'Approach TP'):
+                    # Three-interval: h2*f_low + h4*f_high
+                    from .output import three_interval_shape
+                    f_low, f_high = three_interval_shape(data.temp, r.T_crit_low, r.delta_T_crit)
+                    h_T_samples[name][b] = r.h2 * f_low + r.h4 * f_high
 
                 elif name in ('Approach SL', 'Approach SJ', 'Approach SP'):
                     # Segmented linear: h2*(T-T_opt) if T≤T_opt else h4*(T-T_opt)
@@ -719,6 +739,10 @@ def run_bootstrap(
         # T_opt may not exist for all approaches (e.g., Approach 6c uses T_dep_opt/f2 instead)
         T_opt_point = getattr(orig, 'T_opt', None)
 
+        # Three-interval specific
+        T_crit_low_point = getattr(orig, 'T_crit_low', None)
+        delta_T_crit_point = getattr(orig, 'delta_T_crit', None)
+
         results[name] = BootstrapResult(
             approach=orig.approach,
             h1_point=orig.h1,
@@ -743,6 +767,10 @@ def run_bootstrap(
             f2_samples=f2_samples[name],
             T_dep_opt_point=T_dep_opt_point,
             T_dep_opt_samples=T_dep_opt_samples[name],
+            T_crit_low_point=T_crit_low_point,
+            T_crit_low_samples=T_crit_low_samples[name],
+            delta_T_crit_point=delta_T_crit_point,
+            delta_T_crit_samples=delta_T_crit_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
             var_attrib_point=getattr(orig, 'var_attrib', None),

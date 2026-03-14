@@ -112,6 +112,27 @@ def reconstruct_bootstrap_results(
             T_dep_opt_samples = samples['T_dep_opt'].values
             T_dep_opt_point = summary_row.get('T_dep_opt_point', None)
 
+        # Three-interval specific fields
+        T_crit_low_point = None
+        T_crit_low_samples = None
+        delta_T_crit_point = None
+        delta_T_crit_samples = None
+
+        if 'T_crit_low' in samples.columns and not samples['T_crit_low'].isna().all():
+            T_crit_low_samples = samples['T_crit_low'].values
+            # Get point estimate from iteration -1 row
+            point_mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
+            point_rows = coefficients_df[point_mask]
+            if len(point_rows) > 0 and 'T_crit_low' in point_rows.columns:
+                T_crit_low_point = point_rows['T_crit_low'].values[0]
+
+        if 'delta_T_crit' in samples.columns and not samples['delta_T_crit'].isna().all():
+            delta_T_crit_samples = samples['delta_T_crit'].values
+            point_mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
+            point_rows = coefficients_df[point_mask]
+            if len(point_rows) > 0 and 'delta_T_crit' in point_rows.columns:
+                delta_T_crit_point = point_rows['delta_T_crit'].values[0]
+
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
         k_samples = None
@@ -166,6 +187,10 @@ def reconstruct_bootstrap_results(
             f2_samples=f2_samples,
             T_dep_opt_point=T_dep_opt_point,
             T_dep_opt_samples=T_dep_opt_samples,
+            T_crit_low_point=T_crit_low_point,
+            T_crit_low_samples=T_crit_low_samples,
+            delta_T_crit_point=delta_T_crit_point,
+            delta_T_crit_samples=delta_T_crit_samples,
             k_point=k_point,
             k_samples=k_samples,
         )
@@ -756,6 +781,11 @@ def generate_variance_decomposition_by_response(
             'description': 'Segmented linear',
             'latex_description': r'Segmented linear',
         },
+        'Three-Interval': {
+            'approaches': ['Approach TJ', 'Approach TP', 'Approach TL'],
+            'description': 'Three-interval',
+            'latex_description': r'Three-interval',
+        },
         'Persistence': {
             'approaches': ['Approach DJ', 'Approach DP', 'Approach DL'],
             'description': 'Quadratic with decay',
@@ -1048,9 +1078,10 @@ def generate_covariance_tables(
         return
 
     # Define approach groups
-    j_approaches = ['Approach NJ', 'Approach QJ', 'Approach PJ', 'Approach SJ', 'Approach DJ']
+    j_approaches = ['Approach NJ', 'Approach QJ', 'Approach PJ', 'Approach SJ', 'Approach TJ', 'Approach DJ']
     pl_approaches = ['Approach NP', 'Approach NL', 'Approach QP', 'Approach QL',
                      'Approach PP', 'Approach PL', 'Approach SP', 'Approach SL',
+                     'Approach TP', 'Approach TL',
                      'Approach DP', 'Approach DL']
 
     # Filter to approaches that exist in the data
@@ -1512,6 +1543,7 @@ def generate_tables(
         'Approach QJ', 'Approach QP', 'Approach QL',
         'Approach PJ', 'Approach PP', 'Approach PL',
         'Approach SJ', 'Approach SP', 'Approach SL',
+        'Approach TJ', 'Approach TP', 'Approach TL',
         'Approach DJ', 'Approach DP', 'Approach DL',
     ]
 

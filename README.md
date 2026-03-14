@@ -144,6 +144,8 @@ The “climate response” is specified in several ways:
 
 - **Quadratic (Q\*):** `h(T) = h₁·T + h₂·T²`
 - **Piecewise quadratic (P\*):** different curvature below vs above an estimated optimum `T_opt`
+- **Segmented linear (S\*):** different slopes below vs above `T_opt` (V‑shaped response)
+- **Three‑interval (T\*):** derivative transitions linearly between `T_crit_low` and `T_crit_high`, creating a smooth version of the segmented model with a quadratic transition zone
 - **Persistence/decay (D\*):** a distributed‑lag “converging” response with decay parameter `h₄`
 
 ### Approaches implemented
@@ -154,6 +156,8 @@ The code reports results under short labels:
 - **QP**: Quadratic response, *polynomial detrending* (precompute `k(t)` and country trends; linear T trend)
 - **QL**: Quadratic response, *LOESS detrending* (precompute `k(t)` and LOESS trends)
 - **PJ / PP / PL**: Piecewise quadratic variants (joint / polynomial / LOESS detrending)
+- **SJ / SP / SL**: Segmented linear variants (joint / polynomial / LOESS detrending)
+- **TJ / TP / TL**: Three‑interval variants (joint / polynomial / LOESS detrending)
 - **DJ / DP / DL**: Persistence/decay variants (joint / polynomial / LOESS detrending)
 - **NJ / NP / NL**: “null” variants with **no climate response** (only `jᵢ(t)` and `k(t)`)
 

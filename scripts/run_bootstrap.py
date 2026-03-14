@@ -127,7 +127,7 @@ def main(argv=None):
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
-             "First letter: N/Q/P/D/L (response type). "
+             "First letter: N/Q/P/S/T/D/L (response type). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )
@@ -214,6 +214,7 @@ def main(argv=None):
         h_T_approaches = ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach PL', 'Approach DL',
                            'Approach PP', 'Approach DP', 'Approach PJ', 'Approach DJ',
                            'Approach SL', 'Approach SP', 'Approach SJ',
+                           'Approach TL', 'Approach TP', 'Approach TJ',
                            'Approach LL', 'Approach LJ']
     bootstrap_results, country_samples, h_T_samples, year_samples = run_bootstrap(
         data=data,
@@ -306,7 +307,8 @@ def main(argv=None):
 
         # Piecewise/Segmented: h2 (below T_opt), h4 (above T_opt), T_opt
         if name in ['Approach PL', 'Approach PJ', 'Approach PP',
-                     'Approach SL', 'Approach SJ', 'Approach SP'] and result.h4_point is not None:
+                     'Approach SL', 'Approach SJ', 'Approach SP',
+                     'Approach TL', 'Approach TJ', 'Approach TP'] and result.h4_point is not None:
             print(f"  h2 (below T_opt): {result.h2_point:.6f}")
             print(f"    90% CI: [{stats['h2']['p5']:.6f}, {stats['h2']['p95']:.6f}]")
             print(f"  h4 (above T_opt): {result.h4_point:.6f}")

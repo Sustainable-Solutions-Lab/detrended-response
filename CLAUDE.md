@@ -57,6 +57,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
     - Q = Quadratic response function
     - P = Piecewise quadratic response function
     - S = Segmented linear response function
+    - T = Three-interval response function
     - D = Decay (persistence time scale)
     - L = Level effect (h4=1, first-difference of climate response)
   - Second letter indicates trend identification method:
@@ -88,6 +89,9 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
   - Approach SL: gold
   - Approach SJ: darkkhaki
   - Approach SP: goldenrod
+  - Approach TL: darkorange
+  - Approach TJ: sienna
+  - Approach TP: peru
   - Approach LL: blue
   - Approach LJ: purple
   - Approach NJ/Approach NP/Approach NL (null models): gray
