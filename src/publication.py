@@ -115,8 +115,8 @@ def reconstruct_bootstrap_results(
         # Three-interval specific fields
         T_crit_low_point = None
         T_crit_low_samples = None
-        delta_T_crit_point = None
-        delta_T_crit_samples = None
+        T_crit_high_point = None
+        T_crit_high_samples = None
 
         if 'T_crit_low' in samples.columns and not samples['T_crit_low'].isna().all():
             T_crit_low_samples = samples['T_crit_low'].values
@@ -126,12 +126,12 @@ def reconstruct_bootstrap_results(
             if len(point_rows) > 0 and 'T_crit_low' in point_rows.columns:
                 T_crit_low_point = point_rows['T_crit_low'].values[0]
 
-        if 'delta_T_crit' in samples.columns and not samples['delta_T_crit'].isna().all():
-            delta_T_crit_samples = samples['delta_T_crit'].values
+        if 'T_crit_high' in samples.columns and not samples['T_crit_high'].isna().all():
+            T_crit_high_samples = samples['T_crit_high'].values
             point_mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
             point_rows = coefficients_df[point_mask]
-            if len(point_rows) > 0 and 'delta_T_crit' in point_rows.columns:
-                delta_T_crit_point = point_rows['delta_T_crit'].values[0]
+            if len(point_rows) > 0 and 'T_crit_high' in point_rows.columns:
+                T_crit_high_point = point_rows['T_crit_high'].values[0]
 
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
@@ -189,8 +189,8 @@ def reconstruct_bootstrap_results(
             T_dep_opt_samples=T_dep_opt_samples,
             T_crit_low_point=T_crit_low_point,
             T_crit_low_samples=T_crit_low_samples,
-            delta_T_crit_point=delta_T_crit_point,
-            delta_T_crit_samples=delta_T_crit_samples,
+            T_crit_high_point=T_crit_high_point,
+            T_crit_high_samples=T_crit_high_samples,
             k_point=k_point,
             k_samples=k_samples,
         )

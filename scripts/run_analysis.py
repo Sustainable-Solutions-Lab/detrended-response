@@ -210,12 +210,12 @@ def main(argv=None):
             print(f"  h4 (above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # Three-interval approaches: h2, h4, T_crit_low, delta_T_crit, T_opt
+        # Three-interval approaches: h2, h4, T_crit_low, T_crit_high, T_opt
         elif name in ['Approach TL', 'Approach TJ', 'Approach TP'] and hasattr(r, 'T_crit_low'):
             print(f"  h2 (slope below T_crit_low) = {r.h2:.6f}  (SE: {r.h2_se:.6f})")
             print(f"  h4 (slope above T_crit_high) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_crit_low = {r.T_crit_low:.4f}")
-            print(f"  delta_T_crit = {r.delta_T_crit:.4f}")
+            print(f"  T_crit_high = {r.T_crit_high:.4f}")
             T_opt_str = f"{r.T_opt:.4f}" if not np.isnan(r.T_opt) else "N/A"
             print(f"  T_opt = {T_opt_str}")
 
@@ -262,7 +262,10 @@ def main(argv=None):
         'Approach NJ', 'Approach NP', 'Approach NL',
         'Approach QJ', 'Approach QP', 'Approach QL',
         'Approach PJ', 'Approach PP', 'Approach PL',
+        'Approach SJ', 'Approach SP', 'Approach SL',
+        'Approach TJ', 'Approach TP', 'Approach TL',
         'Approach DJ', 'Approach DP', 'Approach DL',
+        'Approach LJ', 'Approach LL',
     ]
     approach_order = [a for a in all_approach_order if a in results]
     save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)

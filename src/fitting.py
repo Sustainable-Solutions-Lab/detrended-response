@@ -347,7 +347,7 @@ class FitResultApproach8:
     h1_se: float = 0.0     # SE for h1 (always 0)
     # Three-interval (T approach) specific fields
     T_crit_low: float = None    # Lower critical temperature (start of transition zone)
-    delta_T_crit: float = None  # Width of transition zone (T_hi - T_lo)
+    T_crit_high: float = None   # Upper critical temperature (end of transition zone)
 
 
 @dataclass
@@ -3573,15 +3573,16 @@ def _optimize_three_interval(compute_sse_for_T0T1, T_bounds=(0.0, 30.0)):
     )
     T0_opt, T1_opt = result.x
     T_crit_low = min(T0_opt, T1_opt)
-    delta_T_crit = abs(T1_opt - T0_opt)
-    return T_crit_low, delta_T_crit
+    T_crit_high = max(T0_opt, T1_opt)
+    return T_crit_low, T_crit_high
 
 
-def _derive_T_opt(h2, h4, T_crit_low, delta_T_crit):
+def _derive_T_opt(h2, h4, T_crit_low, T_crit_high):
     """Derive T_opt from three-interval parameters."""
+    delta = T_crit_high - T_crit_low
     if h2 * h4 < 0:
-        if delta_T_crit > 0:
-            return T_crit_low + h2 * delta_T_crit / (h2 - h4)
+        if delta > 0:
+            return T_crit_low + h2 * delta / (h2 - h4)
         else:
             return T_crit_low
     return np.nan
@@ -3650,11 +3651,12 @@ def fit_ApproachTL_three_interval(
         except Exception:
             return np.inf
 
-    T_crit_low_opt, delta_T_crit_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    delta_T_crit = T_crit_high_opt - T_crit_low_opt
 
     # Re-fit at optimal params
-    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit_opt)
-    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit_opt)
+    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
+    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit)
     X1 = f_low_T - f_low_trend
     X2 = f_high_T - f_high_trend
     X_opt = np.column_stack([X1, X2])
@@ -3668,7 +3670,7 @@ def fit_ApproachTL_three_interval(
     h2_se = np.sqrt(max(cov[0, 0], 0))
     h4_se = np.sqrt(max(cov[1, 1], 0))
 
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, delta_T_crit_opt)
+    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
 
     k = dict(year_means)
     n_params = 4  # h2, h4, T_crit_low, delta_T_crit
@@ -3713,7 +3715,7 @@ def fit_ApproachTL_three_interval(
         var_decomp=var_decomp,
         var_attrib=var_attrib,
         T_crit_low=T_crit_low_opt,
-        delta_T_crit=delta_T_crit_opt,
+        T_crit_high=T_crit_high_opt,
     )
 
 
@@ -3805,10 +3807,11 @@ def fit_ApproachTJ_three_interval_conjoined(
             sse = np.sum((y - y_pred) ** 2)
         return sse
 
-    T_crit_low_opt, delta_T_crit_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    delta_T_crit = T_crit_high_opt - T_crit_low_opt
 
     # Re-fit at optimal params
-    f_low, f_high = three_interval_basis(T, T_crit_low_opt, delta_T_crit_opt)
+    f_low, f_high = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
     X_opt = X_base.copy()
     X_opt[:, 0] = f_low
     X_opt[:, 1] = f_high
@@ -3823,7 +3826,7 @@ def fit_ApproachTJ_three_interval_conjoined(
     h2_se = np.sqrt(max(cov[0, 0], 0))
     h4_se = np.sqrt(max(cov[1, 1], 0))
 
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, delta_T_crit_opt)
+    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
 
     # Extract year fixed effects
     k = {}
@@ -3887,7 +3890,7 @@ def fit_ApproachTJ_three_interval_conjoined(
         var_decomp=var_decomp,
         var_attrib=var_attrib,
         T_crit_low=T_crit_low_opt,
-        delta_T_crit=delta_T_crit_opt,
+        T_crit_high=T_crit_high_opt,
     )
 
 
@@ -3960,11 +3963,12 @@ def fit_ApproachTP_three_interval_linear_detrend(
         except Exception:
             return np.inf
 
-    T_crit_low_opt, delta_T_crit_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+    delta_T_crit = T_crit_high_opt - T_crit_low_opt
 
     # Re-fit at optimal params
-    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit_opt)
-    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit_opt)
+    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
+    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit)
     X1 = f_low_T - f_low_trend
     X2 = f_high_T - f_high_trend
     X_opt = np.column_stack([X1, X2])
@@ -3978,7 +3982,7 @@ def fit_ApproachTP_three_interval_linear_detrend(
     h2_se = np.sqrt(max(cov[0, 0], 0))
     h4_se = np.sqrt(max(cov[1, 1], 0))
 
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, delta_T_crit_opt)
+    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
 
     k = dict(year_means)
     n_params = 4
@@ -4029,7 +4033,7 @@ def fit_ApproachTP_three_interval_linear_detrend(
         var_decomp=var_decomp,
         var_attrib=var_attrib,
         T_crit_low=T_crit_low_opt,
-        delta_T_crit=delta_T_crit_opt,
+        T_crit_high=T_crit_high_opt,
     )
 
 

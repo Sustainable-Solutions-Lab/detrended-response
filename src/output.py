@@ -162,7 +162,7 @@ def is_persistence_result(result) -> bool:
 def is_three_interval_result(result) -> bool:
     """Check if result is from three-interval model (Approach TL/Approach TJ/Approach TP).
 
-    Three-interval results have T_crit_low and delta_T_crit parameters.
+    Three-interval results have T_crit_low and T_crit_high parameters.
     """
     approach = getattr(result, 'approach', '')
     if 'three-interval' in approach.lower() or approach.startswith(('Approach TL', 'Approach TJ', 'Approach TP')):
@@ -262,10 +262,10 @@ def compute_h_response(T: np.ndarray, result) -> np.ndarray:
     if is_three_interval_result(result):
         # Three-interval: h(T) = h2*f_low(T) + h4*f_high(T)
         T_crit_low = result.T_crit_low
-        delta_T_crit = result.delta_T_crit
+        T_crit_high = result.T_crit_high
         h2 = result.h2
         h4 = result.h4
-        f_low, f_high = three_interval_shape(T, T_crit_low, delta_T_crit)
+        f_low, f_high = three_interval_shape(T, T_crit_low, T_crit_high - T_crit_low)
         return h2 * f_low + h4 * f_high
     elif is_segmented_result(result):
         # Segmented linear: h(T_opt) = 0, so h(T) - h(T_opt) = h(T)
@@ -310,14 +310,14 @@ def compute_dh_dT(T: np.ndarray, result) -> np.ndarray:
     if is_three_interval_result(result):
         # Three-interval derivative: piecewise linear
         T_crit_low = result.T_crit_low
-        delta_T_crit = result.delta_T_crit
-        T_hi = T_crit_low + delta_T_crit
+        T_crit_high = result.T_crit_high
         h2 = result.h2
         h4 = result.h4
         below = T <= T_crit_low
-        above = T >= T_hi
-        if delta_T_crit > 0:
-            frac = np.clip((T - T_crit_low) / delta_T_crit, 0, 1)
+        above = T >= T_crit_high
+        delta = T_crit_high - T_crit_low
+        if delta > 0:
+            frac = np.clip((T - T_crit_low) / delta, 0, 1)
             return np.where(below, h2, np.where(above, h4, h2 + (h4 - h2) * frac))
         else:
             return np.where(T <= T_crit_low, h2, h4)
@@ -427,6 +427,10 @@ def save_summary_table(
         if is_three_interval_result(result) or is_piecewise_result(result) or is_segmented_result(result) or is_persistence_result(result):
             row['h4'] = result.h4
             row['h4_SE'] = result.h4_se
+        # Add T_crit_low and T_crit_high for three-interval approaches
+        if is_three_interval_result(result):
+            row['T_crit_low'] = result.T_crit_low
+            row['T_crit_high'] = result.T_crit_high
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -539,7 +543,7 @@ def save_summary_table(
                 f.write(f"  h2 = {result.h2:.6f}  (SE: {result.h2_se:.6f})  [slope below T_crit_low]\n")
                 f.write(f"  h4 = {result.h4:.6f}  (SE: {result.h4_se:.6f})  [slope above T_crit_high]\n")
                 f.write(f"  T_crit_low = {result.T_crit_low:.4f}\n")
-                f.write(f"  delta_T_crit = {result.delta_T_crit:.4f}\n")
+                f.write(f"  T_crit_high = {result.T_crit_high:.4f}\n")
                 T_opt_str = f"{result.T_opt:.4f}" if not np.isnan(result.T_opt) else "N/A"
                 f.write(f"  T_opt = {T_opt_str}\n")
             # Special handling for segmented linear
@@ -1299,8 +1303,8 @@ def save_bootstrap_coefficients_csv(
             point_row['f2'] = result.f2_point
         if getattr(result, 'T_crit_low_point', None) is not None:
             point_row['T_crit_low'] = result.T_crit_low_point
-        if getattr(result, 'delta_T_crit_point', None) is not None:
-            point_row['delta_T_crit'] = result.delta_T_crit_point
+        if getattr(result, 'T_crit_high_point', None) is not None:
+            point_row['T_crit_high'] = result.T_crit_high_point
         rows.append(point_row)
 
         # Write bootstrap samples (iteration 0, 1, ..., N-1)
@@ -1327,13 +1331,13 @@ def save_bootstrap_coefficients_csv(
             # Add f2 for approach 6c (optimal trend temperature)
             if result.f2_samples is not None and not np.isnan(result.f2_samples[i]):
                 row['f2'] = result.f2_samples[i]
-            # Add T_crit_low and delta_T_crit for three-interval approaches
+            # Add T_crit_low and T_crit_high for three-interval approaches
             T_crit_low_samp = getattr(result, 'T_crit_low_samples', None)
-            delta_T_crit_samp = getattr(result, 'delta_T_crit_samples', None)
+            T_crit_high_samp = getattr(result, 'T_crit_high_samples', None)
             if T_crit_low_samp is not None and not np.isnan(T_crit_low_samp[i]):
                 row['T_crit_low'] = T_crit_low_samp[i]
-            if delta_T_crit_samp is not None and not np.isnan(delta_T_crit_samp[i]):
-                row['delta_T_crit'] = delta_T_crit_samp[i]
+            if T_crit_high_samp is not None and not np.isnan(T_crit_high_samp[i]):
+                row['T_crit_high'] = T_crit_high_samp[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -2270,7 +2274,7 @@ def save_bootstrap_h_values(
                     h_T_point = r.h1 * temp_arr + r.h2 * temp_arr**2
                 elif response_type == 'T':
                     # Three-interval: h2*f_low + h4*f_high
-                    f_low, f_high = three_interval_shape(temp_arr, r.T_crit_low, r.delta_T_crit)
+                    f_low, f_high = three_interval_shape(temp_arr, r.T_crit_low, r.T_crit_high - r.T_crit_low)
                     h_T_point = r.h2 * f_low + r.h4 * f_high
                 elif response_type == 'S':
                     # Segmented linear: h2*(T-T_opt) below, h4*(T-T_opt) above
@@ -2418,9 +2422,9 @@ def save_bootstrap_h_baselines(
             if response_type == 'T':
                 # Three-interval: h2*f_low + h4*f_high
                 T_crit_low_pt = getattr(br, 'T_crit_low_point', None)
-                delta_T_crit_pt = getattr(br, 'delta_T_crit_point', None)
-                if T_crit_low_pt is not None and delta_T_crit_pt is not None:
-                    f_low, f_high = three_interval_shape(np.array([T_base]), T_crit_low_pt, delta_T_crit_pt)
+                T_crit_high_pt = getattr(br, 'T_crit_high_point', None)
+                if T_crit_low_pt is not None and T_crit_high_pt is not None:
+                    f_low, f_high = three_interval_shape(np.array([T_base]), T_crit_low_pt, T_crit_high_pt - T_crit_low_pt)
                     h_T_baseline = h2_point * f_low[0] + h4_point * f_high[0]
                 else:
                     h_T_baseline = h1_point * T_base + h2_point * T_base ** 2
@@ -2460,10 +2464,10 @@ def save_bootstrap_h_baselines(
                 if response_type == 'T':
                     h4_b = h4_samples[b] if h4_samples is not None else 0.0
                     T_crit_low_samp = getattr(br, 'T_crit_low_samples', None)
-                    delta_T_crit_samp = getattr(br, 'delta_T_crit_samples', None)
-                    if T_crit_low_samp is not None and delta_T_crit_samp is not None:
+                    T_crit_high_samp = getattr(br, 'T_crit_high_samples', None)
+                    if T_crit_low_samp is not None and T_crit_high_samp is not None:
                         f_low_b, f_high_b = three_interval_shape(
-                            np.array([T_base]), T_crit_low_samp[b], delta_T_crit_samp[b])
+                            np.array([T_base]), T_crit_low_samp[b], T_crit_high_samp[b] - T_crit_low_samp[b])
                         h_T_baseline_b = h2_b * f_low_b[0] + h4_b * f_high_b[0]
                     else:
                         h_T_baseline_b = h1_b * T_base + h2_b * T_base ** 2
@@ -3700,20 +3704,20 @@ def compute_h_response_uncertainty_bands(
         h2_low_samples = getattr(result, 'h2_samples', None)
         h2_high_samples = getattr(result, 'h4_samples', None)
         T_crit_low_samples = getattr(result, 'T_crit_low_samples', None)
-        delta_T_crit_samples = getattr(result, 'delta_T_crit_samples', None)
+        T_crit_high_samples = getattr(result, 'T_crit_high_samples', None)
 
-        if h2_low_samples is None or h2_high_samples is None or T_crit_low_samples is None or delta_T_crit_samples is None:
+        if h2_low_samples is None or h2_high_samples is None or T_crit_low_samples is None or T_crit_high_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
         valid_mask = (~np.isnan(h2_low_samples) &
                       ~np.isnan(h2_high_samples) &
                       ~np.isnan(T_crit_low_samples) &
-                      ~np.isnan(delta_T_crit_samples))
+                      ~np.isnan(T_crit_high_samples))
 
         h2_low_valid = h2_low_samples[valid_mask]
         h2_high_valid = h2_high_samples[valid_mask]
         T_crit_low_valid = T_crit_low_samples[valid_mask]
-        delta_T_crit_valid = delta_T_crit_samples[valid_mask]
+        T_crit_high_valid = T_crit_high_samples[valid_mask]
 
         if len(h2_low_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
@@ -3723,7 +3727,7 @@ def compute_h_response_uncertainty_bands(
         h_relative_samples = np.zeros((n_samples, n_T))
 
         for i in range(n_samples):
-            f_low, f_high = three_interval_shape(T_range, T_crit_low_valid[i], delta_T_crit_valid[i])
+            f_low, f_high = three_interval_shape(T_range, T_crit_low_valid[i], T_crit_high_valid[i] - T_crit_low_valid[i])
             h_relative_samples[i, :] = h2_low_valid[i] * f_low + h2_high_valid[i] * f_high
     elif is_segmented:
         # Segmented linear model: h2 for T <= T_opt, h4 for T > T_opt (linear, not squared)
@@ -4168,10 +4172,10 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
     # Handle three-interval approaches Approach TL/Approach TJ/Approach TP
     if approach_key in ('Approach TL', 'Approach TJ', 'Approach TP') and result.h4_point is not None:
         T_crit_low = getattr(result, 'T_crit_low_point', None)
-        delta_T_crit = getattr(result, 'delta_T_crit_point', None)
+        T_crit_high = getattr(result, 'T_crit_high_point', None)
         T_opt = result.T_opt_point
-        if T_crit_low is not None and delta_T_crit is not None:
-            f_low, f_high = three_interval_shape(T, T_crit_low, delta_T_crit)
+        if T_crit_low is not None and T_crit_high is not None:
+            f_low, f_high = three_interval_shape(T, T_crit_low, T_crit_high - T_crit_low)
             h_point = result.h2_point * f_low + result.h4_point * f_high
         else:
             h_point = np.zeros_like(T)
@@ -4511,20 +4515,20 @@ def compute_derivative_uncertainty_bands(
         h2_low_samples = getattr(result, 'h2_samples', None)
         h2_high_samples = getattr(result, 'h4_samples', None)
         T_crit_low_samples = getattr(result, 'T_crit_low_samples', None)
-        delta_T_crit_samples = getattr(result, 'delta_T_crit_samples', None)
+        T_crit_high_samples = getattr(result, 'T_crit_high_samples', None)
 
-        if h2_low_samples is None or h2_high_samples is None or T_crit_low_samples is None or delta_T_crit_samples is None:
+        if h2_low_samples is None or h2_high_samples is None or T_crit_low_samples is None or T_crit_high_samples is None:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
 
         valid_mask = (~np.isnan(h2_low_samples) &
                       ~np.isnan(h2_high_samples) &
                       ~np.isnan(T_crit_low_samples) &
-                      ~np.isnan(delta_T_crit_samples))
+                      ~np.isnan(T_crit_high_samples))
 
         h2_low_valid = h2_low_samples[valid_mask]
         h2_high_valid = h2_high_samples[valid_mask]
         T_crit_low_valid = T_crit_low_samples[valid_mask]
-        delta_T_crit_valid = delta_T_crit_samples[valid_mask]
+        T_crit_high_valid = T_crit_high_samples[valid_mask]
 
         if len(h2_low_valid) == 0:
             return tuple(np.full_like(T_range, np.nan) for _ in percentiles)
@@ -4537,7 +4541,7 @@ def compute_derivative_uncertainty_bands(
             h2_lo = h2_low_valid[i]
             h4_hi = h2_high_valid[i]
             T_lo = T_crit_low_valid[i]
-            dT = delta_T_crit_valid[i]
+            dT = T_crit_high_valid[i] - T_crit_low_valid[i]
             T_hi = T_lo + dT
             below = T_range <= T_lo
             above = T_range >= T_hi
@@ -4702,15 +4706,15 @@ def _compute_derivative_point_estimate(result, T, approach_key, variant=None):
     # Handle three-interval approaches: piecewise linear derivative
     if approach_key in ('Approach TL', 'Approach TJ', 'Approach TP') and result.h4_point is not None:
         T_crit_low = getattr(result, 'T_crit_low_point', None)
-        delta_T_crit = getattr(result, 'delta_T_crit_point', None)
+        T_crit_high = getattr(result, 'T_crit_high_point', None)
         h2 = result.h2_point
         h4 = result.h4_point
-        if T_crit_low is not None and delta_T_crit is not None:
-            T_hi = T_crit_low + delta_T_crit
+        if T_crit_low is not None and T_crit_high is not None:
             below = T <= T_crit_low
-            above = T >= T_hi
-            if delta_T_crit > 0:
-                frac = np.clip((T - T_crit_low) / delta_T_crit, 0, 1)
+            above = T >= T_crit_high
+            delta = T_crit_high - T_crit_low
+            if delta > 0:
+                frac = np.clip((T - T_crit_low) / delta, 0, 1)
                 return np.where(below, h2, np.where(above, h4, h2 + (h4 - h2) * frac))
             else:
                 return np.where(T <= T_crit_low, h2, h4)
