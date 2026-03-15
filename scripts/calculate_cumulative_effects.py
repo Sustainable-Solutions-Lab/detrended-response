@@ -27,6 +27,7 @@ from src.output import (
     APPROACH_COLORS, RESPONSE_TYPE_LABELS, TREND_TYPE_LABELS,
     RESPONSE_TYPE_ORDER, TREND_TYPE_ORDER,
     build_approach_grid, create_output_dir, add_input_file_annotation,
+    plot_world_map,
 )
 
 
@@ -1566,6 +1567,10 @@ def main(argv=None):
     # Create visualizations
     print("\n[6/6] Creating box plot visualization (grouped by approach)...")
     plot_cumulative_effects_by_approach_grouped(df_summary, representatives, output_dir, input_file)
+
+    # World map choropleths of last-year cumulative effects per approach
+    print("\n[Bonus] Creating world map choropleths...")
+    plot_world_map(df_all_countries, output_dir, input_file=input_file)
 
     # Persistence/Level focused plots (D and L response types only)
     print("\n[Bonus] Creating persistence/level cumulative effects plots...")

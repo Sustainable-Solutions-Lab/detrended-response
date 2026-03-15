@@ -5,3 +5,5 @@ matplotlib
 openpyxl
 pycountry
 statsmodels
+geopandas
+geodatasets

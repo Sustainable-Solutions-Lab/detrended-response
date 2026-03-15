@@ -3,6 +3,7 @@
 import math
 import numpy as np
 import pandas as pd
+import geopandas as gpd
 import matplotlib.pyplot as plt
 from pathlib import Path
 from datetime import datetime
@@ -15,7 +16,7 @@ from .persistence import (
     compute_pre_first_year_correction,
 )
 from .bootstrap import _get_T_loess_at_base_year
-from .axes import get_axis_bounds_and_ticks
+from .axes import get_axis_bounds_and_ticks, get_axis_bounds_and_ticks_ln_pct
 
 # Import for type hints - bootstrap module imported at end to avoid circular import
 from typing import TYPE_CHECKING
@@ -6644,5 +6645,135 @@ def plot_h4_histogram_1x3(
     plt.tight_layout()
     add_input_file_annotation(fig, input_file)
     plt.savefig(output_dir / filename, bbox_inches='tight')
+    plt.close()
+    print(f"  Saved {filename}")
+
+
+# Path to bundled Natural Earth shapefile
+_SHAPEFILE_PATH = Path(__file__).parent.parent / 'data' / 'shapefiles' / 'ne_110m_admin_0_countries.gpkg'
+
+
+def plot_world_map(
+    df: pd.DataFrame,
+    output_dir: Path,
+    input_file: str = None,
+    cmap: str = 'RdBu',
+) -> None:
+    """Plot NxM grid of world choropleth maps showing last-year cumulative effects.
+
+    Uses the same NxM approach grid layout (rows=response types, cols=trend methods)
+    and the same log-percentage color scale as cumulative_effects_by_year.
+
+    Args:
+        df: DataFrame with columns [approach, iso3, year, h_T_delta_cum]
+            (all countries, point estimate)
+        output_dir: Directory to save the plot
+        input_file: Input file path for annotation
+        cmap: Matplotlib colormap name (diverging, symmetric about zero)
+    """
+    available_approaches = list(df['approach'].unique())
+    grid, response_types, trend_types = build_approach_grid(available_approaches)
+    nrows = len(grid)
+    ncols = len(grid[0]) if grid else 0
+    if nrows == 0 or ncols == 0:
+        return
+
+    # Load shapefile once
+    world_base = gpd.read_file(_SHAPEFILE_PATH)
+    world_base['iso3'] = world_base['ISO_A3'].where(
+        world_base['ISO_A3'] != '-99', world_base['ISO_A3_EH']
+    )
+
+    # Extract last-year values per approach
+    last_year = df['year'].max()
+    df_last = df[df['year'] == last_year]
+
+    # Collect all values across approaches for shared color scale
+    all_values = df_last['h_T_delta_cum'].values
+
+    # Use raw data range (matching cumulative_effects_by_year) for round tick labels
+    bounds, tick_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
+        [np.min(all_values), np.max(all_values)], padding=0.05
+    )
+    vmin, vmax = bounds
+
+    row_labels = [RESPONSE_TYPE_LABELS.get(r, r) for r in response_types]
+    col_labels = [TREND_TYPE_LABELS.get(t, t) for t in trend_types]
+
+    fig, axes = plt.subplots(nrows, ncols, figsize=(5.5 * ncols, 3.5 * nrows),
+                             squeeze=False)
+
+    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+
+    for row_idx in range(nrows):
+        for col_idx in range(ncols):
+            approach = grid[row_idx][col_idx]
+            ax = axes[row_idx, col_idx]
+            display_name = approach if approach else f'Approach {response_types[row_idx]}{trend_types[col_idx]}'
+
+            if approach is None or approach not in available_approaches:
+                ax.text(0.5, 0.5, f'{display_name}\n(not available)',
+                        ha='center', va='center', transform=ax.transAxes,
+                        fontsize=10, color='gray')
+                for spine in ax.spines.values():
+                    spine.set_visible(True)
+                    spine.set_edgecolor('black')
+                    spine.set_linewidth(0.8)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                if row_idx == 0:
+                    ax.set_title(col_labels[col_idx], fontsize=11, fontweight='bold')
+                continue
+
+            # Build per-country values for this approach
+            df_app = df_last[df_last['approach'] == approach]
+            country_values = dict(zip(df_app['iso3'], df_app['h_T_delta_cum']))
+            value_df = pd.DataFrame({
+                'iso3': list(country_values.keys()),
+                'value': list(country_values.values()),
+            })
+            world = world_base.merge(value_df, on='iso3', how='left')
+
+            # Countries without data in light gray
+            world[world['value'].isna()].plot(
+                ax=ax, color='lightgray', edgecolor='white', linewidth=0.3
+            )
+            # Countries with data
+            world[world['value'].notna()].plot(
+                column='value', ax=ax, cmap=cmap, edgecolor='white', linewidth=0.3,
+                vmin=vmin, vmax=vmax, legend=False,
+            )
+
+            # Frame around each map panel
+            for spine in ax.spines.values():
+                spine.set_visible(True)
+                spine.set_edgecolor('black')
+                spine.set_linewidth(0.8)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            ax.set_title(approach, fontsize=10)
+
+            # Column headers (top row only)
+            if row_idx == 0:
+                ax.text(0.5, 1.12, col_labels[col_idx], transform=ax.transAxes,
+                        ha='center', va='bottom', fontsize=11, fontweight='bold')
+
+            # Row labels (left column only)
+            if col_idx == 0:
+                ax.text(-0.02, 0.5, row_labels[row_idx], transform=ax.transAxes,
+                        ha='right', va='center', fontsize=9, rotation=90)
+
+    # Shared vertical colorbar on the right with percentage-change tick labels
+    cbar = fig.colorbar(sm, ax=axes, orientation='vertical', fraction=0.03,
+                        pad=0.02, shrink=0.8)
+    cbar.set_ticks(tick_vals)
+    cbar.set_ticklabels([f'{p:g}%' for p in pct_labels])
+    cbar.set_label(f'Cumulative climate effect through {last_year}', fontsize=10)
+
+    add_input_file_annotation(fig, input_file)
+    filename = f'world_map_{nrows}x{ncols}.pdf'
+    plt.savefig(output_dir / filename, bbox_inches='tight', dpi=150)
     plt.close()
     print(f"  Saved {filename}")
