@@ -1198,19 +1198,21 @@ def plot_cumulative_effects_persistence_boxplot(
 def _find_reference_approach(input_path: Path) -> str:
     """Find the best approach to use for representative country selection.
 
-    Prefers Approach QJ, then falls back to the first available quadratic approach,
-    then any available approach.
+    Uses build_approach_grid to select the top-left panel approach, matching
+    the panel whose bands the representative countries correspond to in the
+    cumulative_effects_by_year grid plot.
     """
     # Read a small sample to discover available approaches
     sample = pd.read_csv(input_path, comment='#', nrows=500000)
     available = set(sample[sample['iteration'] == -1]['approach'].unique())
-    preference_order = ['Approach QJ', 'Approach QP', 'Approach QL',
-                        'Approach LJ', 'Approach LP', 'Approach LL']
-    for pref in preference_order:
-        if pref in available:
-            return pref
-    # Fall back to any non-null approach
     non_null = [a for a in available if not a.startswith('Approach N')]
+    grid, _, _ = build_approach_grid(non_null)
+    # Top-left panel
+    for row in grid:
+        for cell in row:
+            if cell is not None and cell in available:
+                return cell
+    # Fallback
     return non_null[0] if non_null else sorted(available)[0]
 
 
