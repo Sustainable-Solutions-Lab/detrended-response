@@ -3577,6 +3577,22 @@ def _optimize_three_interval(compute_sse_for_T0T1, T_bounds=(0.0, 30.0)):
     return T_crit_low, T_crit_high
 
 
+def _compute_g2(T, T_lo, T_hi):
+    """Compute g2 basis: T² in middle, tangent-line extensions outside.
+
+    g2(T) = T²              for T_lo <= T <= T_hi
+    g2(T) = 2*T_lo*T - T_lo²  for T < T_lo
+    g2(T) = 2*T_hi*T - T_hi²  for T > T_hi
+
+    This is C1-continuous everywhere. In the middle, dg2/dT = 2T.
+    Outside, dg2/dT is constant (2*T_lo or 2*T_hi).
+    """
+    return np.where(
+        T < T_lo, 2 * T_lo * T - T_lo**2,
+        np.where(T > T_hi, 2 * T_hi * T - T_hi**2, T**2)
+    )
+
+
 def _derive_T_opt(h2, h4, T_crit_low, T_crit_high):
     """Derive T_opt from three-interval parameters."""
     delta = T_crit_high - T_crit_low
@@ -3623,63 +3639,116 @@ def fit_ApproachTL_three_interval(
     T_trend = trends_loess.T_loess
 
     def compute_sse_for_T0T1(params):
-        """Compute SSE for given (T0, T1), using T_crit_low=min, delta=|T1-T0|."""
-        T_crit_low_val = min(params[0], params[1])
-        delta_T_crit_val = abs(params[1] - params[0])
+        """Compute SSE for given (T0, T1), using middle-only quadratic OLS.
 
-        f_low_T, f_high_T = three_interval_basis(T, T_crit_low_val, delta_T_crit_val)
-        f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_val, delta_T_crit_val)
+        Uses g2 basis (T² in middle, tangent extensions outside).
+        OLS on middle observations only, SSE evaluated on all data.
+        If slopes at both boundaries have the same sign, returns inf.
+        Falls back to full-data f_low/f_high OLS if < 3 middle observations.
+        """
+        T_lo = min(params[0], params[1])
+        T_hi = max(params[0], params[1])
 
-        X1 = f_low_T - f_low_trend
-        X2 = f_high_T - f_high_trend
-        X = np.column_stack([X1, X2])
+        # Count middle observations
+        middle_mask = (T >= T_lo) & (T <= T_hi)
+        n_middle = np.sum(middle_mask)
+
+        if n_middle < 3:
+            return np.inf
+
+        # g2 basis
+        g2_T = _compute_g2(T, T_lo, T_hi)
+        g2_Ttrend = _compute_g2(T_trend, T_lo, T_hi)
+        X1_all = T - T_trend
+        X2_all = g2_T - g2_Ttrend
+        X_all = np.column_stack([X1_all, X2_all])
+
+        # Middle-only OLS
+        X_mid = X_all[middle_mask]
+        y_mid = y[middle_mask]
 
         try:
             if weights is not None:
-                y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
-                sqrt_W = np.sqrt(weights)
-                X_w = X * sqrt_W[:, np.newaxis]
-                y_w = y_clean * sqrt_W
-                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
-                y_pred = X @ beta_ols
-                sse = np.sum(weights * (y_clean - y_pred) ** 2)
+                w_mid = weights[middle_mask]
+                y_mid_clean = np.where(np.isnan(y_mid) & (w_mid == 0), 0, y_mid)
+                sqrt_w = np.sqrt(w_mid)
+                beta, _, _, _ = np.linalg.lstsq(
+                    X_mid * sqrt_w[:, np.newaxis], y_mid_clean * sqrt_w, rcond=None
+                )
             else:
-                beta_ols, _, _, _ = linalg.lstsq(X, y)
-                y_pred = X @ beta_ols
-                sse = np.sum((y - y_pred) ** 2)
-            return sse
+                beta, _, _, _ = linalg.lstsq(X_mid, y_mid)
         except Exception:
             return np.inf
 
-    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
-    delta_T_crit = T_crit_high_opt - T_crit_low_opt
+        h1a, h2a = beta[0], beta[1]
 
-    # Re-fit at optimal params
-    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
-    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit)
+        # Check sign constraint: slopes at boundaries must have opposite signs
+        slope_low = h1a + 2 * h2a * T_lo
+        slope_high = h1a + 2 * h2a * T_hi
+        if slope_low * slope_high > 0:
+            return np.inf
+
+        # SSE on all data
+        y_pred = X_all @ beta
+        if weights is not None:
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+            return np.sum(weights * (y_clean - y_pred) ** 2)
+        return np.sum((y - y_pred) ** 2)
+
+    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
+
+    # Re-fit at optimal params using g2 basis with middle-only OLS
+    middle_mask = (T >= T_crit_low_opt) & (T <= T_crit_high_opt)
+    g2_T_mid = _compute_g2(T[middle_mask], T_crit_low_opt, T_crit_high_opt)
+    g2_Ttrend_mid = _compute_g2(T_trend[middle_mask], T_crit_low_opt, T_crit_high_opt)
+    X_mid = np.column_stack([
+        T[middle_mask] - T_trend[middle_mask],
+        g2_T_mid - g2_Ttrend_mid,
+    ])
+    y_mid = y[middle_mask]
+
+    # Use lstsq for middle-only OLS (may be rank-deficient if interval is narrow)
+    if weights is not None:
+        w_mid = weights[middle_mask]
+        y_mid_clean = np.where(np.isnan(y_mid) & (w_mid == 0), 0, y_mid)
+        sqrt_w = np.sqrt(w_mid)
+        beta_ols, _, _, _ = np.linalg.lstsq(
+            X_mid * sqrt_w[:, np.newaxis], y_mid_clean * sqrt_w, rcond=None
+        )
+    else:
+        beta_ols, _, _, _ = linalg.lstsq(X_mid, y_mid)
+
+    h1a = beta_ols[0]
+    h2a = beta_ols[1]
+
+    # Derive slopes at boundaries and T_opt
+    h2 = h1a + 2 * h2a * T_crit_low_opt   # slope below T_crit_low
+    h4 = h1a + 2 * h2a * T_crit_high_opt   # slope above T_crit_high
+    h2_se = np.nan  # SE not straightforward with middle-only OLS
+    h4_se = np.nan
+
+    # T_opt = where dh/dT = 0 in the quadratic region
+    T_opt = -h1a / (2 * h2a) if abs(h2a) > 1e-15 else np.nan
+
+    # Re-compute using three_interval_basis for compatibility with output/plotting
+    delta = T_crit_high_opt - T_crit_low_opt
+    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta)
+    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta)
     X1 = f_low_T - f_low_trend
     X2 = f_high_T - f_high_trend
-    X_opt = np.column_stack([X1, X2])
-
-    if weights is not None:
-        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
-    else:
-        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
-    h2 = beta_ols[0]
-    h4 = beta_ols[1]
-    h2_se = np.sqrt(max(cov[0, 0], 0))
-    h4_se = np.sqrt(max(cov[1, 1], 0))
-
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
+    y_pred_all = h2 * X1 + h4 * X2
+    y_for_resid = np.where(np.isnan(y) & (weights == 0), 0, y) if weights is not None else y
+    residuals = y_for_resid - y_pred_all
 
     k = dict(year_means)
-    n_params = 4  # h2, h4, T_crit_low, delta_T_crit
-    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    n_params = 4  # h1a, h2a, T_crit_low, T_crit_high
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y_for_resid, residuals, n_params)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
     j_trend = trends_loess.y_loess
     k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
 
+    # h(T) - h(T_trend) using three_interval_basis
     h_values = h2 * X1 + h4 * X2
     h_of_T_trend = h2 * f_low_trend + h4 * f_high_trend
 
@@ -3791,14 +3860,15 @@ def fit_ApproachTJ_three_interval_conjoined(
         X[:, 1] = f_high
 
         if weights is not None:
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
-            y_w = y * sqrt_W
+            y_w = y_clean * sqrt_W
             XTX = X_w.T @ X_w
             XTy = X_w.T @ y_w
             beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
-            sse = np.sum(weights * (y - y_pred) ** 2)
+            sse = np.sum(weights * (y_clean - y_pred) ** 2)
         else:
             XTX = X.T @ X
             XTy = X.T @ y

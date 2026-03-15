@@ -260,13 +260,19 @@ def compute_h_response(T: np.ndarray, result) -> np.ndarray:
         Array of h(T) - h(T_opt) values
     """
     if is_three_interval_result(result):
-        # Three-interval: h(T) = h2*f_low(T) + h4*f_high(T)
+        # Three-interval: h(T) - h(T_opt) = h2*f_low(T) + h4*f_high(T) - h(T_opt)
         T_crit_low = result.T_crit_low
         T_crit_high = result.T_crit_high
         h2 = result.h2
         h4 = result.h4
-        f_low, f_high = three_interval_shape(T, T_crit_low, T_crit_high - T_crit_low)
-        return h2 * f_low + h4 * f_high
+        delta = T_crit_high - T_crit_low
+        f_low, f_high = three_interval_shape(T, T_crit_low, delta)
+        h_T = h2 * f_low + h4 * f_high
+        # Subtract h(T_opt) so curve passes through zero at optimum
+        T_opt = result.T_opt
+        f_low_opt, f_high_opt = three_interval_shape(np.array([T_opt]), T_crit_low, delta)
+        h_T_opt = h2 * f_low_opt[0] + h4 * f_high_opt[0]
+        return h_T - h_T_opt
     elif is_segmented_result(result):
         # Segmented linear: h(T_opt) = 0, so h(T) - h(T_opt) = h(T)
         T_opt = result.T_opt
@@ -849,7 +855,7 @@ def _plot_temperature_derivative_subset(
     if title_suffix:
         title += f' ({title_suffix})'
     ax.set_title(title, fontsize=14)
-    ax.legend(loc='upper left', fontsize=10)
+    ax.legend(loc='lower left', fontsize=10)
     ax.set_xlim(T_range)
     ax.grid(True, alpha=0.3)
 
@@ -3727,8 +3733,15 @@ def compute_h_response_uncertainty_bands(
         h_relative_samples = np.zeros((n_samples, n_T))
 
         for i in range(n_samples):
-            f_low, f_high = three_interval_shape(T_range, T_crit_low_valid[i], T_crit_high_valid[i] - T_crit_low_valid[i])
-            h_relative_samples[i, :] = h2_low_valid[i] * f_low + h2_high_valid[i] * f_high
+            delta_i = T_crit_high_valid[i] - T_crit_low_valid[i]
+            f_low, f_high = three_interval_shape(T_range, T_crit_low_valid[i], delta_i)
+            h_i = h2_low_valid[i] * f_low + h2_high_valid[i] * f_high
+            # Subtract h(T_opt) so curve passes through zero at optimum
+            T_opt_i = result.T_opt_samples[valid_mask][i] if result.T_opt_samples is not None else np.nan
+            if np.isfinite(T_opt_i):
+                f_low_opt, f_high_opt = three_interval_shape(np.array([T_opt_i]), T_crit_low_valid[i], delta_i)
+                h_i -= h2_low_valid[i] * f_low_opt[0] + h2_high_valid[i] * f_high_opt[0]
+            h_relative_samples[i, :] = h_i
     elif is_segmented:
         # Segmented linear model: h2 for T <= T_opt, h4 for T > T_opt (linear, not squared)
         h2_low_samples = getattr(result, 'h2_samples', None)
@@ -4175,8 +4188,12 @@ def _compute_point_estimate_response(result, T, approach_key, variant=None):
         T_crit_high = getattr(result, 'T_crit_high_point', None)
         T_opt = result.T_opt_point
         if T_crit_low is not None and T_crit_high is not None:
-            f_low, f_high = three_interval_shape(T, T_crit_low, T_crit_high - T_crit_low)
+            delta = T_crit_high - T_crit_low
+            f_low, f_high = three_interval_shape(T, T_crit_low, delta)
             h_point = result.h2_point * f_low + result.h4_point * f_high
+            # Subtract h(T_opt) so curve passes through zero at optimum
+            f_low_opt, f_high_opt = three_interval_shape(np.array([T_opt]), T_crit_low, delta)
+            h_point -= result.h2_point * f_low_opt[0] + result.h4_point * f_high_opt[0]
         else:
             h_point = np.zeros_like(T)
         return h_point, T_opt

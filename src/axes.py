@@ -223,8 +223,9 @@ def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
         pct_labels: list of percentage-change values at each tick (e.g. [-25, 0, 25]).
             Use with ax.set_yticklabels([f'{p:g}%' for p in pct_labels]).
     """
-    min_log = min(data)
-    max_log = max(data)
+    finite_data = [x for x in data if np.isfinite(x)]
+    min_log = min(finite_data) if finite_data else -0.1
+    max_log = max(finite_data) if finite_data else 0.1
     span = max_log - min_log
     min_log -= span * padding
     max_log += span * padding
@@ -266,6 +267,11 @@ def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
     mask = (ticks_vals >= min_log - 1e-9) & (ticks_vals <= max_log + 1e-9)
     pct_labels = [p for p, m in zip(pct_labels, mask) if m]
     ticks_vals = ticks_vals[mask]
+
+    # Fallback if all ticks were filtered out
+    if len(ticks_vals) == 0:
+        pct_labels = [0]
+        ticks_vals = np.array([0.0])
 
     # Bounds: at least as wide as data, expand if ticks go beyond
     bounds = [min(min_log, ticks_vals[0]), max(max_log, ticks_vals[-1])]

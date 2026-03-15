@@ -147,6 +147,7 @@ The “climate response” is specified in several ways:
 - **Segmented linear (S\*):** different slopes below vs above `T_opt` (V‑shaped response)
 - **Three‑interval (T\*):** derivative transitions linearly between `T_crit_low` and `T_crit_high`, creating a smooth version of the segmented model with a quadratic transition zone
 - **Persistence/decay (D\*):** a distributed‑lag “converging” response with decay parameter `h₄`
+- **Level effect (L\*):** first‑difference of the climate response (`h₄ = 1`), testing whether temperature affects GDP *levels* rather than *growth*
 
 ### Approaches implemented
 
@@ -159,6 +160,7 @@ The code reports results under short labels:
 - **SJ / SP / SL**: Segmented linear variants (joint / polynomial / LOESS detrending)
 - **TJ / TP / TL**: Three‑interval variants (joint / polynomial / LOESS detrending)
 - **DJ / DP / DL**: Persistence/decay variants (joint / polynomial / LOESS detrending)
+- **LJ / LL**: Level effect variants (joint / LOESS detrending)
 - **NJ / NP / NL**: “null” variants with **no climate response** (only `jᵢ(t)` and `k(t)`)
 
 All approaches are defined precisely in **`METHODS_DETAIL.md`**.
@@ -222,9 +224,15 @@ python ./scripts/main.py --approaches QJ LJ DJ QL LL DL \
 This runs only the Quadratic/Level/Decay response types with Polynomial and LOESS trend identification.
 
 
-# example biogeochemistry full run
-python ./scripts/main.py --output-dir ./data/output/pipeline_ACCESS-ESM1-5_2026-03-05_1000 --use-csv ./data/input/ACCESS-ESM1-5_historical.csv --n-bootstrap 1000 --start-year 1960
+### Example: biogeochemistry model runs
 
-python ./scripts/main.py --output-dir ./data/output/pipeline_CNRM-ESM2-1_2026-03-05_1000   --use-csv ./data/input/CNRM-ESM2-1_historical.csv   --n-bootstrap 1000 --start-year 1960
+```bash
+python ./scripts/main.py --output-dir ./data/output/pipeline_ACCESS-ESM1-5_2026-03-05_1000 \
+  --use-csv ./data/input/ACCESS-ESM1-5_historical.csv --n-bootstrap 1000 --start-year 1960
 
-python ./scripts/main.py --output-dir ./data/output/pipeline_MIROC-ES2L_2026-03-05_1000    --use-csv ./data/input/MIROC-ES2L_historical.csv    --n-bootstrap 1000 --start-year 1960
+python ./scripts/main.py --output-dir ./data/output/pipeline_CNRM-ESM2-1_2026-03-05_1000 \
+  --use-csv ./data/input/CNRM-ESM2-1_historical.csv --n-bootstrap 1000 --start-year 1960
+
+python ./scripts/main.py --output-dir ./data/output/pipeline_MIROC-ES2L_2026-03-05_1000 \
+  --use-csv ./data/input/MIROC-ES2L_historical.csv --n-bootstrap 1000 --start-year 1960
+```
