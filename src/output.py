@@ -6696,6 +6696,9 @@ def plot_world_map(
         [np.min(all_values), np.max(all_values)], padding=0.05
     )
     vmin, vmax = bounds
+    # Symmetric normalization so 0 maps to white in diverging colormap
+    vlim = max(abs(vmin), abs(vmax))
+    vmin, vmax = -vlim, vlim
 
     row_labels = [RESPONSE_TYPE_LABELS.get(r, r) for r in response_types]
     col_labels = [TREND_TYPE_LABELS.get(t, t) for t in trend_types]
@@ -6770,7 +6773,8 @@ def plot_world_map(
                         pad=0.02, shrink=0.8)
     cbar.set_ticks(tick_vals)
     cbar.set_ticklabels([f'{p:g}%' for p in pct_labels])
-    cbar.set_label(f'Cumulative climate effect through {last_year}', fontsize=10)
+    first_year = int(df['year'].min())
+    cbar.set_label(f'Cumulative climate effect {first_year} through {last_year}', fontsize=10)
 
     add_input_file_annotation(fig, input_file)
     filename = f'world_map_{nrows}x{ncols}.pdf'

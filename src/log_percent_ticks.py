@@ -148,8 +148,8 @@ def choose_log_percent_ticks(xmin, xmax, min_ticks=5, max_ticks=8):
         lower = max((p, x) for p, x in candidates if x <= xmin)
         upper = min((p, x) for p, x in candidates if x >= xmax)
 
-        plot_min = lower[1] if (xmin - lower[1]) > threshold else xmin
-        plot_max = upper[1] if (upper[1] - xmax) > threshold else xmax
+        plot_min = lower[1]
+        plot_max = upper[1]
 
         ticks = [(p, x) for p, x in candidates if plot_min <= x <= plot_max]
 

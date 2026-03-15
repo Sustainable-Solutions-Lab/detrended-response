@@ -344,10 +344,17 @@ def plot_cumulative_effects_by_approach_grouped(
             group_centers.append(center)
             group_labels.append(TREND_TYPE_LABELS.get(t, t))
 
-    # Y-axis: dynamic bounds from data
-    all_vals = df_2022['h_T_delta_cum'].values
+    # Y-axis: scale to P5-P95 whisker range (matching box plot whis=[5, 95])
+    whisker_vals = []
+    for approach in approaches:
+        for country_key in country_keys:
+            iso3 = representatives[country_key]['iso3']
+            mask = (df_2022['iso3'] == iso3) & (df_2022['approach'] == approach) & (df_2022['iteration'] >= 0)
+            vals = df_2022.loc[mask, 'h_T_delta_cum'].values
+            if len(vals) > 0:
+                whisker_vals.extend([np.percentile(vals, 5), np.percentile(vals, 95)])
     bounds, ticks_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
-        [all_vals.min(), all_vals.max()])
+        [min(whisker_vals), max(whisker_vals)], padding=0.05)
     ax.set_ylim(bounds)
     ax.set_yticks(ticks_vals)
     ax.set_yticklabels([f'{p:g}%' for p in pct_labels])
