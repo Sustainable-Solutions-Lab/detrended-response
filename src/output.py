@@ -6189,6 +6189,7 @@ def plot_temperature_response_3x3(
 def plot_temperature_derivative_3x3(
     results: Dict[str, "BootstrapResult"],
     output_dir: Path,
+    data: AnalysisData = None,
     filename: str = None,
     T_range: tuple = (0, 30),
     input_file: str = None,
@@ -6201,6 +6202,7 @@ def plot_temperature_derivative_3x3(
     Args:
         results: Dict of BootstrapResult for each approach
         output_dir: Directory to save the plot
+        data: AnalysisData for temperature histogram
         filename: Output filename (default: auto-sized)
         T_range: Temperature range for x-axis (default: (0, 30))
         input_file: Optional input file path for annotation
@@ -6219,6 +6221,13 @@ def plot_temperature_derivative_3x3(
 
     # Temperature array for derivative plots
     T = np.linspace(T_range[0], T_range[1], 200)
+
+    # Get temperature data from most recent year for histogram
+    temp_recent = None
+    if data is not None:
+        max_year = data.year_range[1]
+        mask_recent = data.year == max_year
+        temp_recent = data.temp[mask_recent]
 
     # Pre-compute uncertainty bands and point estimates for all approaches
     precomputed = {}
@@ -6266,6 +6275,18 @@ def plot_temperature_derivative_3x3(
 
             # Retrieve pre-computed bands and point estimate
             dh_p5, dh_p25, dh_p50, dh_p75, dh_p95, dh_point = precomputed[name]
+
+            # Add temperature histogram on secondary y-axis
+            if temp_recent is not None:
+                ax2 = ax.twinx()
+                bins = np.linspace(T_range[0], T_range[1], 30)
+                ax2.hist(temp_recent, bins=bins, color='gray', alpha=0.3, density=True)
+                ax2.set_ylabel('Data density', fontsize=8, color='gray')
+                ax2.tick_params(axis='y', labelcolor='gray', labelsize=7)
+                ax2.set_ylim(bottom=0)
+                ax2.set_zorder(ax.get_zorder() - 1)
+                ax.set_zorder(ax2.get_zorder() + 1)
+                ax.patch.set_visible(False)
 
             # Plot 90% CI band
             ax.fill_between(T, dh_p5, dh_p95, alpha=0.2, color=color, label='90% CI')

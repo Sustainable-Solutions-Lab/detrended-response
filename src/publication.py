@@ -1632,7 +1632,7 @@ def generate_figures(
     # Temperature derivative grid
     print("      [Figures] Generating temperature derivative grid figure...")
     plot_temperature_derivative_3x3(
-        results, output_dir,
+        results, output_dir, data=data,
         T_range=(0, 30), input_file=None,
     )
 
