@@ -1,7 +1,7 @@
 # Log-percent tick generation for matplotlib axes.
 #
-# Core algorithm developed with ChatGPT: picks from a library of "nice"
-# percentage candidates and optimizes for even spacing in log space.
+# Deterministic algorithm: computes buffered bounds, finds boundary ticks
+# from nice candidates, then fills interior with proportionally allocated ticks.
 #
 # Standalone usage:
 #     plot_min, plot_max, tick_locs, tick_labels = choose_log_percent_ticks(xmin, xmax)
@@ -59,15 +59,15 @@ def build_percent_candidates():
         p = -100 * (1 - s)
         perc.add(p)
 
-    # small negative values
-    perc.update([-50, -30, -20, -10, -5, -2, -1])
+    # small and mid-range negative values
+    perc.update([-80, -75, -70, -60, -50, -30, -20, -10, -5, -2, -1])
 
     # zero
     perc.add(0)
 
-    # positive 1-2-5 sequence
+    # positive 1-2-3-5 sequence
     for scale in [1, 10, 100, 1000, 10000]:
-        for base in [1, 2, 5]:
+        for base in [1, 2, 3, 5]:
             perc.add(base * scale)
 
     # keep values > -100
@@ -76,46 +76,32 @@ def build_percent_candidates():
     return sorted(perc)
 
 
-def _variance(vals):
-    """Population variance of a list of numbers."""
-    if not vals:
-        return 0
-    m = sum(vals) / len(vals)
-    return sum((v - m) ** 2 for v in vals) / len(vals)
+def _find_nearest_candidate(target, candidates_log):
+    """Find the candidate in log space nearest to target."""
+    idx = np.searchsorted(candidates_log, target)
+    # Check the two nearest candidates
+    best_idx = idx
+    best_dist = float('inf')
+    for i in [max(0, idx - 1), min(len(candidates_log) - 1, idx)]:
+        dist = abs(candidates_log[i] - target)
+        if dist < best_dist:
+            best_dist = dist
+            best_idx = i
+    return best_idx
 
 
-def _thin_ticks(ticks, plot_min, plot_max, target_n):
-    """Reduce tick count by snapping to an evenly-spaced grid."""
-    # Always keep 0% if present
-    chosen = {}
-    for p, x in ticks:
-        if abs(x) < 1e-12:
-            chosen[x] = p
-            break
-
-    grid = [
-        plot_min + i * (plot_max - plot_min) / (target_n - 1)
-        for i in range(target_n)
-    ]
-
-    for g in grid:
-        p, x = min(ticks, key=lambda t: abs(t[1] - g))
-        chosen[x] = p
-
-    return sorted(((p, x) for x, p in chosen.items()), key=lambda t: t[1])
-
-
-def choose_log_percent_ticks(xmin, xmax, min_ticks=5, max_ticks=8):
+def choose_log_percent_ticks(xmin, xmax, symmetric=False, buffer=0.05):
     """Choose nicely-spaced tick marks for a log-percent axis.
 
-    Given axis bounds in log-ratio space, selects tick positions from a library
-    of "nice" percentage values, optimizing for even spacing.
+    Deterministic algorithm: buffers bounds, finds boundary ticks from nice
+    candidates, fills interior with 7 total ticks proportionally allocated
+    between negative and positive sides.
 
     Args:
         xmin: minimum value in log-ratio space
         xmax: maximum value in log-ratio space
-        min_ticks: minimum number of ticks to consider
-        max_ticks: maximum number of ticks to consider
+        symmetric: if True, make bounds symmetric around zero
+        buffer: fractional buffer to add beyond data range (default 0.05)
 
     Returns:
         plot_min: adjusted minimum bound in log space
@@ -132,51 +118,84 @@ def choose_log_percent_ticks(xmin, xmax, min_ticks=5, max_ticks=8):
     if xmax < 0:
         xmax = 0
 
-    perc_candidates = build_percent_candidates()
+    # Step 1: Compute buffered bounds
+    if symmetric:
+        y_extreme = max(xmax, -xmin)
+        y_max_new = y_extreme * (1 + buffer)
+        y_min_new = -y_max_new
+    else:
+        y_max_new = xmax * (1 + buffer)
+        y_min_new = xmin * (1 + buffer)  # xmin is negative, so this makes it more negative
 
+    # Build candidates in log space
+    perc_candidates = build_percent_candidates()
     candidates = [(p, percent_to_log(p)) for p in perc_candidates]
     candidates.sort(key=lambda t: t[1])
+    candidates_log = np.array([x for _, x in candidates])
+    candidates_pct = [p for p, _ in candidates]
 
-    best = None
-    best_score = None
+    # Step 2: Find boundary ticks (outermost nice ticks)
+    # Strategy: look for a nice candidate in a window near the buffered bound.
+    # If none found, snap to the nearest candidate (inward is fine — plot bounds
+    # are set independently to cover the buffered data range).
 
-    for N in range(min_ticks, max_ticks + 1):
+    # Upper bound: look for nice candidate in [y_max_new * (1 - 2*buffer), y_max_new]
+    upper_inner = y_max_new * (1 - 2 * buffer)
+    upper_candidates = [(i, candidates_log[i]) for i in range(len(candidates_log))
+                        if upper_inner <= candidates_log[i] <= y_max_new]
+    if upper_candidates:
+        max_tick_idx = upper_candidates[-1][0]  # pick the outermost one in range
+    else:
+        max_tick_idx = _find_nearest_candidate(y_max_new, candidates_log)
 
-        avg_spacing = (xmax - xmin) / (N - 1)
-        threshold = avg_spacing / 3
+    # Lower bound: look for nice candidate in [y_min_new, y_min_new * (1 - 2*buffer)]
+    lower_inner = y_min_new * (1 - 2 * buffer)  # closer to zero since y_min_new is negative
+    lower_candidates = [(i, candidates_log[i]) for i in range(len(candidates_log))
+                        if y_min_new <= candidates_log[i] <= lower_inner]
+    if lower_candidates:
+        min_tick_idx = lower_candidates[0][0]  # pick the outermost one (most negative)
+    else:
+        min_tick_idx = _find_nearest_candidate(y_min_new, candidates_log)
 
-        lower = max((p, x) for p, x in candidates if x <= xmin)
-        upper = min((p, x) for p, x in candidates if x >= xmax)
+    min_tick = candidates_log[min_tick_idx]
+    max_tick = candidates_log[max_tick_idx]
 
-        plot_min = lower[1]
-        plot_max = upper[1]
+    # Step 3: Fill interior ticks (7 total)
+    # 3 fixed: min_tick, 0, max_tick
+    # 4 additional allocated proportionally between negative and positive sides
+    full_span = max_tick - min_tick  # min_tick is negative, so this is the full range
+    n_pos = round(max_tick / full_span * 4) if full_span > 0 else 2
+    n_neg = 4 - n_pos
 
-        ticks = [(p, x) for p, x in candidates if plot_min <= x <= plot_max]
+    targets = [min_tick]
+    for k in range(1, n_neg + 1):
+        targets.append(k / (n_neg + 1) * min_tick)
+    targets.append(0.0)
+    for k in range(1, n_pos + 1):
+        targets.append(k / (n_pos + 1) * max_tick)
+    targets.append(max_tick)
 
-        if plot_min <= 0 <= plot_max and not any(abs(x) < 1e-12 for _, x in ticks):
-            ticks.append((0, 0))
+    # Snap each target to nearest candidate, deduplicate
+    seen = set()
+    ticks = []
+    for target in targets:
+        idx = _find_nearest_candidate(target, candidates_log)
+        if idx not in seen:
+            seen.add(idx)
+            ticks.append((candidates_pct[idx], candidates_log[idx]))
 
-        ticks.sort(key=lambda t: t[1])
+    ticks.sort(key=lambda t: t[1])
 
-        if len(ticks) > max_ticks:
-            ticks = _thin_ticks(ticks, plot_min, plot_max, N)
+    # Ensure zero is included
+    if not any(abs(x) < 1e-12 for _, x in ticks):
+        zero_idx = _find_nearest_candidate(0.0, candidates_log)
+        if abs(candidates_log[zero_idx]) < 1e-12:
+            ticks.append((0, 0.0))
+            ticks.sort(key=lambda t: t[1])
 
-        if not (min_ticks <= len(ticks) <= max_ticks):
-            continue
-
-        xs = [x for _, x in ticks]
-        gaps = [xs[i+1] - xs[i] for i in range(len(xs)-1)]
-
-        mean_gap = sum(gaps) / len(gaps)
-        score = _variance(gaps) / (mean_gap**2 + 1e-12)
-
-        score += 0.2 * abs(len(ticks) - 6.5)
-
-        if best_score is None or score < best_score:
-            best_score = score
-            best = (plot_min, plot_max, ticks)
-
-    plot_min, plot_max, ticks = best
+    # Plot bounds cover both the outermost ticks and the buffered data range
+    plot_min = min(ticks[0][1], y_min_new)
+    plot_max = max(ticks[-1][1], y_max_new)
 
     tick_locations = [x for _, x in ticks]
     tick_labels = [format_percent(p) for p, _ in ticks]
@@ -184,7 +203,7 @@ def choose_log_percent_ticks(xmin, xmax, min_ticks=5, max_ticks=8):
     return plot_min, plot_max, tick_locations, tick_labels
 
 
-def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
+def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0, symmetric=False, buffer=0.05):
     """Calculate axis bounds and ticks for log-ratio data with percentage-change labels.
 
     Drop-in replacement for axes.get_axis_bounds_and_ticks_ln_pct.
@@ -193,6 +212,8 @@ def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
         data: iterable of values in log-ratio space, i.e. ln(value/baseline).
             Often just [min_val, max_val].
         padding: fractional padding added to each side of the data range
+        symmetric: if True, make bounds symmetric around zero
+        buffer: fractional buffer for tick boundary selection (default 0.05)
 
     Returns:
         bounds: [min, max] in log space, suitable for ax.set_ylim
@@ -208,7 +229,9 @@ def get_axis_bounds_and_ticks_ln_pct(data, padding=0.0):
     xmin -= span * padding
     xmax += span * padding
 
-    plot_min, plot_max, tick_locations, _ = choose_log_percent_ticks(xmin, xmax)
+    plot_min, plot_max, tick_locations, _ = choose_log_percent_ticks(
+        xmin, xmax, symmetric=symmetric, buffer=buffer
+    )
 
     # Add a small margin so outermost ticks aren't clipped by matplotlib
     margin = (plot_max - plot_min) * 0.02

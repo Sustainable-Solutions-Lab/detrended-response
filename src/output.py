@@ -6691,14 +6691,11 @@ def plot_world_map(
     # Collect all values across approaches for shared color scale
     all_values = df_last['h_T_delta_cum'].values
 
-    # Use raw data range (matching cumulative_effects_by_year) for round tick labels
+    # Use raw data range with symmetric bounds so 0 maps to white in diverging colormap
     bounds, tick_vals, pct_labels = get_axis_bounds_and_ticks_ln_pct(
-        [np.min(all_values), np.max(all_values)], padding=0.05
+        [np.min(all_values), np.max(all_values)], padding=0.05, symmetric=True
     )
     vmin, vmax = bounds
-    # Symmetric normalization so 0 maps to white in diverging colormap
-    vlim = max(abs(vmin), abs(vmax))
-    vmin, vmax = -vlim, vlim
 
     row_labels = [RESPONSE_TYPE_LABELS.get(r, r) for r in response_types]
     col_labels = [TREND_TYPE_LABELS.get(t, t) for t in trend_types]
