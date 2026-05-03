@@ -112,26 +112,25 @@ def reconstruct_bootstrap_results(
             T_dep_opt_samples = samples['T_dep_opt'].values
             T_dep_opt_point = summary_row.get('T_dep_opt_point', None)
 
-        # Three-interval specific fields
-        T_crit_low_point = None
-        T_crit_low_samples = None
-        T_crit_high_point = None
-        T_crit_high_samples = None
+        # Ternary T-family specific fields (h2_D, h2_L block coefficients)
+        h2_D_point = None
+        h2_D_samples = None
+        h2_L_point = None
+        h2_L_samples = None
 
-        if 'T_crit_low' in samples.columns and not samples['T_crit_low'].isna().all():
-            T_crit_low_samples = samples['T_crit_low'].values
-            # Get point estimate from iteration -1 row
+        if 'h2_D' in samples.columns and not samples['h2_D'].isna().all():
+            h2_D_samples = samples['h2_D'].values
             point_mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
             point_rows = coefficients_df[point_mask]
-            if len(point_rows) > 0 and 'T_crit_low' in point_rows.columns:
-                T_crit_low_point = point_rows['T_crit_low'].values[0]
+            if len(point_rows) > 0 and 'h2_D' in point_rows.columns:
+                h2_D_point = point_rows['h2_D'].values[0]
 
-        if 'T_crit_high' in samples.columns and not samples['T_crit_high'].isna().all():
-            T_crit_high_samples = samples['T_crit_high'].values
+        if 'h2_L' in samples.columns and not samples['h2_L'].isna().all():
+            h2_L_samples = samples['h2_L'].values
             point_mask = (coefficients_df['approach'] == approach) & (coefficients_df['iteration'] == -1)
             point_rows = coefficients_df[point_mask]
-            if len(point_rows) > 0 and 'T_crit_high' in point_rows.columns:
-                T_crit_high_point = point_rows['T_crit_high'].values[0]
+            if len(point_rows) > 0 and 'h2_L' in point_rows.columns:
+                h2_L_point = point_rows['h2_L'].values[0]
 
         # Reconstruct k_samples from k_samples_df if available
         k_point = None
@@ -187,10 +186,10 @@ def reconstruct_bootstrap_results(
             f2_samples=f2_samples,
             T_dep_opt_point=T_dep_opt_point,
             T_dep_opt_samples=T_dep_opt_samples,
-            T_crit_low_point=T_crit_low_point,
-            T_crit_low_samples=T_crit_low_samples,
-            T_crit_high_point=T_crit_high_point,
-            T_crit_high_samples=T_crit_high_samples,
+            h2_D_point=h2_D_point,
+            h2_D_samples=h2_D_samples,
+            h2_L_point=h2_L_point,
+            h2_L_samples=h2_L_samples,
             k_point=k_point,
             k_samples=k_samples,
         )

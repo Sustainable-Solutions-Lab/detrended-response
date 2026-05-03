@@ -76,7 +76,7 @@ def plot_uncertainty_range_bars(
         ('Approach Q', 'Quadratic', ['Approach QJ', 'Approach QP', 'Approach QL']),
         ('Approach P', 'Piecewise', ['Approach PJ', 'Approach PP', 'Approach PL']),
         ('Approach S', 'Segmented', ['Approach SJ', 'Approach SP', 'Approach SL']),
-        ('Approach T', 'Three-Interval', ['Approach TJ', 'Approach TP', 'Approach TL']),
+        ('Approach T', 'Ternary G+D+L', ['Approach TJ', 'Approach TP', 'Approach TL']),
         ('Approach D', 'Persistence', ['Approach DJ', 'Approach DP', 'Approach DL']),
     ]
 

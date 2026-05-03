@@ -145,7 +145,7 @@ The “climate response” is specified in several ways:
 - **Quadratic (Q\*):** `h(T) = h₁·T + h₂·T²`
 - **Piecewise quadratic (P\*):** different curvature below vs above an estimated optimum `T_opt`
 - **Segmented linear (S\*):** different slopes below vs above `T_opt` (V‑shaped response)
-- **Three‑interval (T\*):** derivative transitions linearly between `T_crit_low` and `T_crit_high`, creating a smooth version of the segmented model with a quadratic transition zone
+- **Ternary (T\*):** sum of three quadratic blocks centered on a shared `T_opt`: a growth block (`h₂_G·q`), a decay block (`h₂_D·(q − h₄·A_q,lag − corr_q)`) with persistence parameter `h₄`, and a level block (`h₂_L·(q − q_{t-1})`), where `q = (T − T_opt)²`
 - **Persistence/decay (D\*):** a distributed‑lag “converging” response with decay parameter `h₄`
 - **Level effect (L\*):** first‑difference of the climate response (`h₄ = 1`), testing whether temperature affects GDP *levels* rather than *growth*
 

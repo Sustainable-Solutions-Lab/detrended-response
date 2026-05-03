@@ -177,11 +177,13 @@ class BootstrapResult:
     var_attrib_point: dict = None      # From original fit
     var_attrib_samples: dict = None    # Dict mapping key -> np.ndarray of bootstrap samples
 
-    # Three-interval (T approach) specific (optional)
-    T_crit_low_point: float = None
-    T_crit_low_samples: np.ndarray = None
-    T_crit_high_point: float = None
-    T_crit_high_samples: np.ndarray = None
+    # Ternary (T approach) specific (optional). For T approaches, h2_point holds
+    # the G-block coefficient (h2_G); h2_D and h2_L are the decay/level block
+    # coefficients on q_t and its persistence-/first-difference- transforms.
+    h2_D_point: float = None
+    h2_D_samples: np.ndarray = None
+    h2_L_point: float = None
+    h2_L_samples: np.ndarray = None
 
     # Year fixed effects k(t)
     k_point: Dict[int, float] = None      # Point estimates from original fit
@@ -368,9 +370,9 @@ def run_bootstrap(
     h1_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     h2_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     T_opt_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
-    # Three-interval specific samples
-    T_crit_low_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
-    T_crit_high_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    # Ternary T-family specific samples (h2_D, h2_L block coefficients)
+    h2_D_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
+    h2_L_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}
     r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     total_r_squared_samples = {name: np.zeros(n_bootstrap) for name in approach_names}
     # Approach-specific samples (f1, h3, h4, f2, T_dep_opt have different meanings per approach)
@@ -517,11 +519,11 @@ def run_bootstrap(
                 # f2: 6c T_opt_trend, 8b quadratic modulation
                 if hasattr(r, 'f2') and r.f2 is not None:
                     f2_samples[name][b] = r.f2
-                # T_crit_low and T_crit_high: three-interval approaches
-                if hasattr(r, 'T_crit_low') and r.T_crit_low is not None:
-                    T_crit_low_samples[name][b] = r.T_crit_low
-                if hasattr(r, 'T_crit_high') and r.T_crit_high is not None:
-                    T_crit_high_samples[name][b] = r.T_crit_high
+                # Ternary T-family: h2_D, h2_L block coefficients
+                if hasattr(r, 'h2_D') and r.h2_D is not None:
+                    h2_D_samples[name][b] = r.h2_D
+                if hasattr(r, 'h2_L') and r.h2_L is not None:
+                    h2_L_samples[name][b] = r.h2_L
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -605,10 +607,13 @@ def run_bootstrap(
                     )
 
                 elif name in ('Approach TL', 'Approach TJ', 'Approach TP'):
-                    # Three-interval: h2*f_low + h4*f_high
-                    from .output import three_interval_shape
-                    f_low, f_high = three_interval_shape(data.temp, r.T_crit_low, r.T_crit_high - r.T_crit_low)
-                    h_T_samples[name][b] = r.h2 * f_low + r.h4 * f_high
+                    # Ternary G+D+L: reduced-form combined response is the sum
+                    # of three quadratic blocks centered at shared T_opt.
+                    centered_q = (data.temp - r.T_opt) ** 2
+                    h2_G = r.h2  # G-block (stored in h2)
+                    h2_D = getattr(r, 'h2_D', 0.0) or 0.0
+                    h2_L = getattr(r, 'h2_L', 0.0) or 0.0
+                    h_T_samples[name][b] = (h2_G + h2_D + h2_L) * centered_q
 
                 elif name in ('Approach SL', 'Approach SJ', 'Approach SP'):
                     # Segmented linear: h2*(T-T_opt) if T≤T_opt else h4*(T-T_opt)
@@ -739,9 +744,9 @@ def run_bootstrap(
         # T_opt may not exist for all approaches (e.g., Approach 6c uses T_dep_opt/f2 instead)
         T_opt_point = getattr(orig, 'T_opt', None)
 
-        # Three-interval specific
-        T_crit_low_point = getattr(orig, 'T_crit_low', None)
-        T_crit_high_point = getattr(orig, 'T_crit_high', None)
+        # Ternary T-family specific
+        h2_D_point = getattr(orig, 'h2_D', None)
+        h2_L_point = getattr(orig, 'h2_L', None)
 
         results[name] = BootstrapResult(
             approach=orig.approach,
@@ -767,10 +772,10 @@ def run_bootstrap(
             f2_samples=f2_samples[name],
             T_dep_opt_point=T_dep_opt_point,
             T_dep_opt_samples=T_dep_opt_samples[name],
-            T_crit_low_point=T_crit_low_point,
-            T_crit_low_samples=T_crit_low_samples[name],
-            T_crit_high_point=T_crit_high_point,
-            T_crit_high_samples=T_crit_high_samples[name],
+            h2_D_point=h2_D_point,
+            h2_D_samples=h2_D_samples[name],
+            h2_L_point=h2_L_point,
+            h2_L_samples=h2_L_samples[name],
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
             var_attrib_point=getattr(orig, 'var_attrib', None),

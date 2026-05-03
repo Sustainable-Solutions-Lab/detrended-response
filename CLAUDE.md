@@ -57,7 +57,7 @@ This project prioritizes elegant, fail-fast code that surfaces errors quickly ra
     - Q = Quadratic response function
     - P = Piecewise quadratic response function
     - S = Segmented linear response function
-    - T = Three-interval response function
+    - T = Ternary response function (sum of growth + decay + level quadratic blocks centered at shared T_opt)
     - D = Decay (persistence time scale)
     - L = Level effect (h4=1, first-difference of climate response)
   - Second letter indicates trend identification method:

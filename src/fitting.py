@@ -45,6 +45,8 @@ from .persistence import (
     compute_persistence_accumulators_at_T,
     compute_pre_first_year_correction,
     compute_T_linear_at_first_year,
+    compute_x_persistence_accumulator,
+    compute_x_pre_first_year_correction,
 )
 
 
@@ -345,9 +347,6 @@ class FitResultApproach8:
     # Compatibility field for plotting that expects h1
     h1: float = 0.0        # Linear term (always 0 for piecewise model)
     h1_se: float = 0.0     # SE for h1 (always 0)
-    # Three-interval (T approach) specific fields
-    T_crit_low: float = None    # Lower critical temperature (start of transition zone)
-    T_crit_high: float = None   # Upper critical temperature (end of transition zone)
 
 
 @dataclass
@@ -388,6 +387,16 @@ class FitResultApproach4:
     total_r_squared: float
     var_decomp: dict = None
     var_attrib: dict = None
+    # T-family (ternary growth+decay+level) extras. For T approaches, h1/h2 hold
+    # the growth-block coefficients (h1 = -2*T_opt*h2_G, h2 = h2_G), h2_D is the
+    # decay-block coefficient on q_t - h4*A_q,lag, and h2_L is the level-block
+    # coefficient. T_opt_se is the numerical-Hessian SE for the profiled shared
+    # T_opt. None for non-T approaches.
+    h2_D: float = None
+    h2_D_se: float = None
+    h2_L: float = None
+    h2_L_se: float = None
+    T_opt_se: float = None
 
 
 @dataclass
@@ -3494,321 +3503,82 @@ def fit_ApproachDP_persistence_linear_detrend(
     )
 
 
-def three_interval_basis(T_vals, T_crit_low, delta_T_crit):
-    """Compute three-interval basis functions f_low and f_high.
+# ==============================================================================
+# T-family ("ternary": combined Growth + Decay + Level response with shared T_opt)
+#
+# Reduced-form damage: h(T) = h2_G * q                              (growth)
+#                          + h2_D * (q - h4*A_q,lag - corr_q)      (decay, fitted h4)
+#                          + h2_L * (q - q_{t-1})                  (level, h4=1)
+# where q = (T - T_opt)^2 is shared across all three blocks.
+#
+# 5 free climate params (T_opt, h4, h2_G, h2_D, h2_L). T_opt and h4 are profiled
+# jointly via alternating 1-D Brent with an inner OLS over (h2_G, h2_D, h2_L).
+# h4 is bounded strictly inside (0, 1) — at h4=1 the D-block collapses onto
+# the L-block (rank deficiency), and at h4=0 it collapses onto the G-block
+# once country FEs absorb the per-country baseline.
+# ==============================================================================
 
-    The derivative transitions linearly from h2 (below T_lo) to h4 (above T_hi),
-    where T_lo = T_crit_low and T_hi = T_lo + delta_T_crit.
+T_OPT_BOUNDS_T = (0.0, 30.0)
+T_OPT_INIT_T = 15.0
+H4_BOUNDS_T = (0.01, 0.99)
+H4_INIT_T = 0.05
+ALT_BRENT_MAX_ITERS_T = 10
+ALT_BRENT_TOL_T = 1e-4
 
-    f_low(T):
-      T <= T_lo:           T - T_lo
-      T_lo < T < T_hi:    (T - T_lo) - (T - T_lo)^2 / (2*dT)
-      T >= T_hi:           dT / 2
 
-    f_high(T):
-      T <= T_lo:           0
-      T_lo < T < T_hi:    (T - T_lo)^2 / (2*dT)
-      T >= T_hi:           T - T_lo - dT/2
+def _ternary_design_columns(data: AnalysisData, T_opt_val: float, h4_val: float,
+                            T_linear_first: np.ndarray) -> tuple:
+    """Build the three ternary regressor columns (G, D, L) at given (T_opt, h4).
 
-    Args:
-        T_vals: Temperature array
-        T_crit_low: Lower critical temperature
-        delta_T_crit: Width of transition zone (>= 0)
+    Uses shared smoothed-first-year baseline T_linear_first for both the L-block
+    h4=1 first-difference boundary and the D-block pre-first-year correction.
 
-    Returns:
-        Tuple of (f_low, f_high) arrays
+    Returns (G_col, D_col, L_col, q).
     """
-    T_lo = T_crit_low
-    dT = delta_T_crit
-    T_hi = T_lo + dT
-
-    d = T_vals - T_lo  # shifted temperature
-
-    below = T_vals <= T_lo
-    above = T_vals >= T_hi
-    middle = ~below & ~above
-
-    f_low = np.where(below, d, np.where(above, dT / 2, 0.0))
-    f_high = np.where(below, 0.0, np.where(above, d - dT / 2, 0.0))
-
-    # Middle region: use np.where to avoid division by zero when dT=0
-    # When dT=0, middle is empty so these values are never used
-    if dT > 0:
-        d_mid = np.where(middle, d, 0.0)
-        f_low = np.where(middle, d_mid - d_mid**2 / (2 * dT), f_low)
-        f_high = np.where(middle, d_mid**2 / (2 * dT), f_high)
-
-    return f_low, f_high
-
-
-def _optimize_three_interval(compute_sse_for_T0T1, T_bounds=(0.0, 30.0)):
-    """Shared 2D optimization over (T0, T1) for three-interval approaches.
-
-    Optimizes over (T0, T1) both in T_bounds. The SSE function should accept
-    (T0, T1) and internally compute T_crit_low = min(T0, T1),
-    delta_T_crit = |T1 - T0|.
-
-    Returns:
-        Tuple of (T_crit_low, delta_T_crit) at optimum
-    """
-    # Grid search: 12×12 over T0 × T1 (only upper triangle needed due to symmetry,
-    # but searching both is simpler and the grid is small)
-    T_grid = np.linspace(T_bounds[0], T_bounds[1], 12)
-    best_sse = np.inf
-    best_T0T1 = np.array([15.0, 20.0])
-    for t0 in T_grid:
-        for t1 in T_grid:
-            sse = compute_sse_for_T0T1(np.array([t0, t1]))
-            if sse < best_sse:
-                best_sse = sse
-                best_T0T1 = np.array([t0, t1])
-
-    # Refine with L-BFGS-B
-    result = minimize(
-        compute_sse_for_T0T1,
-        x0=best_T0T1,
-        bounds=[T_bounds, T_bounds],
-        method='L-BFGS-B',
-        options={'ftol': 1e-8}
-    )
-    T0_opt, T1_opt = result.x
-    T_crit_low = min(T0_opt, T1_opt)
-    T_crit_high = max(T0_opt, T1_opt)
-    return T_crit_low, T_crit_high
-
-
-def _compute_g2(T, T_lo, T_hi):
-    """Compute g2 basis: T² in middle, tangent-line extensions outside.
-
-    g2(T) = T²              for T_lo <= T <= T_hi
-    g2(T) = 2*T_lo*T - T_lo²  for T < T_lo
-    g2(T) = 2*T_hi*T - T_hi²  for T > T_hi
-
-    This is C1-continuous everywhere. In the middle, dg2/dT = 2T.
-    Outside, dg2/dT is constant (2*T_lo or 2*T_hi).
-    """
-    return np.where(
-        T < T_lo, 2 * T_lo * T - T_lo**2,
-        np.where(T > T_hi, 2 * T_hi * T - T_hi**2, T**2)
-    )
-
-
-def _derive_T_opt(h2, h4, T_crit_low, T_crit_high):
-    """Derive T_opt from three-interval parameters."""
-    delta = T_crit_high - T_crit_low
-    if h2 * h4 < 0:
-        if delta > 0:
-            return T_crit_low + h2 * delta / (h2 - h4)
-        else:
-            return T_crit_low
-    return np.nan
-
-
-def fit_ApproachTL_three_interval(
-    data: AnalysisData,
-    trends_loess: CountryTrendsLoess,
-    year_means: dict,
-    T_bounds: tuple = (0.0, 30.0),
-    weights: np.ndarray = None,
-) -> FitResultApproach8:
-    """Approach TL: Three-interval response with LOESS detrending.
-
-    The derivative dh/dT transitions linearly between T_crit_low and T_crit_high,
-    creating three intervals: linear below, quadratic in the middle, linear above.
-
-    Optimization is over (T0, T1) both in T_bounds, with T_crit_low = min(T0, T1)
-    and delta_T_crit = |T1 - T0|. This avoids boundary issues when delta_T_crit = 0.
-
-    Args:
-        data: AnalysisData object
-        trends_loess: CountryTrendsLoess (with LOESS trends)
-        year_means: Pre-computed k[t] = mean(dy_i[t])
-        T_bounds: Bounds for T0 and T1 (default [0, 30])
-        weights: Optional observation weights for weighted least squares
-
-    Returns:
-        FitResultApproach8 with T_opt, h2, h4, T_crit_low, delta_T_crit
-    """
-    # Compute dependent variable: dy - k[t] - j_i[t]
-    y = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
-        yr = data.year[i]
-        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
-
     T = data.temp
-    T_trend = trends_loess.T_loess
+    T2 = T ** 2
 
-    def compute_sse_for_T0T1(params):
-        """Compute SSE for given (T0, T1), using middle-only quadratic OLS.
+    q = T2 - 2.0 * T_opt_val * T + T_opt_val ** 2
 
-        Uses g2 basis (T² in middle, tangent extensions outside).
-        OLS on middle observations only, SSE evaluated on all data.
-        If slopes at both boundaries have the same sign, returns inf.
-        Falls back to full-data f_low/f_high OLS if < 3 middle observations.
-        """
-        T_lo = min(params[0], params[1])
-        T_hi = max(params[0], params[1])
+    # L-block: h4=1 first-difference of q, with smoothed first-year baseline.
+    # Build q_lag at h4=1 from T-lag and T2-lag accumulators (h4=1) plus their
+    # smoothed-baseline corrections, then expand q_lag = T2_lag - 2*T_opt*T_lag + T_opt^2.
+    A_T_lag_h41, A_T2_lag_h41 = compute_persistence_accumulators(data, 1.0)
+    corr_T_h41, corr_T2_h41 = compute_pre_first_year_correction(data, 1.0, T_linear_first)
+    T_lag_eff = A_T_lag_h41 + corr_T_h41
+    T2_lag_eff = A_T2_lag_h41 + corr_T2_h41
+    q_lag_h41 = T2_lag_eff - 2.0 * T_opt_val * T_lag_eff + T_opt_val ** 2
+    L_col = q - q_lag_h41
 
-        # Count middle observations
-        middle_mask = (T >= T_lo) & (T <= T_hi)
-        n_middle = np.sum(middle_mask)
+    # D-block: q accumulator at fitted h4 with smoothed pre-history correction.
+    A_q_lag = compute_x_persistence_accumulator(data, h4_val, q)
+    q_first_per_obs = (T_linear_first - T_opt_val) ** 2
+    corr_q = compute_x_pre_first_year_correction(data, h4_val, q_first_per_obs)
+    D_col = q - h4_val * A_q_lag - corr_q
 
-        if n_middle < 3:
-            return np.inf
-
-        # g2 basis
-        g2_T = _compute_g2(T, T_lo, T_hi)
-        g2_Ttrend = _compute_g2(T_trend, T_lo, T_hi)
-        X1_all = T - T_trend
-        X2_all = g2_T - g2_Ttrend
-        X_all = np.column_stack([X1_all, X2_all])
-
-        # Middle-only OLS
-        X_mid = X_all[middle_mask]
-        y_mid = y[middle_mask]
-
-        try:
-            if weights is not None:
-                w_mid = weights[middle_mask]
-                y_mid_clean = np.where(np.isnan(y_mid) & (w_mid == 0), 0, y_mid)
-                sqrt_w = np.sqrt(w_mid)
-                beta, _, _, _ = np.linalg.lstsq(
-                    X_mid * sqrt_w[:, np.newaxis], y_mid_clean * sqrt_w, rcond=None
-                )
-            else:
-                beta, _, _, _ = linalg.lstsq(X_mid, y_mid)
-        except Exception:
-            return np.inf
-
-        h1a, h2a = beta[0], beta[1]
-
-        # Check sign constraint: slopes at boundaries must have opposite signs
-        slope_low = h1a + 2 * h2a * T_lo
-        slope_high = h1a + 2 * h2a * T_hi
-        if slope_low * slope_high > 0:
-            return np.inf
-
-        # SSE on all data
-        y_pred = X_all @ beta
-        if weights is not None:
-            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
-            return np.sum(weights * (y_clean - y_pred) ** 2)
-        return np.sum((y - y_pred) ** 2)
-
-    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
-
-    # Re-fit at optimal params using g2 basis with middle-only OLS
-    middle_mask = (T >= T_crit_low_opt) & (T <= T_crit_high_opt)
-    g2_T_mid = _compute_g2(T[middle_mask], T_crit_low_opt, T_crit_high_opt)
-    g2_Ttrend_mid = _compute_g2(T_trend[middle_mask], T_crit_low_opt, T_crit_high_opt)
-    X_mid = np.column_stack([
-        T[middle_mask] - T_trend[middle_mask],
-        g2_T_mid - g2_Ttrend_mid,
-    ])
-    y_mid = y[middle_mask]
-
-    # Use lstsq for middle-only OLS (may be rank-deficient if interval is narrow)
-    if weights is not None:
-        w_mid = weights[middle_mask]
-        y_mid_clean = np.where(np.isnan(y_mid) & (w_mid == 0), 0, y_mid)
-        sqrt_w = np.sqrt(w_mid)
-        beta_ols, _, _, _ = np.linalg.lstsq(
-            X_mid * sqrt_w[:, np.newaxis], y_mid_clean * sqrt_w, rcond=None
-        )
-    else:
-        beta_ols, _, _, _ = linalg.lstsq(X_mid, y_mid)
-
-    h1a = beta_ols[0]
-    h2a = beta_ols[1]
-
-    # Derive slopes at boundaries and T_opt
-    h2 = h1a + 2 * h2a * T_crit_low_opt   # slope below T_crit_low
-    h4 = h1a + 2 * h2a * T_crit_high_opt   # slope above T_crit_high
-    h2_se = np.nan  # SE not straightforward with middle-only OLS
-    h4_se = np.nan
-
-    # T_opt = where dh/dT = 0 in the quadratic region
-    T_opt = -h1a / (2 * h2a) if abs(h2a) > 1e-15 else np.nan
-
-    # Re-compute using three_interval_basis for compatibility with output/plotting
-    delta = T_crit_high_opt - T_crit_low_opt
-    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta)
-    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta)
-    X1 = f_low_T - f_low_trend
-    X2 = f_high_T - f_high_trend
-    y_pred_all = h2 * X1 + h4 * X2
-    y_for_resid = np.where(np.isnan(y) & (weights == 0), 0, y) if weights is not None else y
-    residuals = y_for_resid - y_pred_all
-
-    k = dict(year_means)
-    n_params = 4  # h1a, h2a, T_crit_low, T_crit_high
-    r_sq, adj_r_sq, rmse = compute_fit_stats(y_for_resid, residuals, n_params)
-    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
-
-    j_trend = trends_loess.y_loess
-    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
-
-    # h(T) - h(T_trend) using three_interval_basis
-    h_values = h2 * X1 + h4 * X2
-    h_of_T_trend = h2 * f_low_trend + h4 * f_high_trend
-
-    components = {
-        'h_T': h_values,
-        'j': j_trend,
-        'k': k_values,
-    }
-    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
-
-    Delta_u = h_values
-    v = h_of_T_trend
-    j_trend_adjusted = j_trend - v
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
-
-    return FitResultApproach8(
-        approach="Approach TL: Three-Interval (LOESS Detrending)",
-        h2=h2,
-        h2_se=h2_se,
-        h4=h4,
-        h4_se=h4_se,
-        T_opt=T_opt,
-        T_opt_se=np.nan,
-        k=k,
-        r_squared=r_sq,
-        adj_r_squared=adj_r_sq,
-        rmse=rmse,
-        n_obs=data.n_obs,
-        n_params=n_params,
-        residuals=residuals,
-        total_r_squared=total_r_sq,
-        var_decomp=var_decomp,
-        var_attrib=var_attrib,
-        T_crit_low=T_crit_low_opt,
-        T_crit_high=T_crit_high_opt,
-    )
+    return q, D_col, L_col
 
 
-def fit_ApproachTJ_three_interval_conjoined(
+def fit_ApproachTJ_ternary_conjoined(
     data: AnalysisData,
-    T_bounds: tuple = (0.0, 30.0),
+    T_opt_bounds: tuple = T_OPT_BOUNDS_T,
+    h4_bounds: tuple = H4_BOUNDS_T,
     weights: np.ndarray = None,
-) -> FitResultApproach8:
-    """Approach TJ: Three-interval response with full OLS for j_i(t) and k(t).
+) -> FitResultApproach4:
+    """Approach TJ: Ternary growth+decay+level response, shared T_opt, joint OLS.
 
-    Optimization is over (T0, T1) both in T_bounds, with T_crit_low = min(T0, T1)
-    and delta_T_crit = |T1 - T0|.
+    Model:
+        Δy_i,t = h2_G · q_t
+               + h2_D · (q_t − h4·A_q,t-1 − corr_q,t)
+               + h2_L · (q_t − q_{t-1})
+               + j_i(t) + k_t + ε
+    where q_t = (T_t − T_opt)² and A_q(t) = q_t + (1−h4)·A_q(t-1).
 
-    Args:
-        data: AnalysisData object
-        T_bounds: Bounds for T0 and T1 (default [0, 30])
-        weights: Optional observation weights for weighted least squares
-
-    Returns:
-        FitResultApproach8 with T_opt, h2, h4, T_crit_low, delta_T_crit
+    Profiles (T_opt, h4) via alternating 1-D Brent with inner OLS over
+    (h2_G, h2_D, h2_L) plus country quadratic trends and active-year FEs.
     """
     n_obs = data.n_obs
     n_countries = data.n_countries
-
     unique_years = sorted(set(data.year))
 
     if weights is not None:
@@ -3819,98 +3589,112 @@ def fit_ApproachTJ_three_interval_conjoined(
         active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
     else:
         active_years = unique_years
-
     active_year_to_idx = {y: i for i, y in enumerate(active_years)}
     n_active_years = len(active_years)
 
     n_j_params = 3 * (n_countries - 1)
-    n_k_params = n_active_years
-    n_total_params = 2 + n_j_params + n_k_params
+    n_total_params = 3 + n_j_params + n_active_years   # 3 climate cols (G/D/L)
+    k_col_start = 3 + n_j_params
 
-    # Pre-compute constant parts of design matrix
+    # Pre-build country-trend + year-effect columns ((T_opt, h4)-independent)
     X_base = np.zeros((n_obs, n_total_params))
-
     for i in range(n_obs):
         c = data.country_idx[i]
         if c > 0:
             t = data.time[i]
-            col_base = 2 + 3 * (c - 1)
+            col_base = 3 + 3 * (c - 1)
             X_base[i, col_base] = 1.0
             X_base[i, col_base + 1] = t
             X_base[i, col_base + 2] = t * t
-
-    k_col_start = 2 + n_j_params
     for i in range(n_obs):
         yr = data.year[i]
         if yr in active_year_to_idx:
-            yr_idx = active_year_to_idx[yr]
-            X_base[i, k_col_start + yr_idx] = 1.0
+            X_base[i, k_col_start + active_year_to_idx[yr]] = 1.0
 
-    T = data.temp
     y = data.growth_pcGDP
+    T_linear_first = compute_T_linear_at_first_year(data, weights)
 
-    def compute_sse_for_T0T1(params):
-        """Compute SSE for given (T0, T1), using T_crit_low=min, delta=|T1-T0|."""
-        T_crit_low_val = min(params[0], params[1])
-        delta_T_crit_val = abs(params[1] - params[0])
-        f_low, f_high = three_interval_basis(T, T_crit_low_val, delta_T_crit_val)
-
+    def _build_X(T_opt_val, h4_val):
+        G_col, D_col, L_col = _ternary_design_columns(data, T_opt_val, h4_val, T_linear_first)
         X = X_base.copy()
-        X[:, 0] = f_low
-        X[:, 1] = f_high
+        X[:, 0] = G_col
+        X[:, 1] = D_col
+        X[:, 2] = L_col
+        return X, G_col, D_col, L_col
 
+    def compute_sse(T_opt_val, h4_val):
+        X, _, _, _ = _build_X(T_opt_val, h4_val)
         if weights is not None:
-            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
             sqrt_W = np.sqrt(weights)
             X_w = X * sqrt_W[:, np.newaxis]
-            y_w = y_clean * sqrt_W
+            y_w = y * sqrt_W
             XTX = X_w.T @ X_w
             XTy = X_w.T @ y_w
             beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
             y_pred = X @ beta_ols
-            sse = np.sum(weights * (y_clean - y_pred) ** 2)
-        else:
-            XTX = X.T @ X
-            XTy = X.T @ y
-            beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
-            y_pred = X @ beta_ols
-            sse = np.sum((y - y_pred) ** 2)
-        return sse
+            return float(np.sum(weights * (y - y_pred) ** 2))
+        XTX = X.T @ X
+        XTy = X.T @ y
+        beta_ols, _, _, _ = np.linalg.lstsq(XTX, XTy, rcond=None)
+        y_pred = X @ beta_ols
+        return float(np.sum((y - y_pred) ** 2))
 
-    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
-    delta_T_crit = T_crit_high_opt - T_crit_low_opt
+    # Alternating 1-D Brent over (T_opt, h4)
+    T_opt_cur = T_OPT_INIT_T
+    h4_cur = H4_INIT_T
+    for _alt_iter in range(ALT_BRENT_MAX_ITERS_T):
+        res_T = minimize_scalar(
+            lambda t_val: compute_sse(t_val, h4_cur),
+            bounds=T_opt_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        T_opt_new = float(res_T.x)
+        res_h4 = minimize_scalar(
+            lambda h: compute_sse(T_opt_new, h),
+            bounds=h4_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        h4_new = float(res_h4.x)
+        if abs(T_opt_new - T_opt_cur) + abs(h4_new - h4_cur) < ALT_BRENT_TOL_T:
+            T_opt_cur, h4_cur = T_opt_new, h4_new
+            break
+        T_opt_cur, h4_cur = T_opt_new, h4_new
+    T_opt_opt, h4_opt = T_opt_cur, h4_cur
 
-    # Re-fit at optimal params
-    f_low, f_high = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
-    X_opt = X_base.copy()
-    X_opt[:, 0] = f_low
-    X_opt[:, 1] = f_high
-
+    # Refit at optimal (T_opt, h4)
+    X_opt, G_col_opt, D_col_opt, L_col_opt = _build_X(T_opt_opt, h4_opt)
     if weights is not None:
-        beta, residuals, sigma_sq, cov = fit_ols_weighted(y, X_opt, weights)
+        beta, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
     else:
-        beta, residuals, sigma_sq, cov = fit_ols(y, X_opt)
+        beta, residuals, _, cov = fit_ols(y, X_opt)
+    h2_G = float(beta[0])
+    h2_D = float(beta[1])
+    h2_L = float(beta[2])
+    h2_G_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h2_D_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_L_se = float(np.sqrt(max(cov[2, 2], 0)))
 
-    h2 = beta[0]
-    h4 = beta[1]
-    h2_se = np.sqrt(max(cov[0, 0], 0))
-    h4_se = np.sqrt(max(cov[1, 1], 0))
+    T_opt_se = compute_1d_se_numerical(
+        lambda t_val: compute_sse(t_val, h4_opt),
+        T_opt_opt, T_opt_bounds, n_obs, n_params=5,
+    )
+    h4_se = compute_1d_se_numerical(
+        lambda h: compute_sse(T_opt_opt, h),
+        h4_opt, h4_bounds, n_obs, n_params=5,
+    )
 
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
+    # Map G-block quadratic to (h1, h2) form for downstream compatibility:
+    # h_G(T) = h2_G·(T - T_opt)² ⇒ h1 = -2·T_opt·h2_G, h2 = h2_G.
+    h1 = -2.0 * T_opt_opt * h2_G
+    h1_se = abs(2.0 * T_opt_opt) * h2_G_se
 
-    # Extract year fixed effects
-    k = {}
-    for yr in unique_years:
-        if yr in active_year_to_idx:
-            k[yr] = beta[k_col_start + active_year_to_idx[yr]]
-        else:
-            k[yr] = np.nan
-
-    n_params = 4
+    k_dict = {yr: (beta[k_col_start + active_year_to_idx[yr]]
+                   if yr in active_year_to_idx else np.nan)
+              for yr in unique_years}
+    n_params = 5  # T_opt, h4, h2_G, h2_D, h2_L
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_total_params)
     total_r_sq = compute_total_r_squared(residuals, y)
 
-    # Compute j_trend and k_values for diagnostics
     j_trend = np.zeros(n_obs)
     k_values = np.zeros(n_obs)
     for i in range(n_obs):
@@ -3918,192 +3702,326 @@ def fit_ApproachTJ_three_interval_conjoined(
         t = data.time[i]
         yr = data.year[i]
         if c > 0:
-            col_base = 2 + 3 * (c - 1)
-            j0 = beta[col_base]
-            j1 = beta[col_base + 1]
-            j2 = beta[col_base + 2]
-            j_trend[i] = j0 + j1 * t + j2 * t * t
-        k_val = k[yr]
+            col_base = 3 + 3 * (c - 1)
+            j_trend[i] = beta[col_base] + beta[col_base + 1] * t + beta[col_base + 2] * t * t
+        k_val = k_dict[yr]
         k_values[i] = k_val if not np.isnan(k_val) else 0.0
 
-    h_values = h2 * f_low + h4 * f_high
-
-    components = {
-        'h_T': h_values,
-        'j': j_trend,
-        'k': k_values,
-    }
+    h_conv = h2_G * G_col_opt + h2_D * D_col_opt + h2_L * L_col_opt
+    components = {'h_T': h_conv, 'j': j_trend, 'k': k_values}
     var_decomp = compute_variance_decomposition(components, y, total_r_sq)
-
-    # For conjoined approach: Delta_u = 0, v = h(T)
-    Delta_u = np.zeros(n_obs)
-    v = h_values
+    Delta_u = h_conv
+    v = np.zeros(n_obs)
     epsilon = y - (Delta_u + v + j_trend + k_values)
     var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
 
-    return FitResultApproach8(
-        approach="Approach TJ: Three-Interval (Joint OLS)",
-        h2=h2,
-        h2_se=h2_se,
-        h4=h4,
-        h4_se=h4_se,
-        T_opt=T_opt,
-        T_opt_se=np.nan,
-        k=k,
-        r_squared=r_sq,
-        adj_r_squared=adj_r_sq,
-        rmse=rmse,
-        n_obs=n_obs,
-        n_params=n_params,
-        residuals=residuals,
-        total_r_squared=total_r_sq,
-        var_decomp=var_decomp,
-        var_attrib=var_attrib,
-        T_crit_low=T_crit_low_opt,
-        T_crit_high=T_crit_high_opt,
+    return FitResultApproach4(
+        approach="Approach TJ: Ternary Growth+Decay+Level (Joint OLS)",
+        h1=h1, h2=h2_G, h1_se=h1_se, h2_se=h2_G_se,
+        h4=h4_opt, h4_se=h4_se,
+        k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params,
+        residuals=residuals, T_opt=T_opt_opt, total_r_squared=total_r_sq,
+        var_decomp=var_decomp, var_attrib=var_attrib,
+        h2_D=h2_D, h2_D_se=h2_D_se,
+        h2_L=h2_L, h2_L_se=h2_L_se, T_opt_se=T_opt_se,
     )
 
 
-def fit_ApproachTP_three_interval_linear_detrend(
+def _ternary_detrended_design_columns(data: AnalysisData, T_opt_val: float, h4_val: float,
+                                       T_trend: np.ndarray) -> tuple:
+    """Build paired G/D/L diff regressors at given (T_opt, h4) for TL/TP.
+
+    Each block column is (block_at_T_obs - block_at_T_trend), so country trends
+    absorbed by detrending drop out of the regression. Pre-history correction
+    uses each series' own first-year value (analogue of compute_pre_first_year_correction
+    pattern in DL/DP).
+
+    Returns (X1, X2, X3) — the three column vectors for G, D, L blocks.
+    """
+    T = data.temp
+    T2 = T ** 2
+    T_trend2 = T_trend ** 2
+
+    q_obs = T2 - 2.0 * T_opt_val * T + T_opt_val ** 2
+    q_trend = T_trend2 - 2.0 * T_opt_val * T_trend + T_opt_val ** 2
+
+    # L-block (h4=1 first-difference): use h4=1 accumulators on T and T_trend.
+    A_T_lag_h41, A_T2_lag_h41 = compute_persistence_accumulators(data, 1.0)
+    A_Ttr_lag_h41, A_T2tr_lag_h41 = compute_persistence_accumulators_at_T(data, 1.0, T_trend)
+    corr_T_h41, corr_T2_h41 = compute_pre_first_year_correction(data, 1.0, T)
+    corr_Ttr_h41, corr_T2tr_h41 = compute_pre_first_year_correction(data, 1.0, T_trend)
+    T_lag_eff = A_T_lag_h41 + corr_T_h41
+    T2_lag_eff = A_T2_lag_h41 + corr_T2_h41
+    Ttr_lag_eff = A_Ttr_lag_h41 + corr_Ttr_h41
+    T2tr_lag_eff = A_T2tr_lag_h41 + corr_T2tr_h41
+    q_obs_lag_h41 = T2_lag_eff - 2.0 * T_opt_val * T_lag_eff + T_opt_val ** 2
+    q_trend_lag_h41 = T2tr_lag_eff - 2.0 * T_opt_val * Ttr_lag_eff + T_opt_val ** 2
+
+    # G-block: (q_obs − q_trend)
+    X1 = q_obs - q_trend
+    # L-block: (dq_obs − dq_trend) where dq_x = q_x − q_x_lag at h4=1
+    X3 = (q_obs - q_obs_lag_h41) - (q_trend - q_trend_lag_h41)
+    # D-block: (D_obs − D_trend), each D = q − h4·A_q,lag − corr_q
+    A_q_obs_lag = compute_x_persistence_accumulator(data, h4_val, q_obs)
+    A_q_trend_lag = compute_x_persistence_accumulator(data, h4_val, q_trend)
+    corr_q_obs = compute_x_pre_first_year_correction(data, h4_val, q_obs)
+    corr_q_trend = compute_x_pre_first_year_correction(data, h4_val, q_trend)
+    D_obs = q_obs - h4_val * A_q_obs_lag - corr_q_obs
+    D_trend = q_trend - h4_val * A_q_trend_lag - corr_q_trend
+    X2 = D_obs - D_trend
+
+    return X1, X2, X3, q_trend, D_trend, (q_trend - q_trend_lag_h41)
+
+
+def fit_ApproachTL_ternary_loess(
+    data: AnalysisData,
+    trends_loess: CountryTrendsLoess,
+    year_means: dict,
+    T_opt_bounds: tuple = T_OPT_BOUNDS_T,
+    h4_bounds: tuple = H4_BOUNDS_T,
+    weights: np.ndarray = None,
+) -> FitResultApproach4:
+    """Approach TL: Ternary growth+decay+level, LOESS detrending.
+
+    Same regression structure as TJ, but with LOESS-detrended y and LOESS-trend
+    versions of the G/D/L block regressors subtracted (mirrors QL/DL/LL).
+    """
+    n_obs = data.n_obs
+    y = np.zeros(n_obs)
+    for i in range(n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    T_trend = trends_loess.T_loess
+
+    def _build_X(T_opt_val, h4_val):
+        X1, X2, X3, q_trend, D_trend, dq_trend = _ternary_detrended_design_columns(
+            data, T_opt_val, h4_val, T_trend
+        )
+        return np.column_stack([X1, X2, X3]), X1, X2, X3, q_trend, D_trend, dq_trend
+
+    def compute_sse(T_opt_val, h4_val):
+        X, *_ = _build_X(T_opt_val, h4_val)
+        if weights is not None:
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y_clean * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            return float(np.sum(weights * (y_clean - y_pred) ** 2))
+        beta_ols, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+        y_pred = X @ beta_ols
+        return float(np.sum((y - y_pred) ** 2))
+
+    T_opt_cur = T_OPT_INIT_T
+    h4_cur = H4_INIT_T
+    for _alt_iter in range(ALT_BRENT_MAX_ITERS_T):
+        res_T = minimize_scalar(
+            lambda t_val: compute_sse(t_val, h4_cur),
+            bounds=T_opt_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        T_opt_new = float(res_T.x)
+        res_h4 = minimize_scalar(
+            lambda h: compute_sse(T_opt_new, h),
+            bounds=h4_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        h4_new = float(res_h4.x)
+        if abs(T_opt_new - T_opt_cur) + abs(h4_new - h4_cur) < ALT_BRENT_TOL_T:
+            T_opt_cur, h4_cur = T_opt_new, h4_new
+            break
+        T_opt_cur, h4_cur = T_opt_new, h4_new
+    T_opt_opt, h4_opt = T_opt_cur, h4_cur
+
+    X_opt, X1, X2, X3, q_trend, D_trend, dq_trend = _build_X(T_opt_opt, h4_opt)
+    if weights is not None:
+        beta, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        beta, residuals, _, cov = fit_ols(y, X_opt)
+    h2_G = float(beta[0])
+    h2_D = float(beta[1])
+    h2_L = float(beta[2])
+    h2_G_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h2_D_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_L_se = float(np.sqrt(max(cov[2, 2], 0)))
+
+    T_opt_se = compute_1d_se_numerical(
+        lambda t_val: compute_sse(t_val, h4_opt),
+        T_opt_opt, T_opt_bounds, n_obs, n_params=5,
+    )
+    h4_se = compute_1d_se_numerical(
+        lambda h: compute_sse(T_opt_opt, h),
+        h4_opt, h4_bounds, n_obs, n_params=5,
+    )
+
+    h1 = -2.0 * T_opt_opt * h2_G
+    h1_se = abs(2.0 * T_opt_opt) * h2_G_se
+
+    k_dict = dict(year_means)
+    n_params = 5
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(n_obs)])
+    h_conv = h2_G * X1 + h2_D * X2 + h2_L * X3
+    components = {'h_T': h_conv, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+    Delta_u = h_conv
+    h_conv_T_trend = h2_G * q_trend + h2_D * D_trend + h2_L * dq_trend
+    v = h_conv_T_trend
+    j_adj = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_adj + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_adj, k_values, epsilon, data.growth_pcGDP)
+
+    return FitResultApproach4(
+        approach="Approach TL: Ternary Growth+Decay+Level (LOESS Detrending)",
+        h1=h1, h2=h2_G, h1_se=h1_se, h2_se=h2_G_se,
+        h4=h4_opt, h4_se=h4_se,
+        k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params,
+        residuals=residuals, T_opt=T_opt_opt, total_r_squared=total_r_sq,
+        var_decomp=var_decomp, var_attrib=var_attrib,
+        h2_D=h2_D, h2_D_se=h2_D_se,
+        h2_L=h2_L, h2_L_se=h2_L_se, T_opt_se=T_opt_se,
+    )
+
+
+def fit_ApproachTP_ternary_linear_detrend(
     data: AnalysisData,
     trends: CountryTrends,
     year_means: dict,
-    T_bounds: tuple = (0.0, 30.0),
+    T_opt_bounds: tuple = T_OPT_BOUNDS_T,
+    h4_bounds: tuple = H4_BOUNDS_T,
     weights: np.ndarray = None,
-) -> FitResultApproach8:
-    """Approach TP: Three-interval response with linear T + quadratic GDP detrending.
+) -> FitResultApproach4:
+    """Approach TP: Ternary growth+decay+level, polynomial detrending.
 
-    Optimization is over (T0, T1) both in T_bounds, with T_crit_low = min(T0, T1)
-    and delta_T_crit = |T1 - T0|.
-
-    Args:
-        data: AnalysisData object
-        trends: CountryTrends (with linear T trend: T0, T1; quadratic GDP: y0, y1, y2)
-        year_means: Pre-computed k[t] = mean(dy_i[t])
-        T_bounds: Bounds for T0 and T1 (default [0, 30])
-        weights: Optional observation weights for weighted least squares
-
-    Returns:
-        FitResultApproach8 with T_opt, h2, h4, T_crit_low, delta_T_crit
+    Pre-detrends y with quadratic GDP trend (y0 + y1·t + y2·t²) and uses linear
+    T-trend (T0 + T1·t) for the trend version of the G/D/L block regressors.
+    Mirrors QP/DP/SP for the pre-computed-trend variant family.
     """
-    # Compute dependent variable: dy - k[t] - j_i[t]
-    y = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
+    n_obs = data.n_obs
+    y = np.zeros(n_obs)
+    for i in range(n_obs):
         c = data.country_idx[i]
         t = data.time[i]
         yr = data.year[i]
         j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
         y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
 
-    T = data.temp
-
-    # Compute T_trend using linear polynomial fit (T0 + T1*t)
-    T_trend = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
+    # Linear T trend per country
+    T_trend = np.zeros(n_obs)
+    for i in range(n_obs):
         c = data.country_idx[i]
         t = data.time[i]
         T_trend[i] = trends.T0[c] + trends.T1[c] * t
 
-    def compute_sse_for_T0T1(params):
-        """Compute SSE for given (T0, T1), using T_crit_low=min, delta=|T1-T0|."""
-        T_crit_low_val = min(params[0], params[1])
-        delta_T_crit_val = abs(params[1] - params[0])
+    def _build_X(T_opt_val, h4_val):
+        X1, X2, X3, q_trend, D_trend, dq_trend = _ternary_detrended_design_columns(
+            data, T_opt_val, h4_val, T_trend
+        )
+        return np.column_stack([X1, X2, X3]), X1, X2, X3, q_trend, D_trend, dq_trend
 
-        f_low_T, f_high_T = three_interval_basis(T, T_crit_low_val, delta_T_crit_val)
-        f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_val, delta_T_crit_val)
+    def compute_sse(T_opt_val, h4_val):
+        X, *_ = _build_X(T_opt_val, h4_val)
+        if weights is not None:
+            y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
+            sqrt_W = np.sqrt(weights)
+            X_w = X * sqrt_W[:, np.newaxis]
+            y_w = y_clean * sqrt_W
+            beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
+            y_pred = X @ beta_ols
+            return float(np.sum(weights * (y_clean - y_pred) ** 2))
+        beta_ols, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+        y_pred = X @ beta_ols
+        return float(np.sum((y - y_pred) ** 2))
 
-        X1 = f_low_T - f_low_trend
-        X2 = f_high_T - f_high_trend
-        X = np.column_stack([X1, X2])
+    T_opt_cur = T_OPT_INIT_T
+    h4_cur = H4_INIT_T
+    for _alt_iter in range(ALT_BRENT_MAX_ITERS_T):
+        res_T = minimize_scalar(
+            lambda t_val: compute_sse(t_val, h4_cur),
+            bounds=T_opt_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        T_opt_new = float(res_T.x)
+        res_h4 = minimize_scalar(
+            lambda h: compute_sse(T_opt_new, h),
+            bounds=h4_bounds, method='bounded',
+            options={'xatol': 1e-3},
+        )
+        h4_new = float(res_h4.x)
+        if abs(T_opt_new - T_opt_cur) + abs(h4_new - h4_cur) < ALT_BRENT_TOL_T:
+            T_opt_cur, h4_cur = T_opt_new, h4_new
+            break
+        T_opt_cur, h4_cur = T_opt_new, h4_new
+    T_opt_opt, h4_opt = T_opt_cur, h4_cur
 
-        try:
-            if weights is not None:
-                y_clean = np.where(np.isnan(y) & (weights == 0), 0, y)
-                sqrt_W = np.sqrt(weights)
-                X_w = X * sqrt_W[:, np.newaxis]
-                y_w = y_clean * sqrt_W
-                beta_ols, _, _, _ = np.linalg.lstsq(X_w, y_w, rcond=None)
-                y_pred = X @ beta_ols
-                sse = np.sum(weights * (y_clean - y_pred) ** 2)
-            else:
-                beta_ols, _, _, _ = linalg.lstsq(X, y)
-                y_pred = X @ beta_ols
-                sse = np.sum((y - y_pred) ** 2)
-            return sse
-        except Exception:
-            return np.inf
-
-    T_crit_low_opt, T_crit_high_opt = _optimize_three_interval(compute_sse_for_T0T1, T_bounds)
-    delta_T_crit = T_crit_high_opt - T_crit_low_opt
-
-    # Re-fit at optimal params
-    f_low_T, f_high_T = three_interval_basis(T, T_crit_low_opt, delta_T_crit)
-    f_low_trend, f_high_trend = three_interval_basis(T_trend, T_crit_low_opt, delta_T_crit)
-    X1 = f_low_T - f_low_trend
-    X2 = f_high_T - f_high_trend
-    X_opt = np.column_stack([X1, X2])
-
+    X_opt, X1, X2, X3, q_trend, D_trend, dq_trend = _build_X(T_opt_opt, h4_opt)
     if weights is not None:
-        beta_ols, residuals, sigma_sq_resid, cov = fit_ols_weighted(y, X_opt, weights)
+        beta, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
     else:
-        beta_ols, residuals, sigma_sq_resid, cov = fit_ols(y, X_opt)
-    h2 = beta_ols[0]
-    h4 = beta_ols[1]
-    h2_se = np.sqrt(max(cov[0, 0], 0))
-    h4_se = np.sqrt(max(cov[1, 1], 0))
+        beta, residuals, _, cov = fit_ols(y, X_opt)
+    h2_G = float(beta[0])
+    h2_D = float(beta[1])
+    h2_L = float(beta[2])
+    h2_G_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h2_D_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_L_se = float(np.sqrt(max(cov[2, 2], 0)))
 
-    T_opt = _derive_T_opt(h2, h4, T_crit_low_opt, T_crit_high_opt)
+    T_opt_se = compute_1d_se_numerical(
+        lambda t_val: compute_sse(t_val, h4_opt),
+        T_opt_opt, T_opt_bounds, n_obs, n_params=5,
+    )
+    h4_se = compute_1d_se_numerical(
+        lambda h: compute_sse(T_opt_opt, h),
+        h4_opt, h4_bounds, n_obs, n_params=5,
+    )
 
-    k = dict(year_means)
-    n_params = 4
+    h1 = -2.0 * T_opt_opt * h2_G
+    h1_se = abs(2.0 * T_opt_opt) * h2_G_se
+
+    k_dict = dict(year_means)
+    n_params = 5
     r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
     total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
 
-    j_trend = np.zeros(data.n_obs)
-    k_values = np.zeros(data.n_obs)
-    for i in range(data.n_obs):
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
         c = data.country_idx[i]
         t = data.time[i]
         yr = data.year[i]
         j_trend[i] = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
         k_values[i] = year_means[yr]
 
-    h_values = h2 * X1 + h4 * X2
-    h_of_T_trend = h2 * f_low_trend + h4 * f_high_trend
-
-    components = {
-        'h_T': h_values,
-        'j': j_trend,
-        'k': k_values,
-    }
+    h_conv = h2_G * X1 + h2_D * X2 + h2_L * X3
+    components = {'h_T': h_conv, 'j': j_trend, 'k': k_values}
     var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+    Delta_u = h_conv
+    h_conv_T_trend = h2_G * q_trend + h2_D * D_trend + h2_L * dq_trend
+    v = h_conv_T_trend
+    j_adj = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_adj + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_adj, k_values, epsilon, data.growth_pcGDP)
 
-    Delta_u = h_values
-    v = h_of_T_trend
-    j_trend_adjusted = j_trend - v
-    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
-    var_attrib = compute_variance_attribution(Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
-
-    return FitResultApproach8(
-        approach="Approach TP: Three-Interval (Polynomial Detrending)",
-        h2=h2,
-        h2_se=h2_se,
-        h4=h4,
-        h4_se=h4_se,
-        T_opt=T_opt,
-        T_opt_se=np.nan,
-        k=k,
-        r_squared=r_sq,
-        adj_r_squared=adj_r_sq,
-        rmse=rmse,
-        n_obs=data.n_obs,
-        n_params=n_params,
-        residuals=residuals,
-        total_r_squared=total_r_sq,
-        var_decomp=var_decomp,
-        var_attrib=var_attrib,
-        T_crit_low=T_crit_low_opt,
-        T_crit_high=T_crit_high_opt,
+    return FitResultApproach4(
+        approach="Approach TP: Ternary Growth+Decay+Level (Polynomial Detrending)",
+        h1=h1, h2=h2_G, h1_se=h1_se, h2_se=h2_G_se,
+        h4=h4_opt, h4_se=h4_se,
+        k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params,
+        residuals=residuals, T_opt=T_opt_opt, total_r_squared=total_r_sq,
+        var_decomp=var_decomp, var_attrib=var_attrib,
+        h2_D=h2_D, h2_D_se=h2_D_se,
+        h2_L=h2_L, h2_L_se=h2_L_se, T_opt_se=T_opt_se,
     )
 
 
@@ -4166,7 +4084,8 @@ def fit_all_approaches(
     if should_fit('Approach SJ'):
         timed_fit('Approach SJ', fit_ApproachSJ_segmented_conjoined, data, (0.0, 30.0), weights)
     if should_fit('Approach TJ'):
-        timed_fit('Approach TJ', fit_ApproachTJ_three_interval_conjoined, data, (0.0, 30.0), weights)
+        timed_fit('Approach TJ', fit_ApproachTJ_ternary_conjoined,
+                  data, T_OPT_BOUNDS_T, H4_BOUNDS_T, weights)
     if should_fit('Approach DJ'):
         timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
     if should_fit('Approach LJ'):
@@ -4198,8 +4117,8 @@ def fit_all_approaches(
             timed_fit('Approach SL', fit_ApproachSL_segmented,
                       data, trends_loess, year_means, (0.0, 30.0), weights)
         if should_fit('Approach TL'):
-            timed_fit('Approach TL', fit_ApproachTL_three_interval,
-                      data, trends_loess, year_means, (0.0, 30.0), weights)
+            timed_fit('Approach TL', fit_ApproachTL_ternary_loess,
+                      data, trends_loess, year_means, T_OPT_BOUNDS_T, H4_BOUNDS_T, weights)
         if should_fit('Approach DL'):
             timed_fit('Approach DL', fit_ApproachDL_persistence_decay,
                       data, trends_loess, year_means, (0.0, 1.0), weights)
@@ -4217,8 +4136,8 @@ def fit_all_approaches(
             timed_fit('Approach SP', fit_ApproachSP_segmented_linear_detrend,
                       data, trends_with_k, year_means, (0.0, 30.0), weights)
         if should_fit('Approach TP'):
-            timed_fit('Approach TP', fit_ApproachTP_three_interval_linear_detrend,
-                      data, trends_with_k, year_means, (0.0, 30.0), weights)
+            timed_fit('Approach TP', fit_ApproachTP_ternary_linear_detrend,
+                      data, trends_with_k, year_means, T_OPT_BOUNDS_T, H4_BOUNDS_T, weights)
         if should_fit('Approach DP'):
             timed_fit('Approach DP', fit_ApproachDP_persistence_linear_detrend,
                       data, trends_with_k, year_means, (0.0, 1.0), weights)

@@ -185,6 +185,79 @@ def compute_pre_first_year_correction(
     return correction_T, correction_T2
 
 
+def compute_x_persistence_accumulator(
+    data: AnalysisData, h4: float, x: np.ndarray
+) -> np.ndarray:
+    """Lagged persistence accumulator for a generic per-observation series.
+
+    Generic version of `compute_persistence_accumulators` that operates on a
+    single arbitrary series (e.g. q = (T - T_opt)²) instead of T and T²
+    separately. Used by the T-family (ternary G+D+L) where the D-block
+    accumulates q under a shared T_opt.
+
+        A_x(t) = x(t) + (1 - h4) * A_x(t-1), with A_x(first_year) = x(first_year)
+
+    Returns the LAGGED value A_x(t-1). For the first observation per country,
+    returns 0 (no lagged value available).
+    """
+    decay = 1.0 - h4
+    A_x_lag = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        country_indices = np.where(data.country_idx == c)[0]
+        if country_indices.size == 0:
+            continue
+        order = np.argsort(data.year[country_indices])
+        sorted_idx = country_indices[order]
+
+        A_x = 0.0
+        for i, idx in enumerate(sorted_idx):
+            x_val = x[idx]
+            if i == 0:
+                A_x_lag[idx] = 0.0
+                A_x = x_val
+            else:
+                A_x_lag[idx] = A_x
+                A_x = x_val + decay * A_x
+
+    return A_x_lag
+
+
+def compute_x_pre_first_year_correction(
+    data: AnalysisData, h4: float, x_first_per_obs: np.ndarray
+) -> np.ndarray:
+    """Pre-first-year correction for a generic series.
+
+    Mirrors `compute_pre_first_year_correction` but for an arbitrary series
+    (e.g. q = (T - T_opt)²). `x_first_per_obs` is a per-observation array
+    broadcast within each country to the country's pre-history value of x
+    (typically x evaluated at a smoothed first-year baseline).
+
+        correction(t) = (1 - h4)^(t - first_year) * x_first
+    """
+    decay = 1.0 - h4
+    correction = np.zeros(data.n_obs)
+
+    for c in range(data.n_countries):
+        country_indices = np.where(data.country_idx == c)[0]
+        if country_indices.size == 0:
+            continue
+        years_for_country = data.year[country_indices]
+        order = np.argsort(years_for_country)
+        sorted_idx = country_indices[order]
+        sorted_years = years_for_country[order]
+
+        first_year = sorted_years[0]
+        x_first = x_first_per_obs[sorted_idx[0]]
+
+        for i, idx in enumerate(sorted_idx):
+            years_since_first = sorted_years[i] - first_year
+            decay_factor = decay ** years_since_first
+            correction[idx] = decay_factor * x_first
+
+    return correction
+
+
 def compute_T_linear_at_first_year(data: AnalysisData, weights: np.ndarray = None) -> np.ndarray:
     """Compute linear temperature trend evaluated at each country's first year.
 
