@@ -148,6 +148,7 @@ The “climate response” is specified in several ways:
 - **Ternary (T\*):** sum of three quadratic blocks centered on a shared `T_opt`: a growth block (`h₂_G·q`), a decay block (`h₂_D·(q − h₄·A_q,lag − corr_q)`) with persistence parameter `h₄`, and a level block (`h₂_L·(q − q_{t-1})`), where `q = (T − T_opt)²`
 - **Persistence/decay (D\*):** a distributed‑lag “converging” response with decay parameter `h₄`
 - **Level effect (L\*):** first‑difference of the climate response (`h₄ = 1`), testing whether temperature affects GDP *levels* rather than *growth*
+- **GDP‑scaled quadratic (G\* / C\*):** the climate response is multiplied by a per‑capita‑GDP scaling factor `g = (pcGDP / Y_ref)^(−β)`, where `Y_ref = median(pcGDP)` and the exponent `β` is freely estimated. Two forms: **G** = free quadratic `g·(β₀ + β₁·T + β₂·T²)`; **C** = centered quadratic `g·β₂·(T − T_opt)²`. Larger `β` means poorer countries (lower `pcGDP`) are more temperature‑sensitive.
 
 ### Approaches implemented
 
@@ -161,6 +162,8 @@ The code reports results under short labels:
 - **TJ / TP / TL**: Three‑interval variants (joint / polynomial / LOESS detrending)
 - **DJ / DP / DL**: Persistence/decay variants (joint / polynomial / LOESS detrending)
 - **LJ / LL**: Level effect variants (joint / LOESS detrending)
+- **GJ**: GDP‑scaled *free* quadratic response `g·(β₀+β₁T+β₂T²)`, *joint* OLS (β and the quadratic coefficients estimated together)
+- **CJ**: GDP‑scaled *centered* quadratic response `g·β₂·(T−T_opt)²`, *joint* OLS (β and `T_opt` profiled jointly)
 - **NJ / NP / NL**: “null” variants with **no climate response** (only `jᵢ(t)` and `k(t)`)
 
 All approaches are defined precisely in **`METHODS_DETAIL.md`**.

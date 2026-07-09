@@ -310,6 +310,43 @@ class FitResult:
 
 
 @dataclass
+class FitResultGDP:
+    """Container for GDP-dependent climate-response results (Approaches GJ, CJ).
+
+    The response is scaled by g = (pcGDP / Y_ref)^(-beta):
+        GJ (free quadratic):  h(T, Y) = g * (h0 + h1*T + h2*T²)
+        CJ (centered):        h(T, Y) = g * h2 * (T - T_opt)²   (h0 = h1 = 0-form; h1 mapped)
+
+    For plotting/downstream compatibility, h1/h2/T_opt describe the temperature
+    shape at the reference GDP (g = 1): the standard quadratic branch of
+    compute_h_response renders h(T) - h(T_opt) correctly since the h0 constant and
+    the g factor drop out under centering at Y_ref.
+    """
+    approach: str
+    h0: float              # Constant term β0 (0 for CJ)
+    h0_se: float
+    h1: float              # Linear temperature coefficient β1 (CJ: -2*T_opt*β2)
+    h2: float              # Quadratic temperature coefficient β2
+    h1_se: float
+    h2_se: float
+    beta: float            # GDP scaling exponent
+    beta_se: float
+    Y_ref: float           # Reference per-capita GDP (median), fixed across bootstrap
+    T_opt: float           # Optimal temperature
+    T_opt_se: float        # SE of T_opt (NaN for GJ where T_opt is derived)
+    k: Dict[int, float]    # Year fixed effects
+    r_squared: float
+    adj_r_squared: float
+    rmse: float
+    n_obs: int
+    n_params: int
+    residuals: np.ndarray
+    total_r_squared: float
+    var_decomp: dict = None
+    var_attrib: dict = None
+
+
+@dataclass
 class FitResultApproach8:
     """Container for piecewise quadratic temperature response results.
 
@@ -4025,17 +4062,287 @@ def fit_ApproachTP_ternary_linear_detrend(
     )
 
 
+# ==============================================================================
+# GDP-dependent response family (Approaches GJ, CJ)
+#
+# The climate response is scaled by g = (pcGDP / Y_ref)^(-beta), with
+# Y_ref = median(pcGDP) fixed across the sample (and across bootstrap resamples):
+#   GJ (free quadratic):  Δy_i(t) = g*(β0 + β1*T + β2*T²) + j_i(t) + k_t
+#   CJ (centered):        Δy_i(t) = g*β2*(T - T_opt)²    + j_i(t) + k_t
+# β (and T_opt for CJ) are profiled with bounded Brent; an inner OLS solves the
+# climate columns plus country quadratic trends and active-year fixed effects.
+# The g factor multiplies ONLY the climate columns; the j and k columns are
+# un-scaled, exactly as in the quadratic joint fit (Approach QJ).
+# ==============================================================================
+
+BETA_BOUNDS_GDP = (0.001, 10.0)
+BETA_INIT_GDP = 1.0
+# Wide search window for the CJ vertex so the optimum can fall outside the
+# plotted 0–30 °C range rather than pinning at a boundary.
+T_OPT_BOUNDS_GDP = (-30.0, 60.0)
+T_OPT_INIT_GDP = 15.0
+ALT_BRENT_MAX_ITERS_GDP = 10
+ALT_BRENT_TOL_GDP = 1e-4
+
+
+def _gdp_joint_base(data: AnalysisData, weights: np.ndarray, n_climate_cols: int) -> tuple:
+    """Build the (β/T_opt-independent) country-trend + year-FE design block.
+
+    Climate columns occupy the first n_climate_cols columns (left as zeros here;
+    the caller fills them per candidate β/T_opt). Country quadratic trends skip
+    country 0 (reference); year fixed effects cover only active (non-zero-weight)
+    years.
+
+    Returns (X_base, active_year_to_idx, unique_years, k_col_start, n_total_params).
+    """
+    n_obs = data.n_obs
+    n_countries = data.n_countries
+    unique_years = sorted(set(data.year))
+    if weights is not None:
+        year_weights = {}
+        for i in range(n_obs):
+            yr = data.year[i]
+            year_weights[yr] = year_weights.get(yr, 0) + weights[i]
+        active_years = [yr for yr in unique_years if year_weights.get(yr, 0) > 0]
+    else:
+        active_years = unique_years
+    active_year_to_idx = {y: i for i, y in enumerate(active_years)}
+    n_active_years = len(active_years)
+    n_j_params = 3 * (n_countries - 1)
+    n_total_params = n_climate_cols + n_j_params + n_active_years
+    k_col_start = n_climate_cols + n_j_params
+
+    X_base = np.zeros((n_obs, n_total_params))
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        if c > 0:
+            t = data.time[i]
+            col_base = n_climate_cols + 3 * (c - 1)
+            X_base[i, col_base] = 1.0
+            X_base[i, col_base + 1] = t
+            X_base[i, col_base + 2] = t * t
+    for i in range(n_obs):
+        yr = data.year[i]
+        if yr in active_year_to_idx:
+            X_base[i, k_col_start + active_year_to_idx[yr]] = 1.0
+    return X_base, active_year_to_idx, unique_years, k_col_start, n_total_params
+
+
+def _gdp_sse(X: np.ndarray, y: np.ndarray, weights: np.ndarray) -> float:
+    """Inner OLS SSE for a filled GDP design matrix (weighted if weights given)."""
+    if weights is not None:
+        sqrt_W = np.sqrt(weights)
+        X_w = X * sqrt_W[:, np.newaxis]
+        y_w = y * sqrt_W
+        beta_ols, _, _, _ = np.linalg.lstsq(X_w.T @ X_w, X_w.T @ y_w, rcond=None)
+        y_pred = X @ beta_ols
+        return float(np.sum(weights * (y - y_pred) ** 2))
+    beta_ols, _, _, _ = np.linalg.lstsq(X.T @ X, X.T @ y, rcond=None)
+    y_pred = X @ beta_ols
+    return float(np.sum((y - y_pred) ** 2))
+
+
+def _gdp_j_and_k(data: AnalysisData, coef: np.ndarray, k_col_start: int,
+                 active_year_to_idx: dict, unique_years: list,
+                 n_climate_cols: int) -> tuple:
+    """Reconstruct per-obs country trend j_i(t), year effects k, and k_dict."""
+    n_obs = data.n_obs
+    k_dict = {yr: (coef[k_col_start + active_year_to_idx[yr]]
+                   if yr in active_year_to_idx else np.nan)
+              for yr in unique_years}
+    j_trend = np.zeros(n_obs)
+    k_values = np.zeros(n_obs)
+    for i in range(n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        if c > 0:
+            col_base = n_climate_cols + 3 * (c - 1)
+            j_trend[i] = coef[col_base] + coef[col_base + 1] * t + coef[col_base + 2] * t * t
+        kv = k_dict[yr]
+        k_values[i] = kv if not np.isnan(kv) else 0.0
+    return j_trend, k_values, k_dict
+
+
+def fit_ApproachGJ_gdp_quadratic_conjoined(
+    data: AnalysisData, gdp_ref: float,
+    beta_bounds: tuple = BETA_BOUNDS_GDP, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach GJ: GDP-scaled free quadratic response, joint OLS.
+
+    Δy_i(t) = g_it·(β0 + β1·T + β2·T²) + j_i(t) + k_t,  g = (pcGDP/Y_ref)^(-β).
+
+    Profiles β with a bounded 1-D Brent search; inner OLS solves (β0, β1, β2)
+    plus country quadratic trends and active-year fixed effects at each β.
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    ratio = data.pcGDP / gdp_ref
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 3)
+
+    def _build_X(beta):
+        g = ratio ** (-beta)
+        X = X_base.copy()
+        X[:, 0] = g
+        X[:, 1] = g * T
+        X[:, 2] = g * T * T
+        return X, g
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, g_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h0 = float(coef[0])
+    h1 = float(coef[1])
+    h2 = float(coef[2])
+    h0_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h1_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_se = float(np.sqrt(max(cov[2, 2], 0)))
+
+    n_params = n_total_params + 1  # + β
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    j_trend, k_values, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 3)
+
+    h_T = g_opt * (h0 + h1 * T + h2 * T * T)
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach GJ: GDP-Scaled Quadratic (Joint OLS)",
+        h0=h0, h0_se=h0_se, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+    )
+
+
+def fit_ApproachCJ_gdp_centered_conjoined(
+    data: AnalysisData, gdp_ref: float,
+    T_opt_bounds: tuple = T_OPT_BOUNDS_GDP,
+    beta_bounds: tuple = BETA_BOUNDS_GDP, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach CJ: GDP-scaled centered quadratic response, joint OLS.
+
+    Δy_i(t) = g_it·β2·(T - T_opt)² + j_i(t) + k_t,  g = (pcGDP/Y_ref)^(-β).
+
+    Profiles (β, T_opt) with alternating bounded 1-D Brent searches; inner OLS
+    solves the single climate coefficient β2 plus country trends and year FEs.
+    The curve passes through zero at T_opt by construction.
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    ratio = data.pcGDP / gdp_ref
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 1)
+
+    def _build_X(beta, T_opt):
+        g = ratio ** (-beta)
+        X = X_base.copy()
+        X[:, 0] = g * (T - T_opt) ** 2
+        return X, g
+
+    def compute_sse(beta, T_opt):
+        X, _ = _build_X(beta, T_opt)
+        return _gdp_sse(X, y, weights)
+
+    beta_cur = BETA_INIT_GDP
+    T_opt_cur = T_OPT_INIT_GDP
+    for _alt_iter in range(ALT_BRENT_MAX_ITERS_GDP):
+        res_b = minimize_scalar(lambda b: compute_sse(b, T_opt_cur),
+                                bounds=beta_bounds, method='bounded',
+                                options={'xatol': 1e-4})
+        beta_new = float(res_b.x)
+        res_T = minimize_scalar(lambda t_val: compute_sse(beta_new, t_val),
+                                bounds=T_opt_bounds, method='bounded',
+                                options={'xatol': 1e-3})
+        T_opt_new = float(res_T.x)
+        if abs(beta_new - beta_cur) + abs(T_opt_new - T_opt_cur) < ALT_BRENT_TOL_GDP:
+            beta_cur, T_opt_cur = beta_new, T_opt_new
+            break
+        beta_cur, T_opt_cur = beta_new, T_opt_new
+    beta_opt, T_opt_opt = beta_cur, T_opt_cur
+
+    X_opt, g_opt = _build_X(beta_opt, T_opt_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h2 = float(coef[0])
+    h2_se = float(np.sqrt(max(cov[0, 0], 0)))
+
+    n_params = n_total_params + 2  # + β, T_opt
+    beta_se = compute_1d_se_numerical(lambda b: compute_sse(b, T_opt_opt),
+                                      beta_opt, beta_bounds, n_obs, n_params=n_params)
+    T_opt_se = compute_1d_se_numerical(lambda t_val: compute_sse(beta_opt, t_val),
+                                       T_opt_opt, T_opt_bounds, n_obs, n_params=n_params)
+
+    # Map centered form to (h1, h2) at reference GDP so the standard quadratic
+    # plotting branch renders correctly: β2(T-T_opt)² = β2·T² - 2·β2·T_opt·T + const.
+    h1 = -2.0 * T_opt_opt * h2
+    h1_se = abs(2.0 * T_opt_opt) * h2_se
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    j_trend, k_values, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 1)
+
+    h_T = g_opt * h2 * (T - T_opt_opt) ** 2
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach CJ: GDP-Scaled Centered Quadratic (Joint OLS)",
+        h0=0.0, h0_se=0.0, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt_opt, T_opt_se=T_opt_se, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
     trends_loess: CountryTrendsLoess = None,
     weights: np.ndarray = None,
     approaches: list = None,
+    gdp_ref: float = None,
 ) -> dict:
     """Fit all approaches and return results.
 
     Returns dict with keys:
         Publication-ready approaches:
+        'Approach GJ': GDP-scaled free quadratic response, joint OLS
+        'Approach CJ': GDP-scaled centered quadratic response, joint OLS
         'Approach QJ': Conjoined OLS fit, with j terms and year fixed effects
         'Approach QP': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
@@ -4057,10 +4364,14 @@ def fit_all_approaches(
         trends_loess: CountryTrendsLoess for approaches 2-4 (LOESS detrending)
         weights: Optional observation weights for weighted least squares (bootstrap)
         approaches: Optional list of approach names to fit (default: None = fit all)
+        gdp_ref: Reference per-capita GDP for GDP-scaled approaches (GJ, CJ);
+            computed once as median(pcGDP) on the full dataset if None.
     """
     results = {}
     timings = {}
     wanted = set(approaches) if approaches else None
+    if gdp_ref is None:
+        gdp_ref = float(np.median(data.pcGDP))
 
     def should_fit(name):
         return wanted is None or name in wanted
@@ -4090,6 +4401,12 @@ def fit_all_approaches(
         timed_fit('Approach DJ', fit_ApproachDJ_persistence_conjoined, data, (0.0, 1.0), weights)
     if should_fit('Approach LJ'):
         timed_fit('Approach LJ', fit_ApproachLJ_level_effect_conjoined, data, weights)
+    if should_fit('Approach GJ'):
+        timed_fit('Approach GJ', fit_ApproachGJ_gdp_quadratic_conjoined,
+                  data, gdp_ref, BETA_BOUNDS_GDP, weights)
+    if should_fit('Approach CJ'):
+        timed_fit('Approach CJ', fit_ApproachCJ_gdp_centered_conjoined,
+                  data, gdp_ref, T_OPT_BOUNDS_GDP, BETA_BOUNDS_GDP, weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:

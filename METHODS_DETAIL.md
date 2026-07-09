@@ -113,6 +113,25 @@ where `h₄ ∈ [0,1]` controls the decay rate:
 
 The code implements (M4) efficiently via recursive accumulators (Section 5.5).
 
+### 3.4 GDP‑dependent scaling of the response
+
+The GDP‑scaled specifications allow the *magnitude* of the temperature response to depend on a country's per‑capita GDP **level** `pcGDPᵢ,t` (not its growth). The quadratic response is multiplied by a scaling factor:
+
+```
+g(pcGDPᵢ,t) = (pcGDPᵢ,t / Y_ref)^(−β),      Y_ref = median(pcGDP).      (M4b)
+```
+
+The exponent `β` is a freely estimated parameter (bounds `[0.001, 10]`); `Y_ref` is a fixed normalizer (the sample median of per‑capita GDP), computed once on the full dataset and held fixed across bootstrap resamples. Because `Y_ref` only rescales the multiplicative coefficients, its choice does not affect `β` or the fitted response; it keeps the coefficients well‑conditioned and interpretable. For `β > 0`, poorer countries (lower `pcGDP`) receive a larger response.
+
+Two response shapes are used:
+
+```
+Free quadratic (G):     h(T, pcGDP) = g · (β₀ + β₁·T + β₂·T²),          (M4c)
+Centered quadratic (C): h(T, pcGDP) = g · β₂ · (T − T_opt)².            (M4d)
+```
+
+In (M4c) the vertex is `T_opt = −β₁ / (2 β₂)`, independent of `β₀` and of `g`. In (M4d) the response is zero at `T_opt` by construction, and `T_opt` is estimated directly (Section 5.7). At the reference GDP (`g = 1`) both reduce to a quadratic in `T`, so the plotted response curve — drawn at `Y_ref` — coincides with a standard quadratic shape; the GDP dependence is displayed separately as the scaling factor `g` versus `pcGDP`.
+
 ---
 
 ## 4. Detrending components
@@ -200,6 +219,8 @@ The code reports results using short approach names. For each, we describe the e
 | Quadratic `h(T)=h₁T+h₂T²` | QJ | QP | QL |
 | Piecewise quadratic | PJ | PP | PL |
 | Persistence / decay | DJ | DP | DL |
+| GDP‑scaled free quadratic `g·(β₀+β₁T+β₂T²)` | GJ | — | — |
+| GDP‑scaled centered quadratic `g·β₂(T−T_opt)²` | CJ | — | — |
 | Null (no climate response) | NJ | NP | NL |
 
 ### 5.1 Quadratic, joint OLS: **Approach QJ**
@@ -403,6 +424,35 @@ Null approaches fit the same detrending structure but impose **no climate respon
 - **NL:** LOESS detrending of growth, no temperature regression.
 
 These provide baseline fit diagnostics and help assess how much explanatory power is coming from non‑climate components.
+
+### 5.7 GDP‑scaled responses: **Approaches GJ / CJ**
+
+These are joint fixed‑effects models (same country‑trend and year‑effect structure as QJ, M6) in which the climate response is multiplied by the per‑capita‑GDP scaling factor `g = (pcGDPᵢ,t / Y_ref)^(−β)` of Section 3.4. Only the climate columns are scaled by `g`; the country trends `jᵢ(t)` and year effects `k(t)` are unscaled.
+
+**Approach GJ (free quadratic, M4c):**
+
+```
+Δyᵢ,t = gᵢ,t · (β₀ + β₁ Tᵢ,t + β₂ Tᵢ,t²)
+        + (j₀,ᵢ + j₁,ᵢ τ + j₂,ᵢ τ²) + k(t) + εᵢ,t.        (M10)
+```
+
+**Approach CJ (centered quadratic, M4d):**
+
+```
+Δyᵢ,t = gᵢ,t · β₂ · (Tᵢ,t − T_opt)²
+        + (j₀,ᵢ + j₁,ᵢ τ + j₂,ᵢ τ²) + k(t) + εᵢ,t.        (M11)
+```
+
+**Estimation.** The models are linear in the climate coefficients (`β₀,β₁,β₂` for GJ; `β₂` for CJ) and the trend/year parameters given the *nonlinear* parameters, so estimation profiles the nonlinear parameters with an inner OLS:
+
+- **GJ:** a bounded 1‑D search (Brent) over `β`; for each candidate `β`, an inner OLS solves `(β₀,β₁,β₂)` together with the country trends and year effects. `T_opt = −β₁/(2β₂)` is derived analytically.
+- **CJ:** an alternating bounded 1‑D search over `β` and `T_opt` (as in the ternary/piecewise optimizers); for each candidate `(β, T_opt)`, an inner OLS solves the single climate coefficient `β₂` plus trends and year effects. The `T_opt` search window is wide (`[−30, +60] °C`) so the vertex is not forced into the `0–30 °C` display range.
+
+**Standard errors.** Climate‑coefficient SEs come from the inner OLS covariance at the optimum; SEs for the profiled parameters (`β`, and `T_opt` for CJ) are obtained from the numerical curvature of the SSE profile.
+
+**Identification note.** In GJ the constant term is entered as the column `g` (i.e. `g·β₀`), which is a smooth function of country and year and can be weakly identified against the country trends `jᵢ(t)`; the response‑shape parameters (`β`, `β₁`, `β₂`, `T_opt`) are well identified, but `β₀` may carry a wide standard error.
+
+**Reference GDP in the bootstrap.** `Y_ref = median(pcGDP)` is computed once on the full sample and reused for every resample, so bootstrap variation in `β` reflects sampling of countries/years, not a moving normalizer.
 
 ---
 

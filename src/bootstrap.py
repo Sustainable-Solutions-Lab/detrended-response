@@ -142,6 +142,12 @@ class BootstrapResult:
     f1_point: float = None         # GDP scaling exponent (formerly beta_point)
     f1_samples: np.ndarray = None  # Bootstrap samples for f1 (formerly beta_samples)
 
+    # GDP-scaled response approaches (GJ, CJ) specific (optional).
+    # beta = GDP scaling exponent in g = (pcGDP/Y_ref)^(-beta); Y_ref = median(pcGDP).
+    beta_point: float = None
+    beta_samples: np.ndarray = None  # Bootstrap samples for beta
+    Y_ref_point: float = None        # Reference per-capita GDP (fixed across resamples)
+
     # Approach 8 (piecewise quadratic) specific (optional)
     # Note: h2 for approach 8 is stored in h2_point; h4 is the curvature above T_opt
     h4_point: float = None         # Curvature for T > T_opt (formerly h2_high_point)
@@ -360,6 +366,10 @@ def run_bootstrap(
     # Get approach names from original results
     approach_names = list(original_results.keys())
 
+    # Reference per-capita GDP for GDP-scaled approaches (GJ, CJ), computed once
+    # on the full original data so the normalizer is fixed across all resamples.
+    gdp_ref = float(np.median(data.pcGDP))
+
     # Initialize storage for bootstrap samples
     # Store which countries were selected in each bootstrap iteration
     country_samples = np.zeros((n_bootstrap, n_countries), dtype=np.int32)
@@ -381,6 +391,7 @@ def run_bootstrap(
     h4_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 8: h4; 6b/6c/6e/8a: h4 (departure/trend quadratic)
     f2_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6c: T_opt_trend; 8b: quadratic modulation
     T_dep_opt_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # 6b/6c/6e: optimal departure
+    beta_samples = {name: np.full(n_bootstrap, np.nan) for name in approach_names}  # GJ/CJ: GDP scaling exponent
 
     # Variance decomposition samples - initialized from original results' var_decomp keys
     var_decomp_samples = {}
@@ -471,6 +482,7 @@ def run_bootstrap(
                     trends_loess=boot_trends_loess,
                     weights=weights,
                     approaches=approaches,
+                    gdp_ref=gdp_ref,
                 )
             else:
                 # Original country-only bootstrap (observation duplication)
@@ -493,6 +505,7 @@ def run_bootstrap(
                     year_means=boot_year_means,
                     trends_loess=boot_trends_loess,
                     approaches=approaches,
+                    gdp_ref=gdp_ref,
                 )
 
             # Store results
@@ -524,6 +537,9 @@ def run_bootstrap(
                     h2_D_samples[name][b] = r.h2_D
                 if hasattr(r, 'h2_L') and r.h2_L is not None:
                     h2_L_samples[name][b] = r.h2_L
+                # GDP-scaled approaches (GJ, CJ): GDP scaling exponent beta
+                if hasattr(r, 'beta') and r.beta is not None:
+                    beta_samples[name][b] = r.beta
 
                 # Store variance decomposition samples
                 if r.var_decomp is not None and name in var_decomp_samples:
@@ -550,8 +566,10 @@ def run_bootstrap(
                     continue
                 r = boot_results[name]
 
-                if name in ['Approach QJ', 'Approach QP', 'Approach QL']:
-                    # Standard quadratic: h(T) = h1*T + h2*T²
+                if name in ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach GJ', 'Approach CJ']:
+                    # Standard quadratic shape at reference GDP: h(T) = h1*T + h2*T²
+                    # (for GJ/CJ, h1/h2 are the temperature-shape coefficients at Y_ref;
+                    # any constant offset drops out under centering).
                     h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
 
                 elif name == 'Approach PL':
@@ -734,6 +752,8 @@ def run_bootstrap(
         h4_point = getattr(orig, 'h4', None)
         f2_point = getattr(orig, 'f2', None)
         T_dep_opt_point = getattr(orig, 'T_dep_opt', None)
+        beta_point = getattr(orig, 'beta', None)
+        Y_ref_point = getattr(orig, 'Y_ref', None)
 
         # Use detrended k_point for Approach QJ and Approach NJ
         if name in k_point_detrended:
@@ -776,6 +796,9 @@ def run_bootstrap(
             h2_D_samples=h2_D_samples[name],
             h2_L_point=h2_L_point,
             h2_L_samples=h2_L_samples[name],
+            beta_point=beta_point,
+            beta_samples=beta_samples[name],
+            Y_ref_point=Y_ref_point,
             var_decomp_point=getattr(orig, 'var_decomp', None),
             var_decomp_samples=var_decomp_samples.get(name, None),
             var_attrib_point=getattr(orig, 'var_attrib', None),
@@ -842,6 +865,9 @@ def compute_bootstrap_statistics(
         stats['f2'] = get_percentile_stats(result.f2_samples, result.f2_point)
     if result.T_dep_opt_point is not None and result.T_dep_opt_samples is not None:
         stats['T_dep_opt'] = get_percentile_stats(result.T_dep_opt_samples, result.T_dep_opt_point)
+    # GDP-scaled approaches (GJ, CJ): GDP scaling exponent beta
+    if result.beta_point is not None and result.beta_samples is not None:
+        stats['beta'] = get_percentile_stats(result.beta_samples, result.beta_point)
 
     # Variance decomposition statistics
     if result.var_decomp_point is not None and result.var_decomp_samples is not None:

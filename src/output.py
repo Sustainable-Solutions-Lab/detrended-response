@@ -55,6 +55,8 @@ APPROACH_COLORS = {
     'Approach DP': 'teal',
     'Approach LL': 'blue',
     'Approach LJ': 'purple',
+    'Approach GJ': 'navy',
+    'Approach CJ': 'maroon',
     'Approach SL': 'gold',
     'Approach SJ': 'darkkhaki',
     'Approach SP': 'goldenrod',
@@ -87,6 +89,8 @@ APPROACH_LINESTYLES = {
     'Approach TL': (0, (5, 1)),   # densely dashed
     'Approach TJ': '-',           # solid (conjoined)
     'Approach TP': '-.',          # dash-dot
+    'Approach GJ': '-',           # solid (conjoined)
+    'Approach CJ': '-',           # solid (conjoined)
     'Approach NJ': '--',
     'Approach NP': ':',
     'Approach NL': ':',
@@ -178,6 +182,20 @@ def is_segmented_result(result) -> bool:
     """
     approach = getattr(result, 'approach', '')
     return 'segmented' in approach.lower() or approach.startswith(('Approach SL', 'Approach SJ', 'Approach SP'))
+
+
+def is_gdp_result(result) -> bool:
+    """Check if result is from a GDP-scaled response model (Approach GJ/Approach CJ).
+
+    GDP results carry a freely-estimated GDP scaling exponent `beta` and a
+    reference per-capita GDP `Y_ref`. The plotted temperature shape (h1, h2,
+    T_opt) is evaluated at Y_ref (g = 1), so the standard quadratic branch of
+    compute_h_response renders the curve without special handling.
+    """
+    approach = getattr(result, 'approach', '')
+    if approach.startswith(('Approach GJ', 'Approach CJ')):
+        return True
+    return hasattr(result, 'beta') and hasattr(result, 'Y_ref')
 
 
 def piecewise_quad_shape(T: np.ndarray, T_opt: float) -> tuple:
@@ -519,6 +537,19 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if result.T_opt_se is not None and not np.isnan(result.T_opt_se) else 0.0
                 T_opt_str = f"{result.T_opt:.4f}" if not np.isnan(result.T_opt) else "N/A"
                 f.write(f"  T_opt = {T_opt_str}  (SE: {T_opt_se:.4f})\n")
+            # Special handling for GDP-scaled response (Approach GJ / Approach CJ)
+            # Response scaled by g = (pcGDP/Y_ref)^(-beta); h0/h1/h2 are the
+            # temperature-shape coefficients at Y_ref (g = 1).
+            elif is_gdp_result(result):
+                f.write(f"  beta = {result.beta:12.6f}  (SE: {result.beta_se:.6f})  [GDP scaling exponent]\n")
+                if result.h0 != 0.0:
+                    f.write(f"  h0 = {result.h0:12.6f}  (SE: {result.h0_se:.6f})  [constant, at Y_ref]\n")
+                f.write(f"  h1 = {result.h1:12.6f}  (SE: {result.h1_se:.6f})  [linear, at Y_ref]\n")
+                f.write(f"  h2 = {result.h2:12.6f}  (SE: {result.h2_se:.6f})  [quadratic, at Y_ref]\n")
+                T_opt_se = result.T_opt_se if result.T_opt_se is not None and not np.isnan(result.T_opt_se) else 0.0
+                T_opt_str = f"{result.T_opt:.4f}" if not np.isnan(result.T_opt) else "N/A"
+                f.write(f"  T_opt = {T_opt_str}  (SE: {T_opt_se:.4f})\n")
+                f.write(f"  Y_ref = {result.Y_ref:.2f}  [median pcGDP]\n")
             # Special handling for segmented linear
             # h2 = slope below T_opt; h4 = slope above T_opt
             elif is_segmented_result(result):
@@ -1111,7 +1142,6 @@ def plot_gdp_scaling_factor(
 
     This shows how the temperature response is scaled by per capita GDP level.
     Countries with lower GDP have larger scaling factors (more affected).
-    Currently disabled (no GDP-dependent approaches in panels list).
 
     Args:
         results: Dictionary of FitResult objects
@@ -1120,21 +1150,22 @@ def plot_gdp_scaling_factor(
         Y_range: GDP range for x-axis (default: from data min to max)
         input_file: Path to input data file (for annotation)
     """
-    # Collect panels to plot (no GDP-dependent approaches currently)
+    # Collect panels to plot: any fitted approach carrying a GDP scaling exponent.
     panels = []
-    for key, title, color in [
-    ]:
-        if key in results:
-            r = results[key]
-            if hasattr(r, 'beta') and hasattr(r, 'Y_ref'):
-                panels.append((r, title, color))
+    for key, r in results.items():
+        if hasattr(r, 'beta') and hasattr(r, 'Y_ref'):
+            panels.append((r, key, get_color(key)))
 
     if not panels:
         return
 
-    # Default Y range
+    # Default Y range: span the observed per-capita GDP (works for non-dollar
+    # inputs such as ESM/GPP data); fall back to a dollar-scale default.
     if Y_range is None:
-        Y_range = (500, 100000)
+        if data is not None:
+            Y_range = (float(np.min(data.pcGDP)), float(np.max(data.pcGDP)))
+        else:
+            Y_range = (500, 100000)
 
     # Create GDP array (log-spaced for better visualization)
     Y = np.logspace(np.log10(Y_range[0]), np.log10(Y_range[1]), 200)
@@ -1227,6 +1258,7 @@ def save_all_outputs(
     plot_optimal_temperature_comparison(results, output_dir, input_file=input_file)
     plot_year_effects(results, data, output_dir, input_file=input_file)
     plot_residual_diagnostics(results, data, output_dir, input_file=input_file)
+    plot_gdp_scaling_factor(results, output_dir, data=data, input_file=input_file)
 
 
     print("All outputs saved.")
@@ -1278,6 +1310,11 @@ def save_bootstrap_coefficients_csv(
             point_row['h2_D'] = result.h2_D_point
         if getattr(result, 'h2_L_point', None) is not None:
             point_row['h2_L'] = result.h2_L_point
+        # GDP-scaled approaches (GJ, CJ): GDP scaling exponent and reference GDP
+        if getattr(result, 'beta_point', None) is not None:
+            point_row['beta'] = result.beta_point
+        if getattr(result, 'Y_ref_point', None) is not None:
+            point_row['Y_ref'] = result.Y_ref_point
         rows.append(point_row)
 
         # Write bootstrap samples (iteration 0, 1, ..., N-1)
@@ -1311,6 +1348,10 @@ def save_bootstrap_coefficients_csv(
                 row['h2_D'] = h2_D_samp[i]
             if h2_L_samp is not None and not np.isnan(h2_L_samp[i]):
                 row['h2_L'] = h2_L_samp[i]
+            # Add beta for GDP-scaled approaches (GJ, CJ)
+            beta_samp = getattr(result, 'beta_samples', None)
+            if beta_samp is not None and not np.isnan(beta_samp[i]):
+                row['beta'] = beta_samp[i]
             rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1579,6 +1620,24 @@ def save_bootstrap_summary_table(
             row['f1_p75'] = np.nan
             row['f1_p95'] = np.nan
             row['f1_std'] = np.nan
+
+        # Add beta (GDP scaling exponent) statistics for GDP-scaled approaches (GJ, CJ)
+        if getattr(result, 'beta_point', None) is not None and 'beta' in stats:
+            row['beta_point'] = result.beta_point
+            row['beta_median'] = stats['beta']['p50']
+            row['beta_p5'] = stats['beta']['p5']
+            row['beta_p25'] = stats['beta']['p25']
+            row['beta_p75'] = stats['beta']['p75']
+            row['beta_p95'] = stats['beta']['p95']
+            row['beta_std'] = stats['beta']['std']
+        else:
+            row['beta_point'] = np.nan
+            row['beta_median'] = np.nan
+            row['beta_p5'] = np.nan
+            row['beta_p25'] = np.nan
+            row['beta_p75'] = np.nan
+            row['beta_p95'] = np.nan
+            row['beta_std'] = np.nan
 
         # Add T_dep_opt statistics for approaches 6a/6b/6c (optimal departure)
         if result.T_dep_opt_point is not None and 'T_dep_opt' in stats:
