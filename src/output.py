@@ -57,6 +57,7 @@ APPROACH_COLORS = {
     'Approach LJ': 'purple',
     'Approach GJ': 'navy',
     'Approach CJ': 'maroon',
+    'Approach RJ': 'indigo',
     'Approach SL': 'gold',
     'Approach SJ': 'darkkhaki',
     'Approach SP': 'goldenrod',
@@ -91,6 +92,7 @@ APPROACH_LINESTYLES = {
     'Approach TP': '-.',          # dash-dot
     'Approach GJ': '-',           # solid (conjoined)
     'Approach CJ': '-',           # solid (conjoined)
+    'Approach RJ': '-',           # solid (conjoined)
     'Approach NJ': '--',
     'Approach NP': ':',
     'Approach NL': ':',
@@ -549,6 +551,8 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if result.T_opt_se is not None and not np.isnan(result.T_opt_se) else 0.0
                 T_opt_str = f"{result.T_opt:.4f}" if not np.isnan(result.T_opt) else "N/A"
                 f.write(f"  T_opt = {T_opt_str}  (SE: {T_opt_se:.4f})\n")
+                if getattr(result, 'T_ref', None) is not None:
+                    f.write(f"  Tref = {result.T_ref:.4f}  [representative mean T; per-country zero at country mean T]\n")
                 f.write(f"  Y_ref = {result.Y_ref:.2f}  [median pcGDP]\n")
             # Special handling for segmented linear
             # h2 = slope below T_opt; h4 = slope above T_opt

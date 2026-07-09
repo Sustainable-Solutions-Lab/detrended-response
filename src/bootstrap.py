@@ -566,10 +566,11 @@ def run_bootstrap(
                     continue
                 r = boot_results[name]
 
-                if name in ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach GJ', 'Approach CJ']:
+                if name in ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach GJ', 'Approach CJ', 'Approach RJ']:
                     # Standard quadratic shape at reference GDP: h(T) = h1*T + h2*T²
-                    # (for GJ/CJ, h1/h2 are the temperature-shape coefficients at Y_ref;
-                    # any constant offset drops out under centering).
+                    # (for GJ/CJ/RJ, h1/h2 are the temperature-shape coefficients at Y_ref;
+                    # RJ's curve is the representative curve at global mean T; constant offsets
+                    # drop out under centering).
                     h_T_samples[name][b] = r.h1 * data.temp + r.h2 * data.temp**2
 
                 elif name == 'Approach PL':

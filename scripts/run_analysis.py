@@ -105,8 +105,8 @@ def main(argv=None):
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
-             "First letter: N/Q/P/S/T/D/L/G/C (response type; "
-             "G/C = GDP-scaled free/centered quadratic). "
+             "First letter: N/Q/P/S/T/D/L/G/C/R (response type; "
+             "G/C/R = GDP-scaled free/centered/reference quadratic). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )
@@ -230,8 +230,8 @@ def main(argv=None):
             print(f"  h4 (slope above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # GDP-scaled approaches (Approach GJ/Approach CJ): beta, h0/h1/h2 (at Y_ref), T_opt
-        elif name in ['Approach GJ', 'Approach CJ'] and hasattr(r, 'beta'):
+        # GDP-scaled approaches (Approach GJ/Approach CJ/Approach RJ): beta, h0/h1/h2 (at Y_ref), T_opt
+        elif name in ['Approach GJ', 'Approach CJ', 'Approach RJ'] and hasattr(r, 'beta'):
             print(f"  beta (GDP scaling) = {r.beta:.6f}  (SE: {r.beta_se:.6f})")
             if r.h0 != 0.0:
                 print(f"  h0 (constant, at Y_ref) = {r.h0:.6f}  (SE: {r.h0_se:.6f})")
@@ -240,6 +240,8 @@ def main(argv=None):
             T_opt_se_val = r.T_opt_se if r.T_opt_se is not None and not np.isnan(r.T_opt_se) else 0.0
             T_opt_str = f"{r.T_opt:.4f}" if not np.isnan(r.T_opt) else "N/A"
             print(f"  T_opt = {T_opt_str}  (SE: {T_opt_se_val:.4f})")
+            if getattr(r, 'T_ref', None) is not None:
+                print(f"  Tref = {r.T_ref:.4f}  (representative mean T; per-country zero at country mean T)")
             print(f"  Y_ref = {r.Y_ref:.2f}  (median pcGDP)")
 
         # Approach DL/Approach DJ/Approach DP: h1, h2, h4 (persistence decay), T_opt
@@ -283,7 +285,7 @@ def main(argv=None):
         'Approach TJ', 'Approach TP', 'Approach TL',
         'Approach DJ', 'Approach DP', 'Approach DL',
         'Approach LJ', 'Approach LL',
-        'Approach GJ', 'Approach CJ',
+        'Approach GJ', 'Approach CJ', 'Approach RJ',
     ]
     approach_order = [a for a in all_approach_order if a in results]
     save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)
