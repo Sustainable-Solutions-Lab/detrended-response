@@ -344,6 +344,7 @@ class FitResultGDP:
     total_r_squared: float
     var_decomp: dict = None
     var_attrib: dict = None
+    T_ref: float = None    # Representative reference temperature (RJ only; None for GJ/CJ)
 
 
 @dataclass
@@ -4329,6 +4330,105 @@ def fit_ApproachCJ_gdp_centered_conjoined(
     )
 
 
+def fit_ApproachRJ_gdp_reference_conjoined(
+    data: AnalysisData, gdp_ref: float,
+    beta_bounds: tuple = BETA_BOUNDS_GDP, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach RJ: GDP-scaled "reference" quadratic response, joint OLS.
+
+    Δy_i(t) = g_it·β₂·(T − T_opt)·(T − Tref_i) + j_i(t) + k_t,
+        g = (pcGDP/Y_ref)^(-β),  Tref_i = mean temperature of country i.
+
+    The response crosses zero at each country's own mean temperature Tref_i and at
+    the shared root T_opt. Because (T−T_opt)(T−Tref_i) has no T_opt² term, the model
+    is *linear* in T_opt: writing it as β₂·(T−Tref_i)·T − β₂·T_opt·(T−Tref_i), the
+    inner OLS solves two climate columns (a = β₂, b = −β₂·T_opt) and T_opt = −b/a is
+    derived (unbounded). Only β is profiled (bounded Brent).
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    ratio = data.pcGDP / gdp_ref
+
+    # Per-country mean temperature Tref_i (per-obs), and representative T̄ for plotting.
+    country_temp_sum = np.bincount(data.country_idx, weights=T, minlength=data.n_countries)
+    country_count = np.bincount(data.country_idx, minlength=data.n_countries)
+    Tref = country_temp_sum / country_count
+    Tref_obs = Tref[data.country_idx]
+    Tbar = float(np.mean(T))
+
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 2)
+
+    def _build_X(beta):
+        g = ratio ** (-beta)
+        X = X_base.copy()
+        X[:, 0] = g * (T - Tref_obs) * T   # A: coefficient a = β₂
+        X[:, 1] = g * (T - Tref_obs)       # B: coefficient b = −β₂·T_opt
+        return X, g
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, g_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    a = float(coef[0])   # β₂
+    b = float(coef[1])   # −β₂·T_opt
+    h2 = a
+    h2_se = float(np.sqrt(max(cov[0, 0], 0)))
+    T_opt = -b / a if a != 0 else np.nan
+
+    # T_opt = −b/a: delta-method SE from the inner 2×2 covariance.
+    if a != 0 and np.isfinite(T_opt):
+        var_T_opt = ((b ** 2) / (a ** 4)) * cov[0, 0] \
+            + (1.0 / (a ** 2)) * cov[1, 1] \
+            - 2.0 * (b / (a ** 3)) * cov[0, 1]
+        T_opt_se = float(np.sqrt(var_T_opt)) if var_T_opt > 0 else np.nan
+    else:
+        T_opt_se = np.nan
+
+    n_params = n_total_params + 1  # + β (T_opt is derived, not a separate profiled param)
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, n_obs,
+                                      n_params=n_params)
+
+    # Representative (h1, h2) at T̄ so the standard quadratic plot branch renders RJ:
+    # β₂(T−T_opt)(T−T̄) = β₂·T² − β₂(T_opt+T̄)·T + const.
+    h1 = -h2 * (T_opt + Tbar) if np.isfinite(T_opt) else np.nan
+    h1_se = abs(T_opt + Tbar) * h2_se if np.isfinite(T_opt) else np.nan
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    j_trend, k_values, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 2)
+
+    h_T = g_opt * h2 * (T - T_opt) * (T - Tref_obs)
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach RJ: GDP-Scaled Reference Quadratic (Joint OLS)",
+        h0=0.0, h0_se=0.0, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=T_opt_se, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+        T_ref=Tbar,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
@@ -4343,6 +4443,7 @@ def fit_all_approaches(
         Publication-ready approaches:
         'Approach GJ': GDP-scaled free quadratic response, joint OLS
         'Approach CJ': GDP-scaled centered quadratic response, joint OLS
+        'Approach RJ': GDP-scaled reference quadratic response (roots at T_opt and country mean T), joint OLS
         'Approach QJ': Conjoined OLS fit, with j terms and year fixed effects
         'Approach QP': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
@@ -4407,6 +4508,9 @@ def fit_all_approaches(
     if should_fit('Approach CJ'):
         timed_fit('Approach CJ', fit_ApproachCJ_gdp_centered_conjoined,
                   data, gdp_ref, T_OPT_BOUNDS_GDP, BETA_BOUNDS_GDP, weights)
+    if should_fit('Approach RJ'):
+        timed_fit('Approach RJ', fit_ApproachRJ_gdp_reference_conjoined,
+                  data, gdp_ref, BETA_BOUNDS_GDP, weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
