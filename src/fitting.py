@@ -345,6 +345,7 @@ class FitResultGDP:
     var_decomp: dict = None
     var_attrib: dict = None
     T_ref: float = None    # Representative reference temperature (RJ only; None for GJ/CJ)
+    gdp_scaling_kind: str = 'power'  # 'power' = (pcGDP/Y_ref)^(-β); 'loglin' = 1 - log(pcGDP/Y_ref)/β (I-family)
 
 
 @dataclass
@@ -4240,6 +4241,271 @@ def fit_ApproachGJ_gdp_quadratic_conjoined(
     )
 
 
+BETA_BOUNDS_LOGLIN = (0.1, 50.0)
+
+
+def _gdp_loglin_scale(pcGDP: np.ndarray, gdp_ref: float, beta: float) -> np.ndarray:
+    """Log-linear GDP scale factor s̃ = 1 − log(pcGDP/Y_ref)/β.
+
+    Equivalent to (β − log(pcGDP/Y_ref)) up to an inner-OLS rescaling, but normalized so
+    s̃ = 1 at Y_ref — so the fitted coefficients are the response at the reference GDP.
+    Unlike the power-law (pcGDP/Y_ref)^(-β), s̃ is linear in log-GDP and cannot explode.
+    """
+    return 1.0 - np.log(pcGDP / gdp_ref) / beta
+
+
+def _gdp_scaled_precomputed_decomposition(data, scale, h0, h1, h2, T_trend,
+                                          j_trend, k_values, total_r_sq):
+    """Variance decomposition + attribution for GDP-scaled precomputed-detrending
+    approaches (IP/IL): the QP/QL temperature departure/trend (Δu/v) split, multiplied
+    by the GDP scale factor, with the constant h0 folded into the trend/level term v.
+    Returns (var_decomp, var_attrib); the exact-remainder ε keeps the Sum check at 1.0.
+    """
+    T_star_vals = data.temp - T_trend
+    components = {
+        'h_Tstar': scale * (h1 * T_star_vals + h2 * T_star_vals ** 2),
+        'h_Ttrend': scale * (h0 + h1 * T_trend + h2 * T_trend ** 2),
+        'h_cross': scale * (2 * h2 * T_star_vals * T_trend),
+        'j': j_trend, 'k': k_values,
+    }
+    var_decomp = compute_variance_decomposition(components, data.growth_pcGDP, total_r_sq)
+
+    h_T = h0 + h1 * data.temp + h2 * data.temp ** 2
+    h_T_trend = h0 + h1 * T_trend + h2 * T_trend ** 2
+    Delta_u = scale * (h_T - h_T_trend)  # departure response (h0 cancels)
+    v = scale * h_T_trend                # trend + GDP-level term
+    # Adjust j_trend by subtracting the (scaled) response to the temperature trend,
+    # matching the QP/QL convention so j is comparable across approaches.
+    j_trend_adjusted = j_trend - v
+    epsilon = data.growth_pcGDP - (Delta_u + v + j_trend_adjusted + k_values)
+    var_attrib = compute_variance_attribution(
+        Delta_u, v, j_trend_adjusted, k_values, epsilon, data.growth_pcGDP)
+    return var_decomp, var_attrib
+
+
+def fit_ApproachIJ_loglin_conjoined(
+    data: AnalysisData, gdp_ref: float,
+    beta_bounds: tuple = BETA_BOUNDS_LOGLIN, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach IJ: log-linear GDP-dependent quadratic response, joint OLS.
+
+    Δy_i(t) = s̃·(β0 + β1·T + β2·T²) + j_i(t) + k_t,  s̃ = 1 − log(pcGDP/Y_ref)/β.
+
+    Like GJ but with a log-linear GDP scale factor (bounded in log-GDP) instead of the
+    power law. β is profiled with a bounded 1-D Brent search; the inner OLS solves
+    (β0, β1, β2) plus country trends and year effects at each β. Coefficients are the
+    response at Y_ref (s̃ = 1). Larger β ⇒ weaker GDP dependence (β→∞ nests QJ).
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 3)
+
+    def _build_X(beta):
+        s = _gdp_loglin_scale(data.pcGDP, gdp_ref, beta)
+        X = X_base.copy()
+        X[:, 0] = s
+        X[:, 1] = s * T
+        X[:, 2] = s * T * T
+        return X, s
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, s_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h0 = float(coef[0])
+    h1 = float(coef[1])
+    h2 = float(coef[2])
+    h0_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h1_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_se = float(np.sqrt(max(cov[2, 2], 0)))
+
+    n_params = n_total_params + 1  # + β
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    j_trend, k_values, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 3)
+
+    h_T = s_opt * (h0 + h1 * T + h2 * T * T)
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach IJ: Log-linear GDP Quadratic (Joint OLS)",
+        h0=h0, h0_se=h0_se, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+        gdp_scaling_kind='loglin',
+    )
+
+
+def fit_ApproachIP_loglin_precomputed_k(
+    data: AnalysisData, trends: CountryTrends, year_means: dict,
+    gdp_ref: float, beta_bounds: tuple = BETA_BOUNDS_LOGLIN,
+    weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach IP: log-linear GDP-dependent quadratic response, polynomial detrending.
+
+    GDP analog of QP with the log-linear scale s̃ = 1 − log(pcGDP/Y_ref)/β. Precompute
+    k(t) and country trends (fit to Δy − k), detrend temperature linearly (T*), then fit
+    the residual y = Δy − k − jᵢ(t) to s̃·(β0 + β1·T* + β2·T*²). β is profiled; the inner
+    OLS solves (β0, β1, β2) at each β. Coefficients are the response at Y_ref (s̃ = 1);
+    n_params = 4.
+    """
+    T_star = compute_detrended_temperature(data, trends)
+    T2_detrend = compute_detrended_temp_squared(data, trends)
+
+    y = np.zeros(data.n_obs)
+    j_trend = np.zeros(data.n_obs)
+    T_trend = np.zeros(data.n_obs)
+    k_values = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        c = data.country_idx[i]
+        t = data.time[i]
+        yr = data.year[i]
+        j_i_t = trends.y0[c] + trends.y1[c] * t + trends.y2[c] * t * t
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - j_i_t
+        j_trend[i] = j_i_t
+        T_trend[i] = trends.T0[c] + trends.T1[c] * t
+        k_values[i] = year_means[yr]
+
+    def _build_X(beta):
+        s = _gdp_loglin_scale(data.pcGDP, gdp_ref, beta)
+        return np.column_stack([s, s * T_star, s * T2_detrend]), s
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, s_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h0 = float(coef[0])
+    h1 = float(coef[1])
+    h2 = float(coef[2])
+    h0_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h1_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_se = float(np.sqrt(max(cov[2, 2], 0)))
+
+    n_params = 4  # β0, β1, β2, β
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, data.n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+    var_decomp, var_attrib = _gdp_scaled_precomputed_decomposition(
+        data, s_opt, h0, h1, h2, T_trend, j_trend, k_values, total_r_sq)
+
+    return FitResultGDP(
+        approach="Approach IP: Log-linear GDP Quadratic (Polynomial Detrending)",
+        h0=h0, h0_se=h0_se, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=dict(year_means),
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=data.n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+        gdp_scaling_kind='loglin',
+    )
+
+
+def fit_ApproachIL_loglin_loess(
+    data: AnalysisData, trends_loess: CountryTrendsLoess, year_means: dict,
+    gdp_ref: float, beta_bounds: tuple = BETA_BOUNDS_LOGLIN,
+    weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach IL: log-linear GDP-dependent quadratic response, LOESS detrending.
+
+    GDP analog of QL with the log-linear scale s̃ = 1 − log(pcGDP/Y_ref)/β. Same
+    residualization as QL (LOESS country/temperature trends, y = Δy − k − y_loess), then
+    fit s̃·(β0 + β1·T* + β2·T*²) with β profiled and an inner OLS for (β0, β1, β2).
+    Coefficients are the response at Y_ref (s̃ = 1); n_params = 4.
+    """
+    T_star = compute_detrended_temperature_loess(data, trends_loess)
+    T2_detrend = compute_detrended_temp_squared_loess(data, trends_loess)
+
+    y = np.zeros(data.n_obs)
+    for i in range(data.n_obs):
+        yr = data.year[i]
+        y[i] = data.growth_pcGDP[i] - year_means[yr] - trends_loess.y_loess[i]
+
+    T_trend = trends_loess.T_loess
+    j_trend = trends_loess.y_loess
+    k_values = np.array([year_means[data.year[i]] for i in range(data.n_obs)])
+
+    def _build_X(beta):
+        s = _gdp_loglin_scale(data.pcGDP, gdp_ref, beta)
+        return np.column_stack([s, s * T_star, s * T2_detrend]), s
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, s_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h0 = float(coef[0])
+    h1 = float(coef[1])
+    h2 = float(coef[2])
+    h0_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h1_se = float(np.sqrt(max(cov[1, 1], 0)))
+    h2_se = float(np.sqrt(max(cov[2, 2], 0)))
+
+    n_params = 4  # β0, β1, β2, β
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, data.n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, data.growth_pcGDP)
+    var_decomp, var_attrib = _gdp_scaled_precomputed_decomposition(
+        data, s_opt, h0, h1, h2, T_trend, j_trend, k_values, total_r_sq)
+
+    return FitResultGDP(
+        approach="Approach IL: Log-linear GDP Quadratic (LOESS Detrending)",
+        h0=h0, h0_se=h0_se, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=dict(year_means),
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=data.n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+        gdp_scaling_kind='loglin',
+    )
+
+
 def fit_ApproachCJ_gdp_centered_conjoined(
     data: AnalysisData, gdp_ref: float,
     T_opt_bounds: tuple = T_OPT_BOUNDS_GDP,
@@ -4605,6 +4871,9 @@ def fit_all_approaches(
         'Approach RJ': GDP-scaled reference quadratic response (roots at T_opt and country mean T), joint OLS
         'Approach MJ': GDP-scaled country model (g scales response + country trends), joint OLS
         'Approach WJ': GDP-scaled whole model (g scales response + trends + year effects), joint OLS
+        'Approach IJ': Log-linear GDP-dependent quadratic response, joint OLS
+        'Approach IP': Log-linear GDP-dependent quadratic response, polynomial detrending (if trends_with_k and year_means provided)
+        'Approach IL': Log-linear GDP-dependent quadratic response, LOESS detrending (if trends_loess provided)
         'Approach QJ': Conjoined OLS fit, with j terms and year fixed effects
         'Approach QP': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
@@ -4678,12 +4947,18 @@ def fit_all_approaches(
     if should_fit('Approach WJ'):
         timed_fit('Approach WJ', fit_ApproachWJ_gdp_whole_scaled,
                   data, gdp_ref, BETA_BOUNDS_GDP, weights)
+    if should_fit('Approach IJ'):
+        timed_fit('Approach IJ', fit_ApproachIJ_loglin_conjoined,
+                  data, gdp_ref, BETA_BOUNDS_LOGLIN, weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided
     if trends_with_k is not None and year_means is not None:
         if should_fit('Approach QP'):
             timed_fit('Approach QP', fit_ApproachQP_precomputed_k,
                       data, trends_with_k, year_means, weights)
+        if should_fit('Approach IP'):
+            timed_fit('Approach IP', fit_ApproachIP_loglin_precomputed_k,
+                      data, trends_with_k, year_means, gdp_ref, BETA_BOUNDS_LOGLIN, weights)
         if should_fit('Approach NP'):
             # NP uses precomputed trends - weighting is done in detrending step
             timed_fit('Approach NP', fit_ApproachNP_precomputed_k,
@@ -4694,6 +4969,9 @@ def fit_all_approaches(
         if should_fit('Approach QL'):
             timed_fit('Approach QL', fit_ApproachQL_loess,
                       data, trends_loess, year_means, weights)
+        if should_fit('Approach IL'):
+            timed_fit('Approach IL', fit_ApproachIL_loglin_loess,
+                      data, trends_loess, year_means, gdp_ref, BETA_BOUNDS_LOGLIN, weights)
         if should_fit('Approach NL'):
             # NL uses precomputed trends - weighting is done in detrending step
             timed_fit('Approach NL', fit_ApproachNL_precomputed_k_loess,

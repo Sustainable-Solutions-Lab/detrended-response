@@ -105,9 +105,10 @@ def main(argv=None):
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ). "
-             "First letter: N/Q/P/S/T/D/L/G/C/R/M/W (response type; "
+             "First letter: N/Q/P/S/T/D/L/G/C/R/M/W/I (response type; "
              "G/C/R = GDP-scaled free/centered/reference quadratic; "
-             "M/W = GDP-scaled country/whole model). "
+             "M/W = GDP-scaled country/whole model; "
+             "I = log-linear GDP-dependent quadratic). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )
@@ -231,8 +232,8 @@ def main(argv=None):
             print(f"  h4 (slope above T_opt) = {r.h4:.6f}  (SE: {r.h4_se:.6f})")
             print(f"  T_opt = {r.T_opt:.4f}  (SE: {r.T_opt_se:.4f})")
 
-        # GDP-scaled approaches (GJ/CJ/RJ/MJ/WJ): beta, h0/h1/h2 (at Y_ref), T_opt
-        elif name in ['Approach GJ', 'Approach CJ', 'Approach RJ', 'Approach MJ', 'Approach WJ'] and hasattr(r, 'beta'):
+        # GDP-scaled approaches (GJ/CJ/RJ/MJ/WJ/IJ/IP/IL): beta, h0/h1/h2 (at Y_ref), T_opt
+        elif name in ['Approach GJ', 'Approach CJ', 'Approach RJ', 'Approach MJ', 'Approach WJ', 'Approach IJ', 'Approach IP', 'Approach IL'] and hasattr(r, 'beta'):
             print(f"  beta (GDP scaling) = {r.beta:.6f}  (SE: {r.beta_se:.6f})")
             if r.h0 != 0.0:
                 print(f"  h0 (constant, at Y_ref) = {r.h0:.6f}  (SE: {r.h0_se:.6f})")
@@ -288,6 +289,7 @@ def main(argv=None):
         'Approach LJ', 'Approach LL',
         'Approach GJ', 'Approach CJ', 'Approach RJ',
         'Approach MJ', 'Approach WJ',
+        'Approach IJ', 'Approach IP', 'Approach IL',
     ]
     approach_order = [a for a in all_approach_order if a in results]
     save_all_outputs(data, trends, results, output_dir, input_file=input_file, approaches=approach_order)

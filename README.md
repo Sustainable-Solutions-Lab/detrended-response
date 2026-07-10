@@ -150,6 +150,7 @@ The “climate response” is specified in several ways:
 - **Level effect (L\*):** first‑difference of the climate response (`h₄ = 1`), testing whether temperature affects GDP *levels* rather than *growth*
 - **GDP‑scaled quadratic (G\* / C\* / R\*):** the climate response is multiplied by a per‑capita‑GDP scaling factor `g = (pcGDP / Y_ref)^(−β)`, where `Y_ref = median(pcGDP)` and the exponent `β` is freely estimated. Three forms: **G** = free quadratic `g·(β₀ + β₁·T + β₂·T²)`; **C** = centered quadratic `g·β₂·(T − T_opt)²`; **R** = "reference" quadratic `g·β₂·(T − T_opt)·(T − Tref_i)` whose second root is each country's own mean temperature `Tref_i`. Larger `β` means poorer countries (lower `pcGDP`) are more temperature‑sensitive.
 - **GDP‑scaled *scope* variants (M\* / W\*):** the same GDP factor `g`, but applied beyond the response. **M** ("country model") scales the response *and* the country trends `g·(β₁T + β₂T² + jᵢ(t)) + k_t`; **W** ("whole model") scales everything including year effects `g·(β₁T + β₂T² + jᵢ(t) + k_t)`. Both drop `β₀` (the g‑scaled country intercept absorbs it). These test whether a country's income also modulates its *detrending* structure, not just its temperature sensitivity.
+- **Log‑linear GDP‑dependent quadratic (I\*):** a *different* model of income dependence — the response is scaled by `s̃ = 1 − log(pcGDP/Y_ref)/β` instead of the power law. Because `log(pcGDP/Y_ref)` is bounded, `s̃` never explodes, so this form is identifiable on *pre‑detrended residuals* where the power‑law scaling degenerates. Response magnitude declines linearly with log‑income and crosses zero at `pcGDP = Y_ref·e^β`; larger `β` ⇒ weaker income dependence (`β → ∞` recovers the plain quadratic). Here `β` is a log‑income crossover, **not** comparable to the power‑law elasticity.
 
 ### Approaches implemented
 
@@ -168,6 +169,8 @@ The code reports results under short labels:
 - **RJ**: GDP‑scaled *reference* quadratic response `g·β₂·(T−T_opt)·(T−Tref_i)`, *joint* OLS. The form is linear in `T_opt`, so only β is profiled and `T_opt` is recovered from the linear fit (unbounded); the response is zero at each country's own mean temperature `Tref_i`.
 - **MJ**: GDP‑scaled *country model*, *joint* OLS. `g` scales the response **and** the country trends `g·(β₁T+β₂T²+jᵢ(t)) + k_t`; year effects are additive. Only β is profiled (inner OLS otherwise, like GJ).
 - **WJ**: GDP‑scaled *whole model*, *joint* OLS. `g` scales the **entire** model `g·(β₁T+β₂T²+jᵢ(t)+k_t)`, so year shocks are GDP‑scaled too. Only β is profiled.
+- **IP / IL**: log‑linear GDP‑dependent quadratic `s̃·(β₀+β₁T+β₂T²)`, `s̃ = 1 − log(pcGDP/Y_ref)/β`, on polynomial‑ / LOESS‑detrended residuals (the P/L analogs of GJ, but with the well‑behaved log‑linear scale). β is profiled; coefficients are the response at `Y_ref` (`s̃ = 1`). Both land at an interior β (≈1.6 on the default data).
+- **IJ**: the *joint* version of the log‑linear form. Provided for comparison, but log‑linear GDP‑dependence is **not identified in the joint specification** — β drifts to its bound and IJ collapses to ≈QJ. (Power‑law dependence is the reverse: identified jointly as GJ, but degenerate on residuals.)
 - **NJ / NP / NL**: “null” variants with **no climate response** (only `jᵢ(t)` and `k(t)`)
 
 All approaches are defined precisely in **`METHODS_DETAIL.md`**.

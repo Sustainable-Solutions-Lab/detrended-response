@@ -60,6 +60,9 @@ APPROACH_COLORS = {
     'Approach RJ': 'indigo',
     'Approach MJ': 'steelblue',
     'Approach WJ': 'slateblue',
+    'Approach IJ': 'teal',
+    'Approach IP': 'darkcyan',
+    'Approach IL': 'cadetblue',
     'Approach SL': 'gold',
     'Approach SJ': 'darkkhaki',
     'Approach SP': 'goldenrod',
@@ -97,6 +100,9 @@ APPROACH_LINESTYLES = {
     'Approach RJ': '-',           # solid (conjoined)
     'Approach MJ': '-',           # solid (conjoined)
     'Approach WJ': '-',           # solid (conjoined)
+    'Approach IJ': '-',           # solid (conjoined)
+    'Approach IP': '-.',          # dash-dot (polynomial detrending, like QP)
+    'Approach IL': (0, (5, 1)),   # densely dashed (LOESS detrending, like QL)
     'Approach NJ': '--',
     'Approach NP': ':',
     'Approach NL': ':',
@@ -200,7 +206,8 @@ def is_gdp_result(result) -> bool:
     """
     approach = getattr(result, 'approach', '')
     if approach.startswith(('Approach GJ', 'Approach CJ', 'Approach RJ',
-                            'Approach MJ', 'Approach WJ')):
+                            'Approach MJ', 'Approach WJ',
+                            'Approach IJ', 'Approach IP', 'Approach IL')):
         return True
     return hasattr(result, 'beta') and hasattr(result, 'Y_ref')
 
@@ -1192,7 +1199,13 @@ def plot_gdp_scaling_factor(
     def _draw_panel(ax, r, title, color):
         beta = r.beta
         Y_ref = r.Y_ref
-        g = (Y / Y_ref) ** (-beta)
+        kind = getattr(r, 'gdp_scaling_kind', 'power')
+        if kind == 'loglin':
+            g = 1.0 - np.log(Y / Y_ref) / beta
+            scale_label = 'GDP Scaling Factor s̃ = 1 − log(Y/Y_ref)/β'
+        else:
+            g = (Y / Y_ref) ** (-beta)
+            scale_label = 'GDP Scaling Factor g = (Y/Y_ref)^(-β)'
 
         # Add GDP histogram on secondary y-axis (if data provided)
         if data is not None:
@@ -1211,12 +1224,12 @@ def plot_gdp_scaling_factor(
             ax.patch.set_visible(False)
 
         ax.plot(Y, g, color=color, linewidth=2, label=f'β = {beta:.3f}')
-        ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='g = 1 (at Y = Y_ref)')
+        ax.axhline(1.0, color='gray', linestyle='--', alpha=0.5, label='scale = 1 (at Y = Y_ref)')
         ax.axvline(Y_ref, color='gray', linestyle=':', alpha=0.5, label=f'Y_ref = ${Y_ref:,.0f}')
 
         ax.set_xscale('log')
         ax.set_xlabel('Per Capita GDP ($)', fontsize=12)
-        ax.set_ylabel('GDP Scaling Factor g = (Y/Y_ref)^(-β)', fontsize=12)
+        ax.set_ylabel(scale_label, fontsize=12)
         ax.set_title(title, fontsize=14)
         ax.legend(loc='upper right')
         ax.grid(True, alpha=0.3)

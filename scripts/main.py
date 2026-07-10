@@ -101,8 +101,8 @@ def main():
         nargs="+",
         default=None,
         help="Two-letter approach codes to fit (e.g., QJ PL DJ SJ TJ). "
-             "First letter: N/Q/P/S/T/D/L/G/C/R/M/W (response type; "
-             "G/C/R/M/W = GDP-scaled variants). "
+             "First letter: N/Q/P/S/T/D/L/G/C/R/M/W/I (response type; "
+             "G/C/R/M/W = power-law GDP-scaled variants; I = log-linear GDP-dependent). "
              "Second letter: J/P/L (trend method). "
              "Default: fit all approaches.",
     )

@@ -142,6 +142,14 @@ Whole model (W):   Δyᵢ,t = g · (β₁·T + β₂·T² + jᵢ(t) + k_t).     
 
 In (M4f) the GDP factor scales the country‑specific structural model (response **and** trend), while global year shocks enter additively. In (M4g) it scales the **entire** model, so year shocks also hit poorer countries more strongly (the stored `k_t` are shared‑shock coefficients, realized per observation as `g·k_t`). Estimation is detailed in Section 5.7.
 
+**Log‑linear GDP dependence (I).** A distinct model replaces the power‑law factor with one that is *linear in log‑GDP*:
+
+```
+h(T, pcGDP) = s̃ · (β₀ + β₁·T + β₂·T²),   s̃ = 1 − log(pcGDP/Y_ref)/β.   (M4h)
+```
+
+`s̃` equals `(β − log(pcGDP/Y_ref))` up to an inner‑OLS rescaling, but is normalized so **s̃ = 1 at Y_ref** — so the fitted coefficients are the response at the reference GDP, directly comparable to GJ/QJ. Because `log(pcGDP/Y_ref)` is bounded (≈[−2.8, +3.3] on the default data), `s̃` cannot explode the way the power‑law factor does for low‑pcGDP observations. This is what makes the GDP‑dependent response identifiable on *pre‑detrended residuals* (Approaches IP/IL), where the power‑law form degenerates (β runs to a boundary and the response collapses; see Section 5.7). The response magnitude declines linearly with log‑income and crosses zero at `pcGDP = Y_ref·e^β`; `β → ∞` recovers the plain quadratic (no GDP dependence). Here `β` is a log‑income crossover, not the power‑law elasticity — the two are not comparable numbers.
+
 ---
 
 ## 4. Detrending components
@@ -234,6 +242,7 @@ The code reports results using short approach names. For each, we describe the e
 | GDP‑scaled reference quadratic `g·β₂(T−T_opt)(T−Tref_i)` | RJ | — | — |
 | GDP‑scaled country model `g·(β₁T+β₂T²+jᵢ(t))+k_t` | MJ | — | — |
 | GDP‑scaled whole model `g·(β₁T+β₂T²+jᵢ(t)+k_t)` | WJ | — | — |
+| Log‑linear GDP quadratic `s̃·(β₀+β₁T+β₂T²)` | IJ | IP | IL |
 | Null (no climate response) | NJ | NP | NL |
 
 ### 5.1 Quadratic, joint OLS: **Approach QJ**
@@ -438,7 +447,7 @@ Null approaches fit the same detrending structure but impose **no climate respon
 
 These provide baseline fit diagnostics and help assess how much explanatory power is coming from non‑climate components.
 
-### 5.7 GDP‑scaled responses: **Approaches GJ / CJ / RJ / MJ / WJ**
+### 5.7 GDP‑scaled responses: **Approaches GJ / CJ / RJ / MJ / WJ / IJ / IP / IL**
 
 These are joint fixed‑effects models (same country‑trend and year‑effect structure as QJ, M6) in which the climate response is multiplied by the per‑capita‑GDP scaling factor `g = (pcGDPᵢ,t / Y_ref)^(−β)` of Section 3.4. Only the climate columns are scaled by `g`; the country trends `jᵢ(t)` and year effects `k(t)` are unscaled.
 
@@ -482,6 +491,25 @@ where `Tref_i` is the mean temperature of country *i* across years (precomputed)
 **Approaches MJ / WJ (scaling scope, M4f / M4g).** These widen the GDP factor from the response to the detrending structure. MJ scales the response **and** the country trend, `Δy = g·(β₁T + β₂T² + jᵢ(t)) + k_t`; WJ scales the **whole** model, `Δy = g·(β₁T + β₂T² + jᵢ(t) + k_t)`. Neither carries a `β₀` — the g‑scaled country intercept `v0ᵢ` plays that role, and country 0 is the dropped reference, so both have **one fewer free parameter than GJ**: `n_params = 2 + 3(n_countries − 1) + n_years + 1(β)`. Crucially, for a fixed `β` each model is still *linear in every remaining coefficient* (`β₁, β₂`, the country‑trend parameters, and the year effects), so estimation reuses the GJ machinery: a single bounded 1‑D Brent search over `β` with an inner OLS at each candidate. The *only* implementation difference from GJ is which columns of the design matrix are multiplied by `g` — the climate and country‑trend columns for MJ, and the entire design (including year effects) for WJ. The reported `(h₁, h₂, T_opt)` are the temperature‑shape at `Y_ref` (`g = 1`), so the standard quadratic plotting and bootstrap bands apply unchanged. For WJ, the stored `k_t` are the shared‑shock coefficients (before scaling); the realized per‑observation year effect is `g·k_t`, and that scaled version enters the variance decomposition.
 
 **Identification (MJ / WJ).** Because `g = (pcGDP/Y_ref)^(−β)` varies within a country from year to year (per‑capita GDP changes annually), it is collinear with neither the country dummies/trends nor the year fixed effects; the profiled `β` and the response‑shape parameters are well identified even though the whole design is g‑scaled.
+
+**Approaches IJ / IP / IL (log‑linear GDP dependence, M4h).** These fit `s̃·(β₀+β₁T+β₂T²)` with
+`s̃ = 1 − log(pcGDP/Y_ref)/β`. Estimation profiles `β` with a bounded 1‑D search (`β ∈ [0.1, 50]`);
+the inner OLS solves `(β₀,β₁,β₂)` — plus country trends and year effects for **IJ** (joint, like GJ),
+or on the QP/QL residual `y = Δy − k − jᵢ(t)` for **IP** (polynomial) and **IL** (LOESS). Because
+`s̃ = 1` at `Y_ref`, the fitted `(β₀,β₁,β₂)` are the response at the reference GDP, with clean inner‑OLS
+SEs and `T_opt = −β₁/(2β₂)`. `n_params = n_climate(3) + 3(n−1) + n_years + 1` for IJ, and `4` for IP/IL.
+
+The log‑linear form exists precisely because the **power‑law** GDP scaling is *not* identifiable on
+pre‑detrended residuals: `(pcGDP/Y_ref)^(−β)` explodes for low‑pcGDP observations (reaching ~10¹² at
+β=10), so once the country trends and year effects are removed — leaving no structure to compete for
+that variance — β runs to the boundary and the response collapses. The bounded log‑linear scale avoids
+this, giving a genuine interior optimum on residuals (β≈1.6 on the default data, T_opt≈19 °C, comparable
+to GJ/QJ). **The asymmetry is exact and complementary:** power‑law dependence is identified in the joint
+form (GJ) but degenerate on residuals (would‑be GP/GL); log‑linear dependence is identified on residuals
+(IP/IL) but **not** in the joint form — **IJ**'s SSE(β) profile is nearly flat and β drifts to its upper
+bound, collapsing to ≈QJ (the joint fit rejects the sign flip that log‑linear scaling imposes on the
+richest countries, whereas the always‑positive power‑law shrink is accepted). IJ is therefore reported
+for comparison only; its boundary β should be read as "no joint log‑linear dependence identified."
 
 ---
 
