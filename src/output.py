@@ -428,6 +428,13 @@ def save_summary_table(
             row['h2_D_SE'] = result.h2_D_se
             row['h2_L'] = result.h2_L
             row['h2_L_SE'] = result.h2_L_se
+        # Add GDP scaling exponent and reference GDP for GDP-scaled approaches
+        # (GJ/CJ/RJ/MJ/WJ). h1/h2 are the temperature-shape coefficients at Y_ref
+        # (g = 1); beta and Y_ref are needed to interpret them at any pcGDP level.
+        if is_gdp_result(result):
+            row['beta'] = result.beta
+            row['beta_SE'] = result.beta_se
+            row['Y_ref'] = result.Y_ref
         rows.append(row)
 
     df = pd.DataFrame(rows)
@@ -1647,6 +1654,10 @@ def save_bootstrap_summary_table(
             row['beta_p75'] = np.nan
             row['beta_p95'] = np.nan
             row['beta_std'] = np.nan
+
+        # Reference per-capita GDP (Y_ref); fixed across resamples, so no
+        # percentiles. Needed to interpret the h1/h2/beta coefficients.
+        row['Y_ref'] = getattr(result, 'Y_ref_point', None)
 
         # Add T_dep_opt statistics for approaches 6a/6b/6c (optimal departure)
         if result.T_dep_opt_point is not None and 'T_dep_opt' in stats:
