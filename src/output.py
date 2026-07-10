@@ -58,6 +58,8 @@ APPROACH_COLORS = {
     'Approach GJ': 'navy',
     'Approach CJ': 'maroon',
     'Approach RJ': 'indigo',
+    'Approach MJ': 'steelblue',
+    'Approach WJ': 'slateblue',
     'Approach SL': 'gold',
     'Approach SJ': 'darkkhaki',
     'Approach SP': 'goldenrod',
@@ -93,6 +95,8 @@ APPROACH_LINESTYLES = {
     'Approach GJ': '-',           # solid (conjoined)
     'Approach CJ': '-',           # solid (conjoined)
     'Approach RJ': '-',           # solid (conjoined)
+    'Approach MJ': '-',           # solid (conjoined)
+    'Approach WJ': '-',           # solid (conjoined)
     'Approach NJ': '--',
     'Approach NP': ':',
     'Approach NL': ':',
@@ -195,7 +199,8 @@ def is_gdp_result(result) -> bool:
     compute_h_response renders the curve without special handling.
     """
     approach = getattr(result, 'approach', '')
-    if approach.startswith(('Approach GJ', 'Approach CJ')):
+    if approach.startswith(('Approach GJ', 'Approach CJ', 'Approach RJ',
+                            'Approach MJ', 'Approach WJ')):
         return True
     return hasattr(result, 'beta') and hasattr(result, 'Y_ref')
 

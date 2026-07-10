@@ -566,7 +566,7 @@ def run_bootstrap(
                     continue
                 r = boot_results[name]
 
-                if name in ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach GJ', 'Approach CJ', 'Approach RJ']:
+                if name in ['Approach QJ', 'Approach QP', 'Approach QL', 'Approach GJ', 'Approach CJ', 'Approach RJ', 'Approach MJ', 'Approach WJ']:
                     # Standard quadratic shape at reference GDP: h(T) = h1*T + h2*T²
                     # (for GJ/CJ/RJ, h1/h2 are the temperature-shape coefficients at Y_ref;
                     # RJ's curve is the representative curve at global mean T; constant offsets

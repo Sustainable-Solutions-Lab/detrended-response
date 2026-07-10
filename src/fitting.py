@@ -4429,6 +4429,165 @@ def fit_ApproachRJ_gdp_reference_conjoined(
     )
 
 
+def fit_ApproachMJ_gdp_model_scaled(
+    data: AnalysisData, gdp_ref: float,
+    beta_bounds: tuple = BETA_BOUNDS_GDP, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach MJ: GDP-scaled country model, joint OLS.
+
+    Δy_i(t) = g_it·(β₁·T + β₂·T² + j_i(t)) + k_t,  g = (pcGDP/Y_ref)^(-β).
+
+    The GDP factor scales the climate response *and* the country trend j_i(t),
+    but the year effects k_t enter additively (unscaled). There is no β₀: the
+    g-scaled country intercept absorbs it, and country 0 is the reference. For
+    fixed β the model is linear in every remaining coefficient, so β is profiled
+    with a bounded 1-D Brent search and the inner OLS solves (β₁, β₂), the
+    country trends, and the year FEs at each β.
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    ratio = data.pcGDP / gdp_ref
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 2)
+
+    def _build_X(beta):
+        g = ratio ** (-beta)
+        X = X_base.copy()
+        X[:, 0] = g * T
+        X[:, 1] = g * T * T
+        X[:, 2:k_col_start] *= g[:, np.newaxis]  # scale country-trend block
+        return X, g
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, g_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h1 = float(coef[0])
+    h2 = float(coef[1])
+    h1_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h2_se = float(np.sqrt(max(cov[1, 1], 0)))
+
+    n_params = n_total_params + 1  # + β (no β₀)
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    # g-aware reconstruction: the country trend is g-scaled, year effects are not.
+    j_raw, k_values, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 2)
+    j_trend = g_opt * j_raw
+
+    h_T = g_opt * (h1 * T + h2 * T * T)
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach MJ: GDP-Scaled Country Model (Joint OLS)",
+        h0=0.0, h0_se=0.0, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+    )
+
+
+def fit_ApproachWJ_gdp_whole_scaled(
+    data: AnalysisData, gdp_ref: float,
+    beta_bounds: tuple = BETA_BOUNDS_GDP, weights: np.ndarray = None,
+) -> FitResultGDP:
+    """Approach WJ: GDP-scaled whole model, joint OLS.
+
+    Δy_i(t) = g_it·(β₁·T + β₂·T² + j_i(t) + k_t),  g = (pcGDP/Y_ref)^(-β).
+
+    The GDP factor scales the *entire* structural model — climate response,
+    country trend, and year effects. There is no β₀ (absorbed by the g-scaled
+    country intercept; country 0 is the reference). For fixed β the model is
+    linear in every remaining coefficient, so β is profiled with a bounded 1-D
+    Brent search and the inner OLS solves everything at each β. The stored k(t)
+    are the shared-shock coefficients; each obs realizes g·k_t.
+    """
+    n_obs = data.n_obs
+    T = data.temp
+    y = data.growth_pcGDP
+    ratio = data.pcGDP / gdp_ref
+    X_base, active_year_to_idx, unique_years, k_col_start, n_total_params = \
+        _gdp_joint_base(data, weights, 2)
+
+    def _build_X(beta):
+        g = ratio ** (-beta)
+        X = X_base.copy()
+        X[:, 0] = T
+        X[:, 1] = T * T
+        X *= g[:, np.newaxis]  # scale the entire design (climate, trends, year FEs)
+        return X, g
+
+    def compute_sse(beta):
+        X, _ = _build_X(beta)
+        return _gdp_sse(X, y, weights)
+
+    res = minimize_scalar(compute_sse, bounds=beta_bounds, method='bounded',
+                          options={'xatol': 1e-4})
+    beta_opt = float(res.x)
+
+    X_opt, g_opt = _build_X(beta_opt)
+    if weights is not None:
+        coef, residuals, _, cov = fit_ols_weighted(y, X_opt, weights)
+    else:
+        coef, residuals, _, cov = fit_ols(y, X_opt)
+    h1 = float(coef[0])
+    h2 = float(coef[1])
+    h1_se = float(np.sqrt(max(cov[0, 0], 0)))
+    h2_se = float(np.sqrt(max(cov[1, 1], 0)))
+
+    n_params = n_total_params + 1  # + β (no β₀)
+    beta_se = compute_1d_se_numerical(compute_sse, beta_opt, beta_bounds, n_obs,
+                                      n_params=n_params)
+    T_opt = compute_T_optimal(h1, h2)
+
+    r_sq, adj_r_sq, rmse = compute_fit_stats(y, residuals, n_params)
+    total_r_sq = compute_total_r_squared(residuals, y)
+    # g-aware reconstruction: both the country trend and the year effects are g-scaled.
+    j_raw, k_raw, k_dict = _gdp_j_and_k(
+        data, coef, k_col_start, active_year_to_idx, unique_years, 2)
+    j_trend = g_opt * j_raw
+    k_values = g_opt * k_raw
+
+    h_T = g_opt * (h1 * T + h2 * T * T)
+    components = {'h_T': h_T, 'j': j_trend, 'k': k_values}
+    var_decomp = compute_variance_decomposition(components, y, total_r_sq)
+    Delta_u = np.zeros(n_obs)  # joint fit: temperature not pre-detrended
+    v = h_T
+    epsilon = y - (Delta_u + v + j_trend + k_values)
+    var_attrib = compute_variance_attribution(Delta_u, v, j_trend, k_values, epsilon, y)
+
+    return FitResultGDP(
+        approach="Approach WJ: GDP-Scaled Whole Model (Joint OLS)",
+        h0=0.0, h0_se=0.0, h1=h1, h2=h2, h1_se=h1_se, h2_se=h2_se,
+        beta=beta_opt, beta_se=beta_se, Y_ref=gdp_ref,
+        T_opt=T_opt, T_opt_se=np.nan, k=k_dict,
+        r_squared=r_sq, adj_r_squared=adj_r_sq, rmse=rmse,
+        n_obs=n_obs, n_params=n_params, residuals=residuals,
+        total_r_squared=total_r_sq, var_decomp=var_decomp, var_attrib=var_attrib,
+    )
+
+
 def fit_all_approaches(
     data: AnalysisData, trends: CountryTrends,
     trends_with_k: CountryTrends = None, year_means: dict = None,
@@ -4444,6 +4603,8 @@ def fit_all_approaches(
         'Approach GJ': GDP-scaled free quadratic response, joint OLS
         'Approach CJ': GDP-scaled centered quadratic response, joint OLS
         'Approach RJ': GDP-scaled reference quadratic response (roots at T_opt and country mean T), joint OLS
+        'Approach MJ': GDP-scaled country model (g scales response + country trends), joint OLS
+        'Approach WJ': GDP-scaled whole model (g scales response + trends + year effects), joint OLS
         'Approach QJ': Conjoined OLS fit, with j terms and year fixed effects
         'Approach QP': Pre-computed k with linear temp + quadratic GDP (if trends_with_k and year_means provided)
         'Approach QL': Pre-computed k with LOESS trends (if trends_loess provided)
@@ -4510,6 +4671,12 @@ def fit_all_approaches(
                   data, gdp_ref, T_OPT_BOUNDS_GDP, BETA_BOUNDS_GDP, weights)
     if should_fit('Approach RJ'):
         timed_fit('Approach RJ', fit_ApproachRJ_gdp_reference_conjoined,
+                  data, gdp_ref, BETA_BOUNDS_GDP, weights)
+    if should_fit('Approach MJ'):
+        timed_fit('Approach MJ', fit_ApproachMJ_gdp_model_scaled,
+                  data, gdp_ref, BETA_BOUNDS_GDP, weights)
+    if should_fit('Approach WJ'):
+        timed_fit('Approach WJ', fit_ApproachWJ_gdp_whole_scaled,
                   data, gdp_ref, BETA_BOUNDS_GDP, weights)
 
     # Add Approach QP and Approach NP if trends_with_k and year_means are provided

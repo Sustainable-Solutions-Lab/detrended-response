@@ -133,6 +133,15 @@ Reference quadratic (R): h(T, pcGDP) = g · β₂ · (T − T_opt) · (T − Tre
 
 In (M4c) the vertex is `T_opt = −β₁ / (2 β₂)`, independent of `β₀` and of `g`. In (M4d) the response is zero at `T_opt` by construction, and `T_opt` is estimated directly (Section 5.7). In (M4e), `Tref_i` is the **mean temperature of country i across years**; the response is zero at both `T_opt` (a shared root) and the country's own mean temperature `Tref_i`, so each country's response is centered on its typical climate. At the reference GDP (`g = 1`) all three reduce to a quadratic in `T`; the plotted response curve is drawn at `Y_ref` (and, for R, at the global mean temperature `T̄` as the representative second root), and the GDP dependence is displayed separately as the scaling factor `g` versus `pcGDP`.
 
+**Scaling scope (M/W).** In G/C/R the factor `g` multiplies the climate response *only*; the country trends `jᵢ(t)` and year effects `k_t` remain ordinary additive terms. Two further variants widen the scope of the GDP scaling (both use the free quadratic shape, with no `β₀` — the g‑scaled country intercept absorbs it):
+
+```
+Country model (M): Δyᵢ,t = g · (β₁·T + β₂·T² + jᵢ(t)) + k_t,          (M4f)
+Whole model (W):   Δyᵢ,t = g · (β₁·T + β₂·T² + jᵢ(t) + k_t).          (M4g)
+```
+
+In (M4f) the GDP factor scales the country‑specific structural model (response **and** trend), while global year shocks enter additively. In (M4g) it scales the **entire** model, so year shocks also hit poorer countries more strongly (the stored `k_t` are shared‑shock coefficients, realized per observation as `g·k_t`). Estimation is detailed in Section 5.7.
+
 ---
 
 ## 4. Detrending components
@@ -223,6 +232,8 @@ The code reports results using short approach names. For each, we describe the e
 | GDP‑scaled free quadratic `g·(β₀+β₁T+β₂T²)` | GJ | — | — |
 | GDP‑scaled centered quadratic `g·β₂(T−T_opt)²` | CJ | — | — |
 | GDP‑scaled reference quadratic `g·β₂(T−T_opt)(T−Tref_i)` | RJ | — | — |
+| GDP‑scaled country model `g·(β₁T+β₂T²+jᵢ(t))+k_t` | MJ | — | — |
+| GDP‑scaled whole model `g·(β₁T+β₂T²+jᵢ(t)+k_t)` | WJ | — | — |
 | Null (no climate response) | NJ | NP | NL |
 
 ### 5.1 Quadratic, joint OLS: **Approach QJ**
@@ -427,7 +438,7 @@ Null approaches fit the same detrending structure but impose **no climate respon
 
 These provide baseline fit diagnostics and help assess how much explanatory power is coming from non‑climate components.
 
-### 5.7 GDP‑scaled responses: **Approaches GJ / CJ**
+### 5.7 GDP‑scaled responses: **Approaches GJ / CJ / RJ / MJ / WJ**
 
 These are joint fixed‑effects models (same country‑trend and year‑effect structure as QJ, M6) in which the climate response is multiplied by the per‑capita‑GDP scaling factor `g = (pcGDPᵢ,t / Y_ref)^(−β)` of Section 3.4. Only the climate columns are scaled by `g`; the country trends `jᵢ(t)` and year effects `k(t)` are unscaled.
 
@@ -467,6 +478,10 @@ where `Tref_i` is the mean temperature of country *i* across years (precomputed)
 **RJ curve and roots.** RJ's response is country‑specific (it is zero at each country's own mean temperature `Tref_i`), so it has no single `h(T)` curve. For display, the code draws a representative curve at the global mean temperature `T̄` (i.e. `β₂·(T−T_opt)·(T−T̄)` at `g = 1`); the reported `T_opt` is one *root* of the response, and the per‑country vertex lies at `(T_opt + Tref_i)/2`. `Tref_i` is invariant under country resampling and is held at the full‑sample country means under year‑weighted resampling.
 
 **Reference GDP in the bootstrap.** `Y_ref = median(pcGDP)` is computed once on the full sample and reused for every resample, so bootstrap variation in `β` reflects sampling of countries/years, not a moving normalizer.
+
+**Approaches MJ / WJ (scaling scope, M4f / M4g).** These widen the GDP factor from the response to the detrending structure. MJ scales the response **and** the country trend, `Δy = g·(β₁T + β₂T² + jᵢ(t)) + k_t`; WJ scales the **whole** model, `Δy = g·(β₁T + β₂T² + jᵢ(t) + k_t)`. Neither carries a `β₀` — the g‑scaled country intercept `v0ᵢ` plays that role, and country 0 is the dropped reference, so both have **one fewer free parameter than GJ**: `n_params = 2 + 3(n_countries − 1) + n_years + 1(β)`. Crucially, for a fixed `β` each model is still *linear in every remaining coefficient* (`β₁, β₂`, the country‑trend parameters, and the year effects), so estimation reuses the GJ machinery: a single bounded 1‑D Brent search over `β` with an inner OLS at each candidate. The *only* implementation difference from GJ is which columns of the design matrix are multiplied by `g` — the climate and country‑trend columns for MJ, and the entire design (including year effects) for WJ. The reported `(h₁, h₂, T_opt)` are the temperature‑shape at `Y_ref` (`g = 1`), so the standard quadratic plotting and bootstrap bands apply unchanged. For WJ, the stored `k_t` are the shared‑shock coefficients (before scaling); the realized per‑observation year effect is `g·k_t`, and that scaled version enters the variance decomposition.
+
+**Identification (MJ / WJ).** Because `g = (pcGDP/Y_ref)^(−β)` varies within a country from year to year (per‑capita GDP changes annually), it is collinear with neither the country dummies/trends nor the year fixed effects; the profiled `β` and the response‑shape parameters are well identified even though the whole design is g‑scaled.
 
 ---
 

@@ -149,6 +149,7 @@ The “climate response” is specified in several ways:
 - **Persistence/decay (D\*):** a distributed‑lag “converging” response with decay parameter `h₄`
 - **Level effect (L\*):** first‑difference of the climate response (`h₄ = 1`), testing whether temperature affects GDP *levels* rather than *growth*
 - **GDP‑scaled quadratic (G\* / C\* / R\*):** the climate response is multiplied by a per‑capita‑GDP scaling factor `g = (pcGDP / Y_ref)^(−β)`, where `Y_ref = median(pcGDP)` and the exponent `β` is freely estimated. Three forms: **G** = free quadratic `g·(β₀ + β₁·T + β₂·T²)`; **C** = centered quadratic `g·β₂·(T − T_opt)²`; **R** = "reference" quadratic `g·β₂·(T − T_opt)·(T − Tref_i)` whose second root is each country's own mean temperature `Tref_i`. Larger `β` means poorer countries (lower `pcGDP`) are more temperature‑sensitive.
+- **GDP‑scaled *scope* variants (M\* / W\*):** the same GDP factor `g`, but applied beyond the response. **M** ("country model") scales the response *and* the country trends `g·(β₁T + β₂T² + jᵢ(t)) + k_t`; **W** ("whole model") scales everything including year effects `g·(β₁T + β₂T² + jᵢ(t) + k_t)`. Both drop `β₀` (the g‑scaled country intercept absorbs it). These test whether a country's income also modulates its *detrending* structure, not just its temperature sensitivity.
 
 ### Approaches implemented
 
@@ -165,6 +166,8 @@ The code reports results under short labels:
 - **GJ**: GDP‑scaled *free* quadratic response `g·(β₀+β₁T+β₂T²)`, *joint* OLS (β and the quadratic coefficients estimated together)
 - **CJ**: GDP‑scaled *centered* quadratic response `g·β₂·(T−T_opt)²`, *joint* OLS (β and `T_opt` profiled jointly)
 - **RJ**: GDP‑scaled *reference* quadratic response `g·β₂·(T−T_opt)·(T−Tref_i)`, *joint* OLS. The form is linear in `T_opt`, so only β is profiled and `T_opt` is recovered from the linear fit (unbounded); the response is zero at each country's own mean temperature `Tref_i`.
+- **MJ**: GDP‑scaled *country model*, *joint* OLS. `g` scales the response **and** the country trends `g·(β₁T+β₂T²+jᵢ(t)) + k_t`; year effects are additive. Only β is profiled (inner OLS otherwise, like GJ).
+- **WJ**: GDP‑scaled *whole model*, *joint* OLS. `g` scales the **entire** model `g·(β₁T+β₂T²+jᵢ(t)+k_t)`, so year shocks are GDP‑scaled too. Only β is profiled.
 - **NJ / NP / NL**: “null” variants with **no climate response** (only `jᵢ(t)` and `k(t)`)
 
 All approaches are defined precisely in **`METHODS_DETAIL.md`**.
