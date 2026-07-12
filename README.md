@@ -176,6 +176,38 @@ The code reports results under short labels:
 All approaches are defined precisely in **`METHODS_DETAIL.md`**.
 
 
+### Caveat: income-dependence of the response is confounded with temperature
+
+The GDP-scaled families (G\* / C\* / R\* / M\* / W\* and the log-linear I\*) let the temperature
+response depend on a country's income. **Treat these as exploratory**: across countries, income and
+temperature level are strongly confounded — richer countries are systematically cooler
+(`corr(mean temperature, mean log pcGDP) ≈ −0.50`) — so "poorer countries are more temperature-sensitive"
+is nearly indistinguishable from "hotter countries are more temperature-sensitive."
+
+A standalone diagnostic makes this explicit:
+
+```bash
+python scripts/run_two_stage_response.py
+```
+
+It estimates each country's *own* temperature sensitivity `β₁ᵢ` (Stage 1: `Δy = β₁ᵢ·T + j0ᵢ + j1ᵢ·t + j2ᵢ·t²`
+per country) and then asks what explains `β₁ᵢ` across countries (Stage 2: on mean `log(pcGDP)` and mean
+temperature). Findings on the default dataset:
+
+- Income and mean temperature each correlate with `β₁ᵢ` on their own, but when **both** are included
+  neither survives cleanly (each drops to |t| ≈ 1.9 precision-weighted, and to insignificance unweighted) —
+  they are tracing the same rich-cool gradient.
+- The `β₁ᵢ`-vs-mean-temperature slope simply recovers `2·β₂` from the pooled quadratic (`QJ`), i.e. it is
+  the shape of a *single* global response, not evidence of heterogeneity.
+- The income–temperature plane plot (`data/output/two_stage/slope_in_gdp_temp_plane.pdf`) shows the cloud
+  lying on a rich-cool / poor-hot ridge with the rich-and-hot corner essentially empty — so there is little
+  off-diagonal variation with which to separate income from temperature.
+
+Because the GDP-scaled point estimates draw ~84% of their identifying variation from this confounded
+between-country dimension, their `β` should be read as reflecting the income–temperature confound rather
+than a cleanly identified income effect. See `scripts/run_two_stage_response.py` / `src/two_stage_response.py`.
+
+
 ## Outputs
 
 The pipeline writes a parent directory with subfolders:
