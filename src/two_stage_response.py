@@ -24,7 +24,12 @@ from dataclasses import dataclass
 import numpy as np
 
 from .data_loader import AnalysisData
-from .detrending import compute_year_means
+from .detrending import (
+    DEFAULT_LOESS_WINDOW_YEARS,
+    compute_year_means,
+    compute_country_trends_loess,
+    compute_detrended_temperature_loess,
+)
 from .fitting import fit_ols
 
 
@@ -40,6 +45,8 @@ class CountrySlopes:
     mean_T: np.ndarray       # mean temperature per country
     growth_vol: np.ndarray   # std of Δy per country
     remove_year_means: bool
+    method: str = 'polynomial'      # 'polynomial' (quadratic time trend) or 'LOESS'
+    window_years: float = None      # LOESS bandwidth in years (LOESS method only)
 
 
 def fit_country_temperature_slopes(data: AnalysisData, remove_year_means: bool = True,
@@ -81,6 +88,57 @@ def fit_country_temperature_slopes(data: AnalysisData, remove_year_means: bool =
         n_obs=np.array(n_obs), r_squared=np.array(r2),
         mean_logGDP=np.array(m_logGDP), mean_T=np.array(m_T),
         growth_vol=np.array(vol), remove_year_means=remove_year_means,
+        method='polynomial',
+    )
+
+
+def fit_country_temperature_slopes_loess(
+    data: AnalysisData, window_years: float = DEFAULT_LOESS_WINDOW_YEARS,
+    remove_year_means: bool = True, min_years: int = 20,
+) -> CountrySlopes:
+    """Stage 1 (LOESS variant): LOESS-detrend each country's growth and temperature,
+    then fit y_resid = β0 + β1ᵢ·T_resid per country.
+
+    Uses the repo's bespoke LOESS (degree-1, tricube weights, bandwidth in *years*) to
+    remove each country's smooth trend from both series, then regresses detrended growth
+    on detrended temperature. β1ᵢ is the temperature sensitivity. If `remove_year_means`,
+    the global year means k_t are subtracted from Δy before LOESS (as in the *L approaches).
+    Returns the same CountrySlopes structure as the polynomial Stage 1.
+    """
+    year_means = (compute_year_means(data) if remove_year_means
+                  else {yr: 0.0 for yr in set(data.year)})
+    trends = compute_country_trends_loess(data, year_means, window_years)
+    T_resid = compute_detrended_temperature_loess(data, trends)
+    k_arr = np.array([year_means[yr] for yr in data.year])
+    y_resid = (data.growth_pcGDP - k_arr) - trends.y_loess
+
+    logGDP = np.log(data.pcGDP)
+    iso, beta1, se, n_obs, r2, m_logGDP, m_T, vol = [], [], [], [], [], [], [], []
+    for c in range(data.n_countries):
+        mask = data.country_idx == c
+        n = int(mask.sum())
+        Tr = T_resid[mask]
+        if n < min_years or np.std(Tr) == 0:
+            continue
+        yr = y_resid[mask]
+        X = np.column_stack([np.ones(n), Tr])   # y_resid = β0 + β1·T_resid
+        coef, residuals, _, cov = fit_ols(yr, X)
+        sst = np.sum((yr - np.mean(yr)) ** 2)
+        iso.append(data.idx_to_iso[c])
+        beta1.append(float(coef[1]))
+        se.append(float(np.sqrt(max(cov[1, 1], 0.0))))
+        n_obs.append(n)
+        r2.append(float(1.0 - np.sum(residuals ** 2) / sst))
+        m_logGDP.append(float(np.mean(logGDP[mask])))
+        m_T.append(float(np.mean(data.temp[mask])))
+        vol.append(float(np.std(data.growth_pcGDP[mask])))
+
+    return CountrySlopes(
+        iso=np.array(iso), beta1=np.array(beta1), se=np.array(se),
+        n_obs=np.array(n_obs), r_squared=np.array(r2),
+        mean_logGDP=np.array(m_logGDP), mean_T=np.array(m_T),
+        growth_vol=np.array(vol), remove_year_means=remove_year_means,
+        method='LOESS', window_years=window_years,
     )
 
 
