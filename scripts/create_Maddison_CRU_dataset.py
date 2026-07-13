@@ -181,9 +181,9 @@ def load_cru_data(csv_path: str) -> pd.DataFrame:
         'precipitation': 'mean'
     }).reset_index()
 
-    # Log-transform precipitation relative to country mean
-    # precp = log(P_t) - log(mean(P)) = log(P_t / mean(P))
-    df['precp'] = np.log(df['precipitation']) - np.log(df.groupby('iso_id')['precipitation'].transform('mean'))
+    # Log-transform precipitation (raw levels, no country-mean normalization)
+    # precp = log(P_t)  — retains cross-country level differences
+    df['precp'] = np.log(df['precipitation'])
 
     # Drop the raw precipitation column
     df = df.drop(columns=['precipitation'])
