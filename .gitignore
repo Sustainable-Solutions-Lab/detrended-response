@@ -37,6 +37,8 @@ wheels/
 # OS
 .DS_Store
 Thumbs.db
+# Windows "mark of the web" sidecar files (from WSL downloads)
+*:Zone.Identifier
 
 # Output data (all generated output)
 data/output/
