@@ -45,6 +45,18 @@ CRU_COUNTRY_OVERRIDES = {
     'Vietnam': 'VNM',
     'Virgin Islands, British': 'VGB',
     'Virgin Islands, U.S.': 'VIR',
+    # CRU name variants (misspellings / abbreviations / punctuation) for sovereign
+    # countries that otherwise fail to map and get silently dropped from the merge.
+    'Turkey': 'TUR',
+    'Bosnia-Herzegovinia': 'BIH',
+    'DR Congo': 'COD',
+    'Cape Verde Isl': 'CPV',
+    'Sao Tome + Principe': 'STP',
+    'Vanatu': 'VUT',
+    'Palau Isl': 'PLW',
+    'St Kitts and Nevis': 'KNA',
+    'St Lucia': 'LCA',
+    'St Vincent': 'VCT',
 }
 
 
