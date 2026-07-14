@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Create Maddison_CRU_dataset.csv from Maddison and CRU data.
+"""Create a merged climate-GDP dataset (Maddison_CRU or WorldBank_CRU).
 
-This script reads Maddison GDP/population data and CRU climate data,
-performs gap-filling for missing GDP years, and outputs a merged dataset.
+Reads GDP + population data from a chosen source (Maddison Project or World Bank),
+merges with CRU climate data, gap-fills missing GDP years, optionally filters
+countries, and writes a merged panel.
+
+GDP source selected with --gdp-source {maddison,worldbank}:
+  maddison  -> Maddison GDPpc + Population sheets (per-capita GDP directly), 1961-2022.
+  worldbank -> World Bank wide CSVs (total GDP NY.GDP.MKTP.PP.KD / population
+               SP.POP.TOTL); pcGDP = GDP / Pop; PPP data begins ~1990.
 """
 
 import argparse
+import glob
 import sys
 from pathlib import Path
 
@@ -18,6 +25,9 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data_loader import CRU_COUNTRY_OVERRIDES, map_cru_country_to_iso3
+
+# World Bank real-country codes that pycountry does not recognize (mirrors CRU_COUNTRY_OVERRIDES).
+WB_COUNTRY_OVERRIDES = {'XKX'}  # Kosovo
 
 
 def load_maddison_gdp_wide(excel_path: str) -> pd.DataFrame:
@@ -102,6 +112,52 @@ def load_maddison_population_wide(excel_path: str) -> pd.DataFrame:
     return df_long
 
 
+def _is_real_country(iso3) -> bool:
+    """True for genuine ISO3 country codes; False for WB aggregates (WLD/HIC/EUU/…) and junk."""
+    if not isinstance(iso3, str) or iso3 == '':
+        return False
+    if iso3 in WB_COUNTRY_OVERRIDES:
+        return True
+    try:
+        pycountry.countries.lookup(iso3)
+        return True
+    except LookupError:
+        return False
+
+
+def _load_worldbank_wide(csv_path: str, value_name: str) -> pd.DataFrame:
+    """Melt a World Bank DataBank wide CSV to long (iso_id, year, <value_name>).
+
+    Wide columns are 'Series Name, Series Code, Country Name, Country Code, "1960 [YR1960]", …';
+    missing values are the string '..'. Aggregate rows (World, income groups, regions) and the
+    trailing junk rows are dropped by keeping only real ISO3 country codes.
+    """
+    df = pd.read_csv(csv_path)
+    year_cols = [c for c in df.columns if c[:4].isdigit()]
+    long = df.melt(id_vars=['Country Code'], value_vars=year_cols,
+                   var_name='year_label', value_name=value_name)
+    long['iso_id'] = long['Country Code']
+    long['year'] = long['year_label'].str.slice(0, 4).astype(int)
+    long[value_name] = pd.to_numeric(long[value_name].replace('..', np.nan), errors='coerce')
+    long = long.dropna(subset=[value_name])
+    long = long[long['iso_id'].map(_is_real_country)]
+    return long[['iso_id', 'year', value_name]].reset_index(drop=True)
+
+
+def load_worldbank_gdp_wide(csv_path: str) -> pd.DataFrame:
+    """World Bank total GDP (PPP, constant int'l $) → columns iso_id, year, gdppc.
+
+    The 'gdppc' column carries TOTAL GDP here (per-capita is formed later via divide-by-pop),
+    matching the intermediate schema of the Maddison GDP loader.
+    """
+    return _load_worldbank_wide(csv_path, 'gdppc')
+
+
+def load_worldbank_pop_wide(csv_path: str) -> pd.DataFrame:
+    """World Bank population (SP.POP.TOTL) → columns iso_id, year, pop (head counts, no *1000)."""
+    return _load_worldbank_wide(csv_path, 'pop')
+
+
 def infill_gdp_gaps(df: pd.DataFrame, max_gap: int = 4) -> pd.DataFrame:
     """Infill GDP gaps of at most max_gap missing years using constant growth rate.
 
@@ -152,6 +208,40 @@ def infill_gdp_gaps(df: pd.DataFrame, max_gap: int = 4) -> pd.DataFrame:
     result = pd.DataFrame(filled_rows)
     result = result.sort_values(['iso_id', 'year']).reset_index(drop=True)
     return result
+
+
+def _longest_contiguous_mask(years: np.ndarray) -> np.ndarray:
+    """Boolean mask over one country's sorted years selecting the longest run of consecutive
+    years (ties broken toward the earliest run)."""
+    breaks = np.diff(years) != 1                       # gap boundary between adjacent years
+    group = np.concatenate(([0], np.cumsum(breaks)))   # run label per year
+    _, inverse, lengths = np.unique(group, return_inverse=True, return_counts=True)
+    run_len = lengths[inverse]
+    best_group = group[run_len == run_len.max()].min()  # earliest run among longest
+    return group == best_group
+
+
+def _filter_contiguous(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep each country's longest contiguous stretch of years (run on infilled data)."""
+    df = df.sort_values(['iso_id', 'year'])
+    keep = df.groupby('iso_id')['year'].transform(
+        lambda s: _longest_contiguous_mask(s.to_numpy()))
+    return df[keep.to_numpy()].reset_index(drop=True)
+
+
+def _filter_nearly_all(df: pd.DataFrame, min_years: int, min_frac: float) -> pd.DataFrame:
+    """Keep only countries with data in at least `min_years` years (or `min_frac` of the span)."""
+    threshold = (int(np.ceil(min_frac * (df['year'].max() - df['year'].min() + 1)))
+                 if min_frac is not None else min_years)
+    counts = df.groupby('iso_id')['year'].transform('count')
+    return df[counts >= threshold].reset_index(drop=True)
+
+
+COUNTRY_FILTERS = {
+    'none':       lambda df, **k: df,
+    'nearly-all': lambda df, **k: _filter_nearly_all(df, k['min_years'], k['min_frac']),
+    'contiguous': lambda df, **k: _filter_contiguous(df),
+}
 
 
 def load_cru_data(csv_path: str) -> pd.DataFrame:
@@ -246,7 +336,8 @@ def permute_climate_countries(df: pd.DataFrame, seed: int = None) -> pd.DataFram
     return df
 
 
-def validate_output(df: pd.DataFrame, reference_path: str = None) -> bool:
+def validate_output(df: pd.DataFrame, reference_path: str = None,
+                    expected_year_min: int = 1961, expected_year_max: int = 2022) -> bool:
     """Validate the output DataFrame.
 
     Returns True if validation passes, False otherwise.
@@ -265,8 +356,8 @@ def validate_output(df: pd.DataFrame, reference_path: str = None) -> bool:
     # Check year range
     year_min, year_max = df['year'].min(), df['year'].max()
     print(f"Year range: {year_min} - {year_max}")
-    if year_min < 1961 or year_max > 2022:
-        print(f"WARNING: Year range outside expected 1961-2022")
+    if year_min < expected_year_min or year_max > expected_year_max:
+        print(f"WARNING: Year range outside expected {expected_year_min}-{expected_year_max}")
 
     # Check for NaN values in key columns
     nan_counts = df[required_columns].isna().sum()
@@ -301,9 +392,65 @@ def validate_output(df: pd.DataFrame, reference_path: str = None) -> bool:
     return True
 
 
+# Per-source defaults: output path and randomT output path.
+SOURCE_DEFAULTS = {
+    'maddison':  {'output': 'data/input/Maddison_CRU_dataset.csv',
+                  'randomT': 'data/input/Maddison_CRU_dataset_randomT.csv'},
+    'worldbank': {'output': 'data/input/WorldBank_CRU_dataset.csv',
+                  'randomT': 'data/input/WorldBank_CRU_dataset_randomT.csv'},
+}
+
+
+def _wb_series_code(csv_path: str) -> str:
+    """The (single) World Bank series code in a DataBank wide CSV, e.g. NY.GDP.PCAP.KD."""
+    return pd.read_csv(csv_path, usecols=['Series Code'])['Series Code'].dropna().iloc[0]
+
+
+def _resolve_wb_files(args) -> tuple:
+    """Resolve (gdp_path, pop_path) for the World Bank source. Auto-detects among
+    data/input/WB_*_Data.csv by series code (NY.GDP.* = GDP, SP.POP.* = population),
+    so the exact download filename does not matter; overridable via --wb-gdp/--wb-pop."""
+    gdp_path, pop_path = args.wb_gdp, args.wb_pop
+    if gdp_path is None or pop_path is None:
+        gdp_files, pop_files = [], []
+        for c in sorted(glob.glob('data/input/WB_*_Data.csv')):
+            code = _wb_series_code(c)
+            (gdp_files if code.startswith('NY.GDP') else
+             pop_files if code.startswith('SP.POP') else []).append(c)
+        if gdp_path is None:
+            if len(gdp_files) != 1:
+                raise FileNotFoundError(f"Expected exactly one WB GDP (NY.GDP.*) file, found {gdp_files}")
+            gdp_path = gdp_files[0]
+        if pop_path is None:
+            if len(pop_files) != 1:
+                raise FileNotFoundError(f"Expected exactly one WB population (SP.POP.*) file, found {pop_files}")
+            pop_path = pop_files[0]
+    return gdp_path, pop_path
+
+
+def load_gdp_pop(gdp_source: str, args) -> tuple:
+    """Dispatch GDP + population loading by source. Returns (df_gdp, df_pop, divide_by_pop) with
+    the shared intermediate schema (iso_id, year, gdppc) and (iso_id, year, pop). divide_by_pop is
+    True only for World Bank *total*-GDP series (NY.GDP.MKTP.*); per-capita series (NY.GDP.PCAP.*)
+    and Maddison are already per-capita."""
+    if gdp_source == 'maddison':
+        return (load_maddison_gdp_wide(args.maddison),
+                load_maddison_population_wide(args.maddison), False)
+    wb_gdp, wb_pop = _resolve_wb_files(args)
+    code = _wb_series_code(wb_gdp)
+    divide_by_pop = 'MKTP' in code   # total GDP -> per-capita; PCAP series already per-capita
+    print(f"  WB GDP file: {wb_gdp}  (series {code}, {'total -> /pop' if divide_by_pop else 'per-capita'})")
+    print(f"  WB Pop file: {wb_pop}")
+    return load_worldbank_gdp_wide(wb_gdp), load_worldbank_pop_wide(wb_pop), divide_by_pop
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description='Create df_base_withPop.csv from Maddison and CRU data'
+        description='Create a merged climate-GDP dataset (Maddison_CRU or WorldBank_CRU)'
+    )
+    parser.add_argument(
+        '--gdp-source', choices=['maddison', 'worldbank'], default='maddison',
+        help='GDP/population source (default: maddison)'
     )
     parser.add_argument(
         '--maddison',
@@ -311,14 +458,42 @@ def main():
         help='Path to Maddison Excel file (default: data/input/mpd2023_web.xlsx)'
     )
     parser.add_argument(
+        '--wb-gdp', default=None,
+        help='Path to World Bank GDP wide CSV (default: auto-detect the NY.GDP.* file in '
+             'data/input/WB_*_Data.csv). Total-GDP (MKTP) series are divided by population; '
+             'per-capita (PCAP) series are used as-is.'
+    )
+    parser.add_argument(
+        '--wb-pop', default=None,
+        help='Path to World Bank population wide CSV (default: auto-detect the SP.POP.* file)'
+    )
+    parser.add_argument(
         '--cru',
         default='data/input/cru_climate_data.csv',
         help='Path to CRU CSV file (default: data/input/cru_climate_data.csv)'
     )
     parser.add_argument(
-        '--output',
-        default='data/input/Maddison_CRU_dataset.csv',
-        help='Output CSV path (default: data/input/Maddison_CRU_dataset.csv)'
+        '--output', default=None,
+        help='Output CSV path (default: per source, e.g. data/input/Maddison_CRU_dataset.csv)'
+    )
+    parser.add_argument(
+        '--country-filter', choices=['none', 'nearly-all', 'contiguous', 'endpoints'], default='none',
+        help="Country retention: none (unbalanced, keep all), nearly-all (>= --min-years/--min-frac), "
+             "contiguous (longest consecutive-year stretch per country), or endpoints (present in both "
+             "the first and last panel year, i.e. the balanced 1961->2022 rule). Default: none"
+    )
+    parser.add_argument(
+        '--min-years', type=int, default=30,
+        help='nearly-all filter: minimum years of data per country (default: 30)'
+    )
+    parser.add_argument(
+        '--min-frac', type=float, default=None,
+        help='nearly-all filter: minimum fraction of the year span per country (overrides --min-years)'
+    )
+    parser.add_argument(
+        '--exclude-iso', nargs='*', default=['BMU', 'GRL', 'HKG'],
+        help='ISO3 codes to exclude (dependent territories kept out of the country panel). '
+             'Default: BMU (Bermuda) GRL (Greenland) HKG (Hong Kong). Pass with no values to exclude none.'
     )
     parser.add_argument(
         '--max-gap',
@@ -345,22 +520,24 @@ def main():
 
     args = parser.parse_args()
 
-    # Use different default output filename for randomT
-    if args.randomT and args.output == 'data/input/Maddison_CRU_dataset.csv':
-        args.output = 'data/input/Maddison_CRU_dataset_randomT.csv'
+    defaults = SOURCE_DEFAULTS[args.gdp_source]
+
+    # Resolve output path from source default, then apply the randomT rename if the user did not
+    # override --output.
+    if args.output is None:
+        args.output = defaults['output']
+    if args.randomT and args.output == defaults['output']:
+        args.output = defaults['randomT']
         print(f"Using randomT default output: {args.output}")
 
-    print("Loading Maddison GDP data from GDPpc sheet...")
-    df_gdp = load_maddison_gdp_wide(args.maddison)
+    print(f"Loading {args.gdp_source} GDP + population data...")
+    df_gdp, df_pop, divide_by_pop = load_gdp_pop(args.gdp_source, args)
     print(f"  Loaded {len(df_gdp)} GDP observations for {df_gdp['iso_id'].nunique()} countries")
+    print(f"  Loaded {len(df_pop)} population observations")
 
     print(f"Filling GDP gaps (max {args.max_gap} missing years)...")
     df_gdp = infill_gdp_gaps(df_gdp, max_gap=args.max_gap)
     print(f"  After gap filling: {len(df_gdp)} observations")
-
-    print("Loading Maddison population data...")
-    df_pop = load_maddison_population_wide(args.maddison)
-    print(f"  Loaded {len(df_pop)} population observations")
 
     print("Loading CRU climate data...")
     df_cru = load_cru_data(args.cru)
@@ -374,7 +551,18 @@ def main():
     print("Merging GDP and population data...")
     df = pd.merge(df_gdp, df_pop, on=['iso_id', 'year'], how='inner')
     df = df.rename(columns={'gdppc': 'pcGDP', 'pop': 'Pop'})
+    if divide_by_pop:
+        df['pcGDP'] = df['pcGDP'] / df['Pop']   # total-GDP series -> per-capita
     print(f"  After GDP+Pop merge: {len(df)} observations")
+
+    if args.exclude_iso:
+        df = df[~df['iso_id'].isin(args.exclude_iso)].copy()
+        print(f"  Excluded ISO {args.exclude_iso}: {df['iso_id'].nunique()} countries remain")
+
+    if args.country_filter in ('nearly-all', 'contiguous'):
+        df = COUNTRY_FILTERS[args.country_filter](df, min_years=args.min_years, min_frac=args.min_frac)
+        print(f"  After country-filter '{args.country_filter}': {len(df)} observations for "
+              f"{df['iso_id'].nunique()} countries")
 
     print("Computing GDP growth rate...")
     df = compute_growth_rate(df)
@@ -384,9 +572,18 @@ def main():
     df = pd.merge(df, df_cru, on=['iso_id', 'year'], how='inner')
     print(f"  After climate merge: {len(df)} observations for {df['iso_id'].nunique()} countries")
 
-    # Filter to years 1961-2022 (as specified in output format)
+    # Filter to years 1961-2022 (CRU coverage; WB PPP naturally starts at 1990)
     df = df[(df['year'] >= 1961) & (df['year'] <= 2022)].copy()
     print(f"  After year filter (1961-2022): {len(df)} observations for {df['iso_id'].nunique()} countries")
+
+    # 'endpoints' filter: keep only countries with data in both the first and last panel year
+    # (the balanced-panel "1961→2022" rule), applied after the year filter.
+    if args.country_filter == 'endpoints':
+        y0, y1 = int(df['year'].min()), int(df['year'].max())
+        keep = set(df.loc[df['year'] == y0, 'iso_id']) & set(df.loc[df['year'] == y1, 'iso_id'])
+        df = df[df['iso_id'].isin(keep)].copy()
+        print(f"  After endpoints filter (present in {y0} and {y1}): {len(df)} observations for "
+              f"{df['iso_id'].nunique()} countries")
 
     # Select and order columns
     output_columns = ['iso_id', 'year', 'pcGDP', 'growth_pcGDP', 'temp', 'precp', 'Pop']
