@@ -57,9 +57,6 @@ APPROACH_COLORS = {
     'Approach LJ': 'purple',
     'Approach GJ': 'navy',
     'Approach CJ': 'maroon',
-    'Approach RJ': 'indigo',
-    'Approach MJ': 'steelblue',
-    'Approach WJ': 'slateblue',
     'Approach IJ': 'teal',
     'Approach IP': 'darkcyan',
     'Approach IL': 'cadetblue',
@@ -97,9 +94,6 @@ APPROACH_LINESTYLES = {
     'Approach TP': '-.',          # dash-dot
     'Approach GJ': '-',           # solid (conjoined)
     'Approach CJ': '-',           # solid (conjoined)
-    'Approach RJ': '-',           # solid (conjoined)
-    'Approach MJ': '-',           # solid (conjoined)
-    'Approach WJ': '-',           # solid (conjoined)
     'Approach IJ': '-',           # solid (conjoined)
     'Approach IP': '-.',          # dash-dot (polynomial detrending, like QP)
     'Approach IL': (0, (5, 1)),   # densely dashed (LOESS detrending, like QL)
@@ -205,8 +199,7 @@ def is_gdp_result(result) -> bool:
     compute_h_response renders the curve without special handling.
     """
     approach = getattr(result, 'approach', '')
-    if approach.startswith(('Approach GJ', 'Approach CJ', 'Approach RJ',
-                            'Approach MJ', 'Approach WJ',
+    if approach.startswith(('Approach GJ', 'Approach CJ',
                             'Approach IJ', 'Approach IP', 'Approach IL')):
         return True
     return hasattr(result, 'beta') and hasattr(result, 'Y_ref')
@@ -436,7 +429,7 @@ def save_summary_table(
             row['h2_L'] = result.h2_L
             row['h2_L_SE'] = result.h2_L_se
         # Add GDP scaling exponent and reference GDP for GDP-scaled approaches
-        # (GJ/CJ/RJ/MJ/WJ). h1/h2 are the temperature-shape coefficients at Y_ref
+        # (GJ/CJ). h1/h2 are the temperature-shape coefficients at Y_ref
         # (g = 1); beta and Y_ref are needed to interpret them at any pcGDP level.
         if is_gdp_result(result):
             row['beta'] = result.beta
@@ -570,8 +563,6 @@ def save_summary_table(
                 T_opt_se = result.T_opt_se if result.T_opt_se is not None and not np.isnan(result.T_opt_se) else 0.0
                 T_opt_str = f"{result.T_opt:.4f}" if not np.isnan(result.T_opt) else "N/A"
                 f.write(f"  T_opt = {T_opt_str}  (SE: {T_opt_se:.4f})\n")
-                if getattr(result, 'T_ref', None) is not None:
-                    f.write(f"  Tref = {result.T_ref:.4f}  [representative mean T; per-country zero at country mean T]\n")
                 f.write(f"  Y_ref = {result.Y_ref:.2f}  [median pcGDP]\n")
             # Special handling for segmented linear
             # h2 = slope below T_opt; h4 = slope above T_opt
