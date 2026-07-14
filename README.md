@@ -51,6 +51,9 @@ By default, the pipeline reads:
 
 - `data/input/Maddison_CRU_dataset.csv`
 
+An alternative World Bank–based panel, `data/input/WorldBank_CRU_dataset.csv`, can be used via the
+`--use-csv` flag on any analysis script (see "Building the merged datasets" below).
+
 Expected columns (additional columns are ignored):
 - `iso_id` (ISO3 country code)
 - `year` (int)
@@ -62,20 +65,63 @@ Expected columns (additional columns are ignored):
 **Note:** The repository may include other columns (e.g., precipitation, legacy time indices).
 The analysis in `src/` currently uses temperature only.
 
-### Optional: build the merged dataset from Maddison + CRU inputs
+### Building the merged datasets from GDP + CRU inputs
 
-If `data/input/mpd2023_web.xlsx` and `data/input/cru_climate_data.csv` are present, you can
-(re)generate the merged CSV:
+`scripts/create_climate_gdp_dataset.py` builds a merged climate–GDP panel from a chosen GDP
+source plus CRU climate. There are two canonical outputs:
+
+| dataset | GDP source | units | span | countries |
+|---|---|---|---|---|
+| `Maddison_CRU_dataset.csv` | Maddison Project GDPpc | per-capita, PPP (constant int'l $) | 1961–2022 | 145 |
+| `WorldBank_CRU_dataset.csv` | World Bank `NY.GDP.PCAP.KD` | per-capita, real (constant 2015 US$) | 1961–2022 | 190 |
+
+Select the source with `--gdp-source` (default `maddison`):
 
 ```bash
-python scripts/create_Maddison_CRU_dataset.py \
-  --maddison data/input/mpd2023_web.xlsx \
-  --cru data/input/cru_climate_data.csv \
+# Maddison — balanced panel (full 1961→2022 record); default source
+python scripts/create_climate_gdp_dataset.py \
+  --gdp-source maddison --country-filter endpoints \
   --output data/input/Maddison_CRU_dataset.csv
+
+# World Bank — unbalanced panel (all available country-years)
+python scripts/create_climate_gdp_dataset.py \
+  --gdp-source worldbank --country-filter none \
+  --output data/input/WorldBank_CRU_dataset.csv
 ```
 
-Options include gap filling (`--max-gap`), output validation (`--validate`), and an optional
-temperature permutation for synthetic null checks (`--randomT`).
+**World Bank source.** Reads the DataBank wide CSVs in `data/input/` (default: auto-detect the
+`NY.GDP.*` GDP file and the `SP.POP.*` population file by series code among `WB_*_Data.csv`;
+overridable with `--wb-gdp` / `--wb-pop`). Region/income aggregate rows (World, High income,
+Sub-Saharan Africa, …) are dropped by keeping only real ISO-3166 country codes. Per-capita series
+(`NY.GDP.PCAP.*`) are used directly; total-GDP series (`NY.GDP.MKTP.*`) are divided by population
+automatically. Note: World Bank PPP series (`*.PP.*`) only start ~1990, which is why the per-capita
+constant-US$ series `NY.GDP.PCAP.KD` (1960+) is used for the long panel.
+
+**Country filtering** (`--country-filter`, default `none`):
+- `none` — keep every available country-year (unbalanced; missing cells simply absent).
+- `nearly-all` — keep countries with data in at least `--min-years` (default 30) years
+  (or `--min-frac` of the span).
+- `contiguous` — keep each country's longest contiguous run of years (after ≤`--max-gap` gap infill).
+- `endpoints` — keep only countries present in both the first and last panel year (the balanced
+  "1961→2022" rule); used for the canonical Maddison dataset.
+
+**Territory exclusion** (`--exclude-iso`, default `BMU GRL HKG`): dependent territories (Bermuda,
+Greenland, Hong Kong) that are valid ISO-3166 codes but not sovereign countries are excluded so the
+panel is countries only. Pass `--exclude-iso` with no values to keep them.
+
+**CRU country-name mapping.** CRU climate is keyed by country name and mapped to ISO3 via
+`map_cru_country_to_iso3` + `CRU_COUNTRY_OVERRIDES` (`src/data_loader.py`). The overrides handle CRU
+spelling/abbreviation variants (e.g. `Turkey`→TUR, `DR Congo`→COD, `Bosnia-Herzegovinia`→BIH,
+`St Lucia`→LCA) that pycountry does not resolve; without them these real countries would be silently
+dropped at the climate merge. North Korea (PRK) is in CRU but has no World Bank GDP, so it is absent
+from the World Bank panel.
+
+**Panel note.** The analysis loader (`load_data_from_csv`) uses an *unbalanced* panel: every country
+in the CSV participates with whatever years it has (there is no requirement to span the full period at
+load time). The balanced-panel choice is made at dataset-build time via `--country-filter endpoints`.
+
+Other options: gap filling (`--max-gap`, ≤N-year interior interpolation via constant growth),
+output validation (`--validate`), and a temperature permutation for synthetic null checks (`--randomT`).
 
 
 ## Running the pipeline
