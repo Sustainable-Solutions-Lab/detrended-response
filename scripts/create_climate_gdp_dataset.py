@@ -5,8 +5,11 @@ Reads GDP + population data from a chosen source (Maddison Project or World Bank
 merges with CRU climate data, gap-fills missing GDP years, optionally filters
 countries, and writes a merged panel.
 
+The retained year window is set by --year-min/--year-max (default 1960-2022).
+
 GDP source selected with --gdp-source {maddison,worldbank}:
-  maddison  -> Maddison GDPpc + Population sheets (per-capita GDP directly), 1961-2022.
+  maddison  -> Maddison GDPpc + Population sheets (per-capita GDP directly); GDP reaches far
+               enough back that the panel can start at 1960 or earlier.
   worldbank -> World Bank wide CSVs (total GDP NY.GDP.MKTP.PP.KD / population
                SP.POP.TOTL); pcGDP = GDP / Pop; PPP data begins ~1990.
 """
@@ -337,7 +340,7 @@ def permute_climate_countries(df: pd.DataFrame, seed: int = None) -> pd.DataFram
 
 
 def validate_output(df: pd.DataFrame, reference_path: str = None,
-                    expected_year_min: int = 1961, expected_year_max: int = 2022) -> bool:
+                    expected_year_min: int = 1960, expected_year_max: int = 2022) -> bool:
     """Validate the output DataFrame.
 
     Returns True if validation passes, False otherwise.
@@ -477,10 +480,20 @@ def main():
         help='Output CSV path (default: per source, e.g. data/input/Maddison_CRU_dataset.csv)'
     )
     parser.add_argument(
+        '--year-min', type=int, default=1960,
+        help='First year retained in the panel (default: 1960). Growth for year y needs GDP at y-1, '
+             'so Maddison supports 1960 (and earlier) while World Bank NY.GDP.PCAP.KD starts at 1960 '
+             'and therefore has no growth before 1961.'
+    )
+    parser.add_argument(
+        '--year-max', type=int, default=2022,
+        help='Last year retained in the panel (default: 2022)'
+    )
+    parser.add_argument(
         '--country-filter', choices=['none', 'nearly-all', 'contiguous', 'endpoints'], default='none',
         help="Country retention: none (unbalanced, keep all), nearly-all (>= --min-years/--min-frac), "
              "contiguous (longest consecutive-year stretch per country), or endpoints (present in both "
-             "the first and last panel year, i.e. the balanced 1961->2022 rule). Default: none"
+             "the first and last panel year, i.e. the balanced-panel rule). Default: none"
     )
     parser.add_argument(
         '--min-years', type=int, default=30,
@@ -491,9 +504,9 @@ def main():
         help='nearly-all filter: minimum fraction of the year span per country (overrides --min-years)'
     )
     parser.add_argument(
-        '--exclude-iso', nargs='*', default=['BMU', 'GRL', 'HKG'],
-        help='ISO3 codes to exclude (dependent territories kept out of the country panel). '
-             'Default: BMU (Bermuda) GRL (Greenland) HKG (Hong Kong). Pass with no values to exclude none.'
+        '--exclude-iso', nargs='*', default=[],
+        help='ISO3 codes to exclude from the panel. Default: exclude none (dependent territories '
+             'such as BMU/GRL/HKG are kept). Example: --exclude-iso BMU GRL HKG'
     )
     parser.add_argument(
         '--max-gap',
@@ -572,12 +585,14 @@ def main():
     df = pd.merge(df, df_cru, on=['iso_id', 'year'], how='inner')
     print(f"  After climate merge: {len(df)} observations for {df['iso_id'].nunique()} countries")
 
-    # Filter to years 1961-2022 (CRU coverage; WB PPP naturally starts at 1990)
-    df = df[(df['year'] >= 1961) & (df['year'] <= 2022)].copy()
-    print(f"  After year filter (1961-2022): {len(df)} observations for {df['iso_id'].nunique()} countries")
+    # Restrict to the requested year window. The start year is bounded by the GDP source, not by
+    # CRU (which covers 1901-2024): the first growth year is one after the source's first GDP year.
+    df = df[(df['year'] >= args.year_min) & (df['year'] <= args.year_max)].copy()
+    print(f"  After year filter ({args.year_min}-{args.year_max}): {len(df)} observations for "
+          f"{df['iso_id'].nunique()} countries")
 
     # 'endpoints' filter: keep only countries with data in both the first and last panel year
-    # (the balanced-panel "1961→2022" rule), applied after the year filter.
+    # (the balanced-panel rule), applied after the year filter.
     if args.country_filter == 'endpoints':
         y0, y1 = int(df['year'].min()), int(df['year'].max())
         keep = set(df.loc[df['year'] == y0, 'iso_id']) & set(df.loc[df['year'] == y1, 'iso_id'])

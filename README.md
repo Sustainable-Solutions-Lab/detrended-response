@@ -72,13 +72,13 @@ source plus CRU climate. There are two canonical outputs:
 
 | dataset | GDP source | units | span | countries |
 |---|---|---|---|---|
-| `Maddison_CRU_dataset.csv` | Maddison Project GDPpc | per-capita, PPP (constant int'l $) | 1961–2022 | 145 |
-| `WorldBank_CRU_dataset.csv` | World Bank `NY.GDP.PCAP.KD` | per-capita, real (constant 2015 US$) | 1961–2022 | 190 |
+| `Maddison_CRU_dataset.csv` | Maddison Project GDPpc | per-capita, PPP (constant int'l $) | 1960–2022 | 146 |
+| `WorldBank_CRU_dataset.csv` | World Bank `NY.GDP.PCAP.KD` | per-capita, real (constant 2015 US$) | 1961–2022 | 193 |
 
 Select the source with `--gdp-source` (default `maddison`):
 
 ```bash
-# Maddison — balanced panel (full 1961→2022 record); default source
+# Maddison — balanced panel (full 1960→2022 record); default source
 python scripts/create_climate_gdp_dataset.py \
   --gdp-source maddison --country-filter endpoints \
   --output data/input/Maddison_CRU_dataset.csv
@@ -103,7 +103,13 @@ constant-US$ series `NY.GDP.PCAP.KD` (1960+) is used for the long panel.
   (or `--min-frac` of the span).
 - `contiguous` — keep each country's longest contiguous run of years (after ≤`--max-gap` gap infill).
 - `endpoints` — keep only countries present in both the first and last panel year (the balanced
-  "1961→2022" rule); used for the canonical Maddison dataset.
+  "1960→2022" rule); used for the canonical Maddison dataset.
+
+**Year window** (`--year-min` / `--year-max`, default 1960–2022): CRU climate spans 1901–2024, so
+the earliest usable year is set by the GDP source, not by climate. Growth for year *y* requires GDP
+at *y−1*, so Maddison (which reaches back centuries) supports a 1960 start, while the World Bank
+series `NY.GDP.PCAP.KD` begins at 1960 and therefore yields no growth observation before 1961. The
+Maddison panel is generated at 1960; the World Bank panel starts at 1961 regardless of `--year-min`.
 
 **Territory exclusion** (`--exclude-iso`, default `BMU GRL HKG`): dependent territories (Bermuda,
 Greenland, Hong Kong) that are valid ISO-3166 codes but not sovereign countries are excluded so the
